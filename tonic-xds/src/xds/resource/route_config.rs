@@ -11,6 +11,8 @@ use regex::Regex;
 use xds_client::resource::TypeUrl;
 use xds_client::{Error, Resource};
 
+use super::string_matcher::StringMatcher;
+
 /// Validated RouteConfiguration.
 #[derive(Debug, Clone)]
 pub(crate) struct RouteConfigResource {
@@ -62,27 +64,13 @@ pub(crate) struct HeaderMatcherConfig {
 
 /// Header match specifier variants.
 ///
-/// String-based variants carry an `ignore_case` flag (gRFC A63).
-/// Regex, range, and presence variants do not support `ignore_case` by design.
+/// The `String` variant carries a generic [`StringMatcher`] (exact / prefix /
+/// suffix / contains / safe_regex, with optional ASCII case-insensitive
+/// matching per gRFC A63). `Present`, `Absent`, and `Range` are header-specific
+/// extensions beyond the generic StringMatcher.
 #[derive(Debug, Clone)]
 pub(crate) enum HeaderMatchSpecifierConfig {
-    Exact {
-        value: String,
-        ignore_case: bool,
-    },
-    Prefix {
-        value: String,
-        ignore_case: bool,
-    },
-    Suffix {
-        value: String,
-        ignore_case: bool,
-    },
-    Contains {
-        value: String,
-        ignore_case: bool,
-    },
-    SafeRegex(Regex),
+    String(StringMatcher),
     /// Match if header is present (any value).
     Present,
     /// Match if header is absent.
@@ -266,7 +254,6 @@ fn validate_header_matcher(
     hm: envoy_types::pb::envoy::config::route::v3::HeaderMatcher,
 ) -> xds_client::Result<HeaderMatcherConfig> {
     use envoy_types::pb::envoy::config::route::v3::header_matcher::HeaderMatchSpecifier;
-    use envoy_types::pb::envoy::r#type::matcher::v3::string_matcher::MatchPattern;
 
     // It's common that some xDS features are marked as deprecated while they are still widely in-use.
     #[allow(deprecated)]
@@ -274,10 +261,12 @@ fn validate_header_matcher(
         // TODO: Remove this arm once ExactMatch is fully removed from envoy-types.
         // ExactMatch is deprecated in favor of StringMatch, which is handled below.
         #[allow(deprecated)]
-        Some(HeaderMatchSpecifier::ExactMatch(v)) => HeaderMatchSpecifierConfig::Exact {
-            value: v,
-            ignore_case: false,
-        },
+        Some(HeaderMatchSpecifier::ExactMatch(v)) => {
+            HeaderMatchSpecifierConfig::String(StringMatcher::Exact {
+                value: v,
+                ignore_case: false,
+            })
+        }
         // TODO: Remove this arm once SafeRegexMatch is fully removed from envoy-types.
         // SafeRegexMatch is deprecated in favor of StringMatch, which is handled below.
         #[allow(deprecated)]
@@ -285,7 +274,7 @@ fn validate_header_matcher(
             let re = Regex::new(&r.regex).map_err(|e| {
                 Error::Validation(format!("invalid header regex '{}': {e}", r.regex))
             })?;
-            HeaderMatchSpecifierConfig::SafeRegex(re)
+            HeaderMatchSpecifierConfig::String(StringMatcher::SafeRegex(re))
         }
         Some(HeaderMatchSpecifier::RangeMatch(r)) => HeaderMatchSpecifierConfig::Range {
             start: r.start,
@@ -299,36 +288,7 @@ fn validate_header_matcher(
             }
         }
         Some(HeaderMatchSpecifier::StringMatch(sm)) => {
-            let ignore_case = sm.ignore_case;
-            match sm.match_pattern {
-                Some(MatchPattern::Exact(v)) => HeaderMatchSpecifierConfig::Exact {
-                    value: v,
-                    ignore_case,
-                },
-                Some(MatchPattern::Prefix(v)) => HeaderMatchSpecifierConfig::Prefix {
-                    value: v,
-                    ignore_case,
-                },
-                Some(MatchPattern::Suffix(v)) => HeaderMatchSpecifierConfig::Suffix {
-                    value: v,
-                    ignore_case,
-                },
-                Some(MatchPattern::Contains(v)) => HeaderMatchSpecifierConfig::Contains {
-                    value: v,
-                    ignore_case,
-                },
-                Some(MatchPattern::SafeRegex(r)) => {
-                    let re = Regex::new(&r.regex).map_err(|e| {
-                        Error::Validation(format!("invalid header regex '{}': {e}", r.regex))
-                    })?;
-                    HeaderMatchSpecifierConfig::SafeRegex(re)
-                }
-                _ => {
-                    return Err(Error::Validation(
-                        "unsupported StringMatcher pattern".into(),
-                    ));
-                }
-            }
+            HeaderMatchSpecifierConfig::String(StringMatcher::from_proto(sm)?)
         }
         None => HeaderMatchSpecifierConfig::Present,
         _ => {

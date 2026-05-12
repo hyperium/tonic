@@ -4,6 +4,8 @@
 //! the xDS client logic and the codec layer. The codec converts these
 //! to/from the wire format (e.g., prost/envoy-types or google-protobuf).
 
+use std::collections::HashMap;
+
 use bytes::Bytes;
 
 /// A discovery request to send to the xDS server.
@@ -63,12 +65,43 @@ pub struct Node {
     pub user_agent_name: String,
     /// Version of the client.
     pub user_agent_version: String,
+    /// Free-form metadata (`google.protobuf.Struct` on the wire).
+    ///
+    /// Some control planes use this to vary the served config — e.g. Istio
+    /// reads `GENERATOR = "grpc"` to switch from sidecar-style to
+    /// proxyless gRPC config (gRFC A27).
+    pub metadata: HashMap<String, MetadataValue>,
+}
+
+/// A `google.protobuf.Value` mirror — any JSON-compatible value carried in
+/// `Node.metadata`.
+///
+/// Mirrors the six variants of `google.protobuf.Value` (and therefore JSON):
+/// null, bool, number, string, list, and struct. Marked `#[non_exhaustive]`
+/// as a forward-compatibility safety belt; the variant set is anchored to
+/// the JSON data model and is not expected to grow.
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub enum MetadataValue {
+    /// JSON `null`.
+    Null,
+    /// JSON `true` / `false`.
+    Bool(bool),
+    /// JSON number (canonical f64; precision-limited above 2^53).
+    Number(f64),
+    /// JSON string.
+    String(String),
+    /// JSON array.
+    Array(Vec<MetadataValue>),
+    /// JSON object.
+    Object(HashMap<String, MetadataValue>),
 }
 
 impl Node {
     /// Create a new Node with the required user agent fields.
     ///
-    /// Other fields (id, cluster, locality) can be set using builder methods.
+    /// Other fields (id, cluster, locality, metadata) can be set using
+    /// builder methods.
     pub fn new(user_agent_name: impl Into<String>, user_agent_version: impl Into<String>) -> Self {
         Self {
             id: None,
@@ -76,6 +109,7 @@ impl Node {
             locality: None,
             user_agent_name: user_agent_name.into(),
             user_agent_version: user_agent_version.into(),
+            metadata: HashMap::new(),
         }
     }
 
@@ -94,6 +128,12 @@ impl Node {
     /// Set the locality.
     pub fn with_locality(mut self, locality: Locality) -> Self {
         self.locality = Some(locality);
+        self
+    }
+
+    /// Replace the node metadata.
+    pub fn with_metadata(mut self, metadata: HashMap<String, MetadataValue>) -> Self {
+        self.metadata = metadata;
         self
     }
 }
