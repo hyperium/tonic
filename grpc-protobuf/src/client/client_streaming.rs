@@ -30,10 +30,10 @@ use grpc::StatusOr;
 use grpc::client::CallOptions;
 use grpc::client::InvokeOnce;
 use grpc::client::RecvStream;
+use grpc::client::ResponseStreamItem;
 use grpc::client::SendOptions;
 use grpc::client::SendStream;
 use grpc::client::stream_util::RecvStreamValidator;
-use grpc::core::ClientResponseStreamItem;
 use grpc::core::RequestHeaders;
 use protobuf::AsMut;
 use protobuf::AsView;
@@ -167,7 +167,7 @@ where
         let mut res = ProtoRecvMessage::from_mut(res);
         loop {
             let i = rx.next(&mut res).await;
-            if let ClientResponseStreamItem::Trailers(t) = i {
+            if let ResponseStreamItem::Trailers(t) = i {
                 return t.into_status();
             }
         }

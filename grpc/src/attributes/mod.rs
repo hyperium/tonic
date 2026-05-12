@@ -22,6 +22,8 @@
  *
  */
 
+//! A generic key/value store for use in many different parts of gRPC.
+
 use std::any::Any;
 use std::any::TypeId;
 use std::cmp::Ordering;

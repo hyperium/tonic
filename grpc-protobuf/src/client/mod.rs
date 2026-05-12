@@ -31,6 +31,7 @@ use grpc::Status;
 use grpc::client::CallOptions;
 use grpc::client::InvokeOnce;
 use grpc::client::RecvStream as ClientRecvStream;
+use grpc::client::ResponseStreamItem;
 use grpc::client::SendOptions;
 use grpc::client::SendStream;
 use grpc::client::interceptor::Intercept;
@@ -39,7 +40,6 @@ use grpc::client::interceptor::Intercepted;
 use grpc::client::interceptor::IntoOnce;
 use grpc::client::interceptor::InvokeOnceExt as _;
 use grpc::client::stream_util::RecvStreamValidator;
-use grpc::core::ClientResponseStreamItem;
 use grpc::core::RecvMessage;
 use protobuf::AsMut;
 use protobuf::Message;
@@ -132,7 +132,7 @@ where
         let mut i = self.rx.next(&mut res_view).await;
 
         // Ignore headers and request the next item.
-        if matches!(i, ClientResponseStreamItem::Headers(_)) {
+        if matches!(i, ResponseStreamItem::Headers(_)) {
             i = self.rx.next(&mut res_view).await;
         }
         drop(res_view);
@@ -143,13 +143,13 @@ where
         // 1. There will always be a Trailers message at the end of the stream.
         // 2. If we receive Trailers, we will only ever receive StreamClosed.
         match i {
-            ClientResponseStreamItem::Headers(_) => unreachable!(),
-            ClientResponseStreamItem::Message => Ok(()),
-            ClientResponseStreamItem::Trailers(trailers) => {
+            ResponseStreamItem::Headers(_) => unreachable!(),
+            ResponseStreamItem::Message => Ok(()),
+            ResponseStreamItem::Trailers(trailers) => {
                 self.status = Some(trailers.into_status());
                 Err(())
             }
-            ClientResponseStreamItem::StreamClosed => Err(()),
+            ResponseStreamItem::StreamClosed => Err(()),
         }
     }
 
@@ -174,7 +174,7 @@ where
             let mut nop_msg = NopRecvMessage;
             loop {
                 let i = self.rx.next(&mut nop_msg).await;
-                if let ClientResponseStreamItem::Trailers(t) = i {
+                if let ResponseStreamItem::Trailers(t) = i {
                     return t.into_status();
                 }
             }
