@@ -84,7 +84,7 @@ impl CertificateData {
 
 /// Errors from certificate provider operations.
 #[derive(Debug, thiserror::Error)]
-pub(crate) enum CertProviderError {
+pub enum CertProviderError {
     #[error("failed to read certificate file '{path}': {source}")]
     FileRead {
         path: String,
