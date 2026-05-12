@@ -222,14 +222,25 @@ impl OutlierStatsRegistry {
         }
     }
 
-    /// Clear the ejection on `state` and decrement the cluster-wide
-    /// `ejected_count`. Returns whether the transition fired (so
-    /// callers can guard against double-counting). Called by the LB
-    /// when an `EjectedChannel`'s timer fires and yields
-    /// `UnejectedChannel::Ready`.
+    /// Clear the ejection on `state`, decrement the cluster-wide
+    /// `ejected_count`, and decrement the channel's ejection
+    /// multiplier (matching gRFC A50 step 6.b, which decrements
+    /// multiplier in the same sweep that un-ejects). Returns whether
+    /// the transition fired (so callers can guard against
+    /// double-counting). Called by the LB when an `EjectedChannel`'s
+    /// timer fires and yields `UnejectedChannel::Ready`.
     pub(crate) fn note_uneject(&self, state: &OutlierChannelState) -> bool {
         if state.try_uneject() {
             self.ejected_count.fetch_sub(1, Ordering::Relaxed);
+            // Per A50, the same sweep that un-ejects also decrements
+            // the multiplier. Since our un-ejection is timer-driven
+            // (decoupled from the housekeeping sweep), we apply the
+            // decrement here to avoid a window where a re-eject would
+            // see a stale (one-higher) multiplier and back off too
+            // aggressively. The actor's housekeeping decrement still
+            // runs at each interval; saturating arithmetic ensures
+            // the eventual decrement to zero stays correct.
+            state.decrement_multiplier();
             true
         } else {
             false
@@ -713,16 +724,56 @@ mod tests {
     fn note_uneject_clears_state_and_decrements_counter() {
         let registry = OutlierStatsRegistry::with_rng(base_config(), FixedRng::boxed(99));
         let s = registry.add_channel(addr(8080));
-        s.try_eject(Instant::now());
+        s.try_eject(Instant::now()); // bumps multiplier 0 → 1
         registry.ejected_count.fetch_add(1, Ordering::Relaxed);
         assert!(s.is_ejected());
+        assert_eq!(s.ejection_multiplier(), 1);
 
         assert!(registry.note_uneject(&s));
         assert!(!s.is_ejected());
         assert_eq!(registry.ejected_count.load(Ordering::Relaxed), 0);
+        // A50 step 6.b: same sweep that un-ejects also decrements
+        // the multiplier.
+        assert_eq!(s.ejection_multiplier(), 0);
 
         // Second call is a no-op.
         assert!(!registry.note_uneject(&s));
+        assert_eq!(s.ejection_multiplier(), 0);
+    }
+
+    /// Re-ejecting a channel immediately after un-ejection should
+    /// produce a backoff sized for multiplier=1, not multiplier=2 —
+    /// i.e. it should *not* punish the channel for the previous
+    /// ejection that has just finished serving its cooldown. This is
+    /// what gRFC A50 prescribes and what Envoy does (un-eject and
+    /// decrement happen at the same sweep).
+    #[test]
+    fn re_eject_after_uneject_uses_fresh_multiplier() {
+        let mut config = fp_config(50, 10, 3);
+        config.base_ejection_time = Duration::from_secs(10);
+        config.max_ejection_time = Duration::from_secs(300);
+        let registry = OutlierStatsRegistry::with_rng(config, FixedRng::boxed(99));
+        let s = registry.add_channel(addr(8080));
+
+        let t0 = Instant::now();
+        s.try_eject(t0); // multiplier 0 → 1
+        registry.ejected_count.fetch_add(1, Ordering::Relaxed);
+        assert_eq!(s.ejection_multiplier(), 1);
+
+        // Backoff elapses; LB calls note_uneject.
+        registry.note_uneject(&s);
+        assert_eq!(s.ejection_multiplier(), 0);
+
+        // Channel immediately misbehaves again and gets re-ejected.
+        let t1 = t0 + Duration::from_secs(11);
+        s.try_eject(t1); // multiplier 0 → 1, not 1 → 2
+        assert_eq!(s.ejection_multiplier(), 1);
+        // Remaining ejection duration should be `base * 1 = 10s`,
+        // not `base * 2 = 20s`.
+        assert_eq!(
+            registry.remaining_ejection(&s, t1).unwrap(),
+            Duration::from_secs(10),
+        );
     }
 
     // ----- Spawned actor -----
