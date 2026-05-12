@@ -195,6 +195,7 @@ mod tests {
             name: name.to_string(),
             eds_service_name: None,
             lb_policy: lb,
+            security: None,
         })
     }
 
