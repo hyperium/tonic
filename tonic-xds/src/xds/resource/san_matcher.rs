@@ -27,6 +27,13 @@ pub(crate) enum SanMatcher {
     Uri(StringMatcher),
     Email(StringMatcher),
     IpAddress(StringMatcher),
+    /// Type-agnostic matcher synthesized from the deprecated
+    /// `CertificateValidationContext.match_subject_alt_names` field, which
+    /// carries plain `StringMatcher`s without an explicit SAN type. Matches
+    /// against any SAN entry in the peer cert regardless of type — required
+    /// for interop with control planes (notably Istio) that still emit the
+    /// deprecated field with SPIFFE URI content.
+    AnyType(StringMatcher),
 }
 
 /// A SAN entry extracted from a peer X.509 certificate.
@@ -81,6 +88,14 @@ impl SanMatcher {
             // (RFC 5952). `IpAddr`'s `Display` implementation already produces
             // that form (lowercase, zero-compressed IPv6).
             (Self::IpAddress(m), SanEntry::IpAddress(ip)) => m.is_match(&ip.to_string()),
+            // AnyType: apply the string matcher to whatever the SAN entry
+            // carries, regardless of type. DNS entries don't get wildcard
+            // semantics here — the deprecated field predates typed wildcard
+            // handling.
+            (Self::AnyType(m), SanEntry::Dns(v)) => m.is_match(v),
+            (Self::AnyType(m), SanEntry::Uri(v)) => m.is_match(v),
+            (Self::AnyType(m), SanEntry::Email(v)) => m.is_match(v),
+            (Self::AnyType(m), SanEntry::IpAddress(ip)) => m.is_match(&ip.to_string()),
             _ => false, // type mismatch
         }
     }
@@ -299,5 +314,40 @@ mod tests {
             SanEntry::Dns("api.example.com".into()),
         ];
         assert!(m.matches_any(&sans));
+    }
+
+    #[test]
+    fn any_type_matches_uri_san() {
+        let m = SanMatcher::AnyType(
+            StringMatcher::from_proto(exact("spiffe://td/ns/prod/sa/x")).unwrap(),
+        );
+        assert!(m.matches_any(&[SanEntry::Uri("spiffe://td/ns/prod/sa/x".into())]));
+    }
+
+    #[test]
+    fn any_type_matches_dns_san() {
+        let m = SanMatcher::AnyType(StringMatcher::from_proto(exact("api.example.com")).unwrap());
+        assert!(m.matches_any(&[SanEntry::Dns("api.example.com".into())]));
+    }
+
+    #[test]
+    fn any_type_matches_email_san() {
+        let m = SanMatcher::AnyType(StringMatcher::from_proto(exact("svc@corp.test")).unwrap());
+        assert!(m.matches_any(&[SanEntry::Email("svc@corp.test".into())]));
+    }
+
+    #[test]
+    fn any_type_matches_ip_san_canonical_form() {
+        let m = SanMatcher::AnyType(StringMatcher::from_proto(exact("10.0.0.1")).unwrap());
+        assert!(m.matches_any(&[SanEntry::IpAddress("10.0.0.1".parse().unwrap())]));
+    }
+
+    #[test]
+    fn any_type_does_not_apply_dns_wildcard_semantics() {
+        // Wildcards in the *cert* are honored only when the matcher type is
+        // `Dns` (typed) — the deprecated `AnyType` path predates that and
+        // compares as literal strings.
+        let m = SanMatcher::AnyType(StringMatcher::from_proto(exact("foo.example.com")).unwrap());
+        assert!(!m.matches_any(&[SanEntry::Dns("*.example.com".into())]));
     }
 }
