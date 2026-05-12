@@ -358,6 +358,13 @@ impl PickFirstPolicy {
     ) {
         let sc_clone = sc.clone();
         self.connectivity_state = ConnectivityState::Connecting;
+        self.subchannel_states.insert(
+            sc.address(),
+            SubchannelState {
+                connectivity_state: ConnectivityState::Connecting,
+                last_connection_error: None,
+            },
+        );
         sc_clone.connect();
 
         // Cancel any existing timer
@@ -568,7 +575,7 @@ impl LbPolicy for PickFirstPolicy {
                 self.subchannel_activate(subchannel, channel_controller);
             }
             (false, _) => {
-                // Always capture freshest unselected error for accurate telemetry.
+                // Always capture freshest unselected error.
                 if state.connectivity_state == ConnectivityState::TransientFailure {
                     if let Some(err) = &state.last_connection_error {
                         self.last_connection_error = Some(err.clone());
@@ -1417,6 +1424,90 @@ mod test {
         assert!(
             !policy.subchannels.is_empty(),
             "Subchannels erroneously cleared by resolver error."
+        );
+    }
+
+    // Out-of-Order Failure Detection
+    // Ensures the policy waits for all parallel connection attempts to drop
+    // before failing the channel.
+    #[tokio::test]
+    async fn test_pick_first_happy_eyeballs_out_of_order_failure() {
+        let (rx, mut policy, mut controller) = simulate_connection(vec!["addr1", "addr2"], None);
+
+        // 1. Simulate Happy Eyeballs timer firing to launch parallel connection
+        // to addr2.
+        policy.timer_expired.store(true, Ordering::SeqCst);
+        policy.work(controller.as_mut());
+
+        match rx.recv().unwrap() {
+            TestEvent::Connect(addr) => assert_eq!(addr.address.to_string(), "addr2"),
+            other => panic!("unexpected event {:?}", other),
+        }
+
+        // 2. Simulate addr2 failing first while addr1 is still in flight.
+        let sc2 = policy.subchannels[1].clone();
+        policy.subchannel_update(
+            sc2,
+            &SubchannelState {
+                connectivity_state: ConnectivityState::TransientFailure,
+                last_connection_error: Some("addr2 failed".to_string()),
+            },
+            controller.as_mut(),
+        );
+
+        // Verify policy does NOT enter TransientFailure yet.
+        std::thread::sleep(Duration::from_millis(50));
+        assert!(rx.try_recv().is_err(), "unexpected premature event");
+
+        // 3. Simulate addr1 failing. Pass is now fully exhausted.
+        let sc1 = policy.subchannels[0].clone();
+        policy.subchannel_update(
+            sc1,
+            &SubchannelState {
+                connectivity_state: ConnectivityState::TransientFailure,
+                last_connection_error: Some("addr1 failed".to_string()),
+            },
+            controller.as_mut(),
+        );
+
+        match rx.recv().unwrap() {
+            TestEvent::UpdatePicker(state) => {
+                assert_eq!(
+                    state.connectivity_state,
+                    ConnectivityState::TransientFailure
+                );
+            }
+            other => panic!("unexpected event {:?}", other),
+        }
+    }
+
+    // Freshest Error Caching (Steady State)
+    // Ensures background failures during Steady State continuously overwrite
+    // stale connection errors.
+    #[tokio::test]
+    async fn test_pick_first_steady_state_freshest_error() {
+        let (rx, mut policy, mut controller) = simulate_failed_connection(vec!["addr1"], None);
+
+        // Consume exhaustion events.
+        rx.recv().unwrap();
+        rx.recv().unwrap();
+        assert!(policy.steady_state.is_some());
+
+        // Simulate background failure during Steady State with net-new error telemetry.
+        let sc1 = policy.subchannels[0].clone();
+        policy.subchannel_update(
+            sc1,
+            &SubchannelState {
+                connectivity_state: ConnectivityState::TransientFailure,
+                last_connection_error: Some("steady state network drop".to_string()),
+            },
+            controller.as_mut(),
+        );
+
+        // Verify policy caches the freshest unselected error.
+        assert_eq!(
+            policy.last_connection_error.as_deref(),
+            Some("steady state network drop")
         );
     }
 }
