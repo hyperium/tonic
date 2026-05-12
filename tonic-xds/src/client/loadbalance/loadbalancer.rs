@@ -837,7 +837,7 @@ mod tests {
 
     // -- Outlier-detection integration tests --
 
-    use crate::client::loadbalance::outlier_detection::{OutlierStatsRegistry, Rng};
+    use crate::client::loadbalance::outlier_detection::OutlierStatsRegistry;
     use crate::xds::resource::outlier_detection::{
         FailurePercentageConfig, OutlierDetectionConfig, Percentage,
     };
@@ -845,13 +845,6 @@ mod tests {
 
     fn pct(v: u32) -> Percentage {
         Percentage::new(v).unwrap()
-    }
-
-    struct AlwaysFireRng;
-    impl Rng for AlwaysFireRng {
-        fn pct_roll(&self) -> u32 {
-            0
-        }
     }
 
     fn fp_config(
@@ -882,7 +875,7 @@ mod tests {
         let connector = Arc::new(MockConnector::new());
         let picker: Arc<dyn ChannelPicker<ReadyChannel<MockService>, &'static str> + Send + Sync> =
             Arc::new(P2cPicker);
-        let registry = OutlierStatsRegistry::with_rng(config, Box::new(AlwaysFireRng));
+        let registry = OutlierStatsRegistry::new(config);
         let lb =
             LoadBalancer::with_outlier(discover, connector.clone(), picker, Some(registry.clone()))
                 .expect("registry not yet wired");
@@ -1156,7 +1149,7 @@ mod tests {
         let connector = Arc::new(MockConnector::new());
         let picker: Arc<dyn ChannelPicker<ReadyChannel<MockService>, &'static str> + Send + Sync> =
             Arc::new(P2cPicker);
-        let registry = OutlierStatsRegistry::with_rng(fp_config(50, 5, 3), Box::new(AlwaysFireRng));
+        let registry = OutlierStatsRegistry::new(fp_config(50, 5, 3));
 
         // First wiring succeeds.
         LoadBalancer::with_outlier(
