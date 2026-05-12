@@ -223,9 +223,9 @@ pub(crate) struct EjectionConfig {
 
 /// Result of an ejection expiring.
 pub(crate) enum UnejectedChannel<S> {
-    /// Connection reused; the caller wraps the service back into a
-    /// [`ReadyChannel`].
-    Ready(S),
+    /// Cooldown elapsed; the original connection is reused with its
+    /// outlier state reattached.
+    Ready(ReadyChannel<S>),
     /// A fresh connection has been started.
     Connecting(ConnectingChannel<S>),
 }
@@ -314,8 +314,9 @@ impl<S> ReadyChannel<S> {
         &self.outlier
     }
 
-    /// Eject this channel. Consumes self; the outlier state remains
-    /// in the registry.
+    /// Eject this channel. Consumes self; the outlier state is moved
+    /// into the [`EjectedChannel`] so it can be reattached to the
+    /// [`ReadyChannel`] produced when the cooldown elapses.
     pub(crate) fn eject<C>(self, config: EjectionConfig, connector: Arc<C>) -> EjectedChannel<S>
     where
         C: Connector<Service = S> + Send + Sync + 'static,
@@ -324,6 +325,7 @@ impl<S> ReadyChannel<S> {
         EjectedChannel {
             addr: self.addr,
             inner: self.inner,
+            outlier: self.outlier,
             config,
             connector,
             ejection_timer,
@@ -383,6 +385,7 @@ pin_project! {
     pub(crate) struct EjectedChannel<S> {
         addr: EndpointAddress,
         inner: S,
+        outlier: Arc<OutlierChannelState>,
         config: EjectionConfig,
         connector: Arc<dyn Connector<Service = S> + Send + Sync>,
         #[pin]
@@ -404,7 +407,12 @@ impl<S: Clone + Send + 'static> Future for EjectedChannel<S> {
                         this.addr.clone(),
                     )))
                 } else {
-                    Poll::Ready(UnejectedChannel::Ready(this.inner.clone()))
+                    let ready = ReadyChannel::new(
+                        this.addr.clone(),
+                        this.inner.clone(),
+                        this.outlier.clone(),
+                    );
+                    Poll::Ready(UnejectedChannel::Ready(ready))
                 }
             }
             Poll::Pending => Poll::Pending,

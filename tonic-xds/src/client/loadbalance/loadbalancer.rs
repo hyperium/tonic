@@ -268,26 +268,26 @@ where
     }
 
     /// Drain completed `EjectedChannel` timers. Clears the
-    /// outlier state and routes the resolved channel back into
-    /// `ready` or `connecting`.
+    /// registry-level ejection counter and routes the resolved
+    /// channel back into `ready` (with its outlier state already
+    /// reattached) or `connecting`.
     fn poll_unejection(&mut self, cx: &mut Context<'_>) {
         while let Poll::Ready(Some((addr, unejected))) = self.ejected.poll_next(cx) {
-            let state = match self.outlier.as_ref() {
-                Some(o) => o.registry().add_channel(addr.clone()),
-                None => Arc::new(OutlierChannelState::new(addr.clone())),
-            };
-            if let Some(o) = self.outlier.as_ref() {
-                o.registry().note_uneject(&state);
-            }
             match unejected {
-                UnejectedChannel::Ready(svc) => {
+                UnejectedChannel::Ready(ready) => {
+                    if let Some(o) = self.outlier.as_ref() {
+                        o.registry().note_uneject(ready.outlier());
+                    }
                     tracing::debug!("outlier detection: uneject {addr}");
-                    let ready = ReadyChannel::new(addr.clone(), svc, state);
                     self.ready.insert(addr, ready);
                 }
                 // `needs_reconnect = false` for A50; this arm is
                 // reserved for future policies.
                 UnejectedChannel::Connecting(future) => {
+                    if let Some(o) = self.outlier.as_ref() {
+                        let state = o.registry().add_channel(addr.clone());
+                        o.registry().note_uneject(&state);
+                    }
                     let _ = self.connecting.add(addr, future);
                 }
             }
