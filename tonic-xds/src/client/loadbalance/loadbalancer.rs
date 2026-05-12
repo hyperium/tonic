@@ -35,7 +35,9 @@ use crate::client::loadbalance::channel_state::{
 };
 use crate::client::loadbalance::errors::LbError;
 use crate::client::loadbalance::keyed_futures::KeyedFutures;
-use crate::client::loadbalance::outlier_detection::{OutlierDetector, OutlierStatsRegistry};
+use crate::client::loadbalance::outlier_detection::{
+    OutlierDetector, OutlierStatsRegistry, RegistryAlreadyWired,
+};
 use crate::client::loadbalance::pickers::ChannelPicker;
 
 /// Future returned by [`LoadBalancer::call`].
@@ -110,27 +112,36 @@ where
         connector: Arc<C>,
         picker: Arc<dyn ChannelPicker<ReadyChannel<C::Service>, Req> + Send + Sync>,
     ) -> Self {
-        Self::with_outlier(discovery, connector, picker, None)
+        // Infallible: `with_outlier(_, _, _, None)` never touches the
+        // outlier-detection construction path.
+        match Self::with_outlier(discovery, connector, picker, None) {
+            Ok(lb) => lb,
+            Err(_) => unreachable!("with_outlier(.., None) cannot wire a registry"),
+        }
     }
 
     /// Create a load balancer, optionally enabling outlier detection.
     /// When `outlier` is `Some`, the registry's housekeeping actor is
     /// spawned and its lifetime is bound to the load balancer.
+    /// Returns [`RegistryAlreadyWired`] if the provided registry has
+    /// already been wired to another load balancer — a registry's
+    /// eject-signal receiver is one-shot.
     pub(crate) fn with_outlier(
         discovery: D,
         connector: Arc<C>,
         picker: Arc<dyn ChannelPicker<ReadyChannel<C::Service>, Req> + Send + Sync>,
         outlier: Option<Arc<OutlierStatsRegistry>>,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, RegistryAlreadyWired> {
+        let outlier = outlier.map(OutlierDetector::new).transpose()?;
+        Ok(Self {
             discovery,
             connector,
             connecting: KeyedFutures::new(),
             ready: IndexMap::new(),
             ejected: KeyedFutures::new(),
-            outlier: outlier.map(OutlierDetector::new),
+            outlier,
             picker,
-        }
+        })
     }
 
     /// Purge all per-endpoint state for `addr`: the connecting
@@ -928,7 +939,8 @@ mod tests {
             Arc::new(P2cPicker);
         let registry = OutlierStatsRegistry::with_rng(config, Box::new(AlwaysFireRng));
         let lb =
-            LoadBalancer::with_outlier(discover, connector.clone(), picker, Some(registry.clone()));
+            LoadBalancer::with_outlier(discover, connector.clone(), picker, Some(registry.clone()))
+                .expect("registry not yet wired");
         (lb, connector, registry)
     }
 
@@ -1186,5 +1198,33 @@ mod tests {
             "8084 must be back in ready after un-ejection"
         );
         assert!(!registry.add_channel(addr(8084)).is_ejected());
+    }
+
+    /// Sharing one `OutlierStatsRegistry` across two `LoadBalancer`s is
+    /// not supported — the eject-signal receiver is one-shot. The
+    /// second `with_outlier` call must return an error rather than
+    /// panic.
+    #[tokio::test]
+    async fn test_outlier_registry_cannot_be_wired_twice() {
+        let (_tx1, discover1) = new_discover();
+        let (_tx2, discover2) = new_discover();
+        let connector = Arc::new(MockConnector::new());
+        let picker: Arc<dyn ChannelPicker<ReadyChannel<MockService>, &'static str> + Send + Sync> =
+            Arc::new(P2cPicker);
+        let registry = OutlierStatsRegistry::with_rng(fp_config(50, 5, 3), Box::new(AlwaysFireRng));
+
+        // First wiring succeeds.
+        LoadBalancer::with_outlier(
+            discover1,
+            connector.clone(),
+            picker.clone(),
+            Some(registry.clone()),
+        )
+        .expect("first wire");
+
+        // Second wiring of the same registry must error, not panic.
+        let result =
+            LoadBalancer::with_outlier(discover2, connector, picker, Some(registry.clone()));
+        assert!(result.is_err());
     }
 }

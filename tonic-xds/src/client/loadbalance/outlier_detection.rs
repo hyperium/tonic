@@ -49,6 +49,14 @@ use crate::client::loadbalance::channel_state::OutlierChannelState;
 use crate::common::async_util::AbortOnDrop;
 use crate::xds::resource::outlier_detection::OutlierDetectionConfig;
 
+/// Construction-time error returned when a single
+/// [`OutlierStatsRegistry`] is wired to more than one load balancer.
+/// The registry's eject-signal receiver is one-shot; reuse is not
+/// supported.
+#[derive(Debug, thiserror::Error)]
+#[error("OutlierStatsRegistry is already wired to a LoadBalancer")]
+pub(crate) struct RegistryAlreadyWired;
+
 /// Probability source for `enforcing_*` rolls.
 pub(crate) trait Rng: Send + Sync + 'static {
     /// Return a uniform random `u32` in `0..100`.
@@ -117,13 +125,17 @@ impl OutlierStatsRegistry {
     }
 
     /// Take the eject-signal receiver. Called exactly once by
-    /// [`OutlierDetector::new`].
-    fn take_eject_rx(&self) -> mpsc::UnboundedReceiver<EndpointAddress> {
+    /// [`OutlierDetector::new`]. Returns
+    /// [`RegistryAlreadyWired`] if a previous call has already taken
+    /// the receiver — a registry can drive at most one load balancer.
+    fn take_eject_rx(
+        &self,
+    ) -> Result<mpsc::UnboundedReceiver<EndpointAddress>, RegistryAlreadyWired> {
         self.eject_rx
             .lock()
             .expect("eject_rx mutex poisoned")
             .take()
-            .expect("OutlierStatsRegistry::take_eject_rx called more than once")
+            .ok_or(RegistryAlreadyWired)
     }
 
     /// Register a channel and return the `Arc<OutlierChannelState>`
@@ -338,15 +350,18 @@ pub(crate) struct OutlierDetector {
 
 impl OutlierDetector {
     /// Build from a registry, spawning the housekeeping actor and
-    /// taking ownership of the eject-signal receiver.
-    pub(crate) fn new(registry: Arc<OutlierStatsRegistry>) -> Self {
-        let eject_rx = registry.take_eject_rx();
+    /// taking ownership of the eject-signal receiver. Returns
+    /// [`RegistryAlreadyWired`] if the registry's receiver has
+    /// already been taken (i.e. this registry is already driving
+    /// another load balancer); a registry can drive at most one LB.
+    pub(crate) fn new(registry: Arc<OutlierStatsRegistry>) -> Result<Self, RegistryAlreadyWired> {
+        let eject_rx = registry.take_eject_rx()?;
         let _actor = spawn_actor(registry.clone());
-        Self {
+        Ok(Self {
             registry,
             eject_rx,
             _actor,
-        }
+        })
     }
 
     /// Shared registry handle.
@@ -591,7 +606,7 @@ mod tests {
     #[test]
     fn ejection_dispatches_address_through_mpsc() {
         let registry = OutlierStatsRegistry::with_rng(fp_config(50, 10, 3), FixedRng::boxed(99));
-        let mut rx = registry.take_eject_rx();
+        let mut rx = registry.take_eject_rx().expect("receiver available");
         let bad = registry.add_channel(addr(8084));
         for port in 8080..=8083 {
             let s = registry.add_channel(addr(port));
