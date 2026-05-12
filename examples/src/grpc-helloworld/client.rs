@@ -35,7 +35,10 @@ async fn main() {
 
     // Send the request and print the response:
     let request = proto!(HelloRequest { name });
-    let response = client.say_hello(request).await.expect("RPC error");
+    let response = client
+        .say_hello(request.as_view())
+        .await
+        .expect("RPC error");
 
     println!("Greeting: {:}", response.message());
 }

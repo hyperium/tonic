@@ -1,6 +1,6 @@
 [package]
 name = "tonic-prost"
-version = "0.14.5"
+version = "0.14.6"
 authors = ["Lucio Franco <luciofranco14@gmail.com>"]
 edition = "2024"
 license = "MIT"
@@ -13,7 +13,7 @@ keywords = ["rpc", "grpc", "prost", "protobuf", "tonic"]
 rust-version = { workspace = true }
 
 [dependencies]
-tonic = { version = "0.14.0", path = "../tonic", default-features = false }
+tonic = { version = "0.14.6", path = "../tonic", default-features = false }
 prost = "0.14"
 bytes = "1"
 

@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 
 use serde::Deserialize;
-use xds_client::message::{Locality, Node};
+use xds_client::message::{Locality, MetadataValue, Node};
 
 /// Environment variable pointing to a bootstrap JSON file path.
 const ENV_BOOTSTRAP_FILE: &str = "GRPC_XDS_BOOTSTRAP";
@@ -121,6 +121,36 @@ pub(crate) struct NodeConfig {
     pub cluster: Option<String>,
     /// Locality where the node is running.
     pub locality: Option<LocalityConfig>,
+    /// Free-form metadata sent to the xDS server (`google.protobuf.Struct`).
+    ///
+    /// Accepts any JSON value (nested objects, arrays, numbers, bools, null)
+    /// per the proto3 JSON mapping for `google.protobuf.Struct`. Some control
+    /// planes vary the served config based on metadata — e.g. Istio's istiod
+    /// gates proxyless gRPC config behind `GENERATOR = "grpc"`.
+    #[serde(default)]
+    pub metadata: HashMap<String, serde_json::Value>,
+}
+
+/// Convert a `serde_json::Value` to the codec-agnostic [`MetadataValue`].
+fn json_to_metadata(value: serde_json::Value) -> Result<MetadataValue, BootstrapError> {
+    Ok(match value {
+        serde_json::Value::Null => MetadataValue::Null,
+        serde_json::Value::Bool(b) => MetadataValue::Bool(b),
+        serde_json::Value::Number(n) => MetadataValue::Number(n.as_f64().ok_or_else(|| {
+            BootstrapError::Validation(format!("metadata number {n} not representable as f64"))
+        })?),
+        serde_json::Value::String(s) => MetadataValue::String(s),
+        serde_json::Value::Array(arr) => MetadataValue::Array(
+            arr.into_iter()
+                .map(json_to_metadata)
+                .collect::<Result<_, _>>()?,
+        ),
+        serde_json::Value::Object(obj) => MetadataValue::Object(
+            obj.into_iter()
+                .map(|(k, v)| json_to_metadata(v).map(|mv| (k, mv)))
+                .collect::<Result<_, _>>()?,
+        ),
+    })
 }
 
 /// Locality configuration from bootstrap JSON.
@@ -245,8 +275,10 @@ impl BootstrapConfig {
     }
 }
 
-impl From<NodeConfig> for Node {
-    fn from(config: NodeConfig) -> Self {
+impl TryFrom<NodeConfig> for Node {
+    type Error = BootstrapError;
+
+    fn try_from(config: NodeConfig) -> Result<Self, Self::Error> {
         let mut node = Node::new("tonic-xds", env!("CARGO_PKG_VERSION"));
 
         if !config.id.is_empty() {
@@ -262,8 +294,16 @@ impl From<NodeConfig> for Node {
                 sub_zone: locality.sub_zone,
             });
         }
+        if !config.metadata.is_empty() {
+            let metadata: HashMap<String, MetadataValue> = config
+                .metadata
+                .into_iter()
+                .map(|(k, v)| json_to_metadata(v).map(|mv| (k, mv)))
+                .collect::<Result<_, _>>()?;
+            node = node.with_metadata(metadata);
+        }
 
-        node
+        Ok(node)
     }
 }
 
@@ -333,7 +373,7 @@ mod tests {
     #[test]
     fn node_from_full_config() {
         let config = BootstrapConfig::from_json(full_json()).unwrap();
-        let node = Node::from(config.node);
+        let node = Node::try_from(config.node).unwrap();
         assert_eq!(node.id.as_deref(), Some("projects/123/nodes/456"));
         assert_eq!(node.cluster.as_deref(), Some("test-cluster"));
         assert_eq!(node.user_agent_name, "tonic-xds");
@@ -347,7 +387,7 @@ mod tests {
     #[test]
     fn node_from_minimal_config() {
         let config = BootstrapConfig::from_json(minimal_json()).unwrap();
-        let node = Node::from(config.node);
+        let node = Node::try_from(config.node).unwrap();
         assert_eq!(node.id.as_deref(), Some("test-node"));
         assert!(node.cluster.is_none());
         assert!(node.locality.is_none());
@@ -431,8 +471,109 @@ mod tests {
             "xds_servers": [{"server_uri": "localhost:5000"}]
         }"#;
         let config = BootstrapConfig::from_json(json).unwrap();
-        let node = Node::from(config.node);
+        let node = Node::try_from(config.node).unwrap();
         assert!(node.id.is_none());
+    }
+
+    #[test]
+    fn parse_node_metadata() {
+        let json = r#"{
+            "xds_servers": [{"server_uri": "localhost:5000"}],
+            "node": {
+                "id": "n1",
+                "metadata": {
+                    "GENERATOR": "grpc",
+                    "PILOT_VERSION": "1.20"
+                }
+            }
+        }"#;
+        let config = BootstrapConfig::from_json(json).unwrap();
+        assert_eq!(
+            config.node.metadata.get("GENERATOR").unwrap(),
+            &serde_json::Value::String("grpc".to_string())
+        );
+        assert_eq!(
+            config.node.metadata.get("PILOT_VERSION").unwrap(),
+            &serde_json::Value::String("1.20".to_string())
+        );
+    }
+
+    #[test]
+    fn node_from_config_propagates_metadata() {
+        let json = r#"{
+            "xds_servers": [{"server_uri": "localhost:5000"}],
+            "node": {
+                "id": "n1",
+                "metadata": {"GENERATOR": "grpc"}
+            }
+        }"#;
+        let config = BootstrapConfig::from_json(json).unwrap();
+        let node = Node::try_from(config.node).unwrap();
+        assert_eq!(
+            node.metadata.get("GENERATOR").unwrap(),
+            &MetadataValue::String("grpc".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_istio_style_metadata() {
+        // Real-world Istio bootstrap shape: nested objects, numbers, arrays.
+        let json = r#"{
+            "xds_servers": [{"server_uri": "unix:///etc/istio/proxy/XDS"}],
+            "node": {
+                "id": "sidecar~10.0.0.1~pod.ns~ns.svc.cluster.local",
+                "metadata": {
+                    "GENERATOR": "grpc",
+                    "ANNOTATIONS": {
+                        "inject.istio.io/templates": "grpc-agent",
+                        "istio.io/rev": "default"
+                    },
+                    "CLUSTER_ID": "Kubernetes",
+                    "ENVOY_PROMETHEUS_PORT": 15090,
+                    "PILOT_SAN": ["istiod.istio-system.svc"]
+                }
+            }
+        }"#;
+        let config = BootstrapConfig::from_json(json).unwrap();
+        let node = Node::try_from(config.node).unwrap();
+
+        assert_eq!(
+            node.metadata.get("GENERATOR").unwrap(),
+            &MetadataValue::String("grpc".to_string())
+        );
+        assert_eq!(
+            node.metadata.get("ENVOY_PROMETHEUS_PORT").unwrap(),
+            &MetadataValue::Number(15090.0)
+        );
+
+        match node.metadata.get("ANNOTATIONS").unwrap() {
+            MetadataValue::Object(fields) => {
+                assert_eq!(
+                    fields.get("istio.io/rev").unwrap(),
+                    &MetadataValue::String("default".to_string())
+                );
+            }
+            other => panic!("expected Object, got {other:?}"),
+        }
+
+        match node.metadata.get("PILOT_SAN").unwrap() {
+            MetadataValue::Array(items) => {
+                assert_eq!(items.len(), 1);
+                assert_eq!(
+                    &items[0],
+                    &MetadataValue::String("istiod.istio-system.svc".to_string())
+                );
+            }
+            other => panic!("expected Array, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn missing_metadata_defaults_to_empty() {
+        let config = BootstrapConfig::from_json(minimal_json()).unwrap();
+        assert!(config.node.metadata.is_empty());
+        let node = Node::try_from(config.node).unwrap();
+        assert!(node.metadata.is_empty());
     }
 
     #[test]
