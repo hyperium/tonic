@@ -100,7 +100,6 @@ pub(crate) struct EndpointChannel<S> {
 impl<S> EndpointChannel<S> {
     /// Creates a new `EndpointChannel`.
     /// This should be used by xDS implementations to construct channels to individual endpoints.
-    #[allow(dead_code)]
     pub(crate) fn new(inner: S) -> Self {
         Self {
             inner,

@@ -431,8 +431,8 @@ mod tests {
         );
 
         let registry = CertProviderRegistry::from_bootstrap(&configs).unwrap();
-        assert!(registry.contains("my_certs"));
-        assert!(!registry.contains("other"));
+        assert!(registry.get("my_certs").is_some());
+        assert!(registry.get("other").is_none());
 
         let provider = registry.get("my_certs").unwrap();
         let data = provider.fetch().unwrap();

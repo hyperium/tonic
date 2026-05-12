@@ -141,7 +141,6 @@ impl XdsCache {
     }
 
     /// Watches cluster resource changes for a specific cluster.
-    #[allow(dead_code)] // Will be used when LB policy dispatch is wired (A48).
     pub(crate) fn watch_cluster(&self, name: &str) -> CacheWatch<ClusterResource> {
         self.clusters.watch(name)
     }

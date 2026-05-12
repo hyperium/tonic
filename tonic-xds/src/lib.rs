@@ -81,6 +81,45 @@
 //! // let client = MyServiceClient::new(channel);
 //! ```
 //!
+//! ## TLS Security (gRFC A29)
+//!
+//! Upstream data-plane TLS is enabled when:
+//!
+//! 1. The crate is built with `tls-ring` *or* `tls-aws-lc` (exactly one).
+//! 2. The bootstrap JSON declares `certificate_providers` entries — each
+//!    referenced by `instance_name` in CDS resources.
+//! 3. A CDS `Cluster` carries `transport_socket: UpstreamTlsContext` naming
+//!    those instances (configured on the xDS control plane).
+//!
+//! Only the `file_watcher` plugin is built in. It reads PEM files from disk
+//! and refreshes them on `refresh_interval` (default 600s) — rotated certs
+//! reach existing TLS connectors on the next handshake.
+//!
+//! ```json
+//! {
+//!   "xds_servers": [{"server_uri": "xds.example.com:443"}],
+//!   "certificate_providers": {
+//!     "root_ca":  { "plugin_name": "file_watcher", "config": {
+//!       "ca_certificate_file": "/etc/certs/ca.pem"
+//!     }},
+//!     "identity": { "plugin_name": "file_watcher", "config": {
+//!       "certificate_file":  "/etc/certs/cert.pem",
+//!       "private_key_file":  "/etc/certs/key.pem",
+//!       "refresh_interval":  "60s"
+//!     }}
+//!   }
+//! }
+//! ```
+//!
+//! When `match_typed_subject_alt_names` is set on the cluster's validation
+//! context, the server cert's SAN list must match one of the configured
+//! matchers ("any" semantics). An empty matcher list accepts any cert
+//! chained to the configured CA roots.
+//!
+//! CDS updates that change a cluster's `transport_socket` rebuild that
+//! cluster's connector — new endpoint connections pick up the new config;
+//! existing TLS sessions continue.
+//!
 //! ## xDS features
 //!
 //! | Feature | gRFC | Status |
@@ -92,7 +131,7 @@
 //! | Weighted cluster traffic splitting | [A28] | Supported |
 //! | Case-insensitive header matching | [A63] | Supported |
 //! | Client-side P2C load balancing | | Supported |
-//! | TLS endpoint connections | [A29] | Planned |
+//! | TLS endpoint connections | [A29] | Supported |
 //! | Least-request load balancing | [A48] | Planned |
 //!
 //! [A27]: https://github.com/grpc/proposal/blob/master/A27-xds-global-load-balancing.md

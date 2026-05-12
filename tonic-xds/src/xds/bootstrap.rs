@@ -54,7 +54,9 @@ pub struct BootstrapConfig {
     ///
     /// [`CertificateProviderPluginInstance`]: https://github.com/envoyproxy/envoy/blob/main/api/envoy/extensions/transport_sockets/tls/v3/common.proto
     #[serde(default)]
-    #[allow(dead_code)] // Consumed when CertProviderRegistry is wired in (PR2/A29).
+    // Consumed by `CertProviderRegistry::from_bootstrap` only under TLS
+    // features; parsed regardless so non-TLS builds accept the same JSON.
+    #[cfg_attr(not(feature = "_tls-any"), allow(dead_code))]
     pub(crate) certificate_providers: HashMap<String, CertProviderPluginConfig>,
 }
 
