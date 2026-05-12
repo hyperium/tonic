@@ -250,7 +250,7 @@ impl IdleChannel {
     where
         C::Service: Send + 'static,
     {
-        ConnectingChannel::new(connector.connect(&self.addr), self.addr)
+        ConnectingChannel::new(connector.connect(&self.addr))
     }
 }
 
@@ -271,7 +271,7 @@ pub(crate) struct ConnectingChannel<S> {
 }
 
 impl<S: Send + 'static> ConnectingChannel<S> {
-    pub(crate) fn new(fut: BoxFuture<S>, _addr: EndpointAddress) -> Self {
+    pub(crate) fn new(fut: BoxFuture<S>) -> Self {
         Self { inner: fut }
     }
 }
@@ -341,7 +341,7 @@ impl<S> ReadyChannel<S> {
     where
         S: Send + 'static,
     {
-        ConnectingChannel::new(connector.connect(&self.addr), self.addr)
+        ConnectingChannel::new(connector.connect(&self.addr))
     }
 }
 
@@ -402,10 +402,7 @@ impl<S: Clone + Send + 'static> Future for EjectedChannel<S> {
             Poll::Ready(()) => {
                 if this.config.needs_reconnect {
                     let fut = this.connector.connect(this.addr);
-                    Poll::Ready(UnejectedChannel::Connecting(ConnectingChannel::new(
-                        fut,
-                        this.addr.clone(),
-                    )))
+                    Poll::Ready(UnejectedChannel::Connecting(ConnectingChannel::new(fut)))
                 } else {
                     let ready = ReadyChannel::new(
                         this.addr.clone(),
@@ -519,8 +516,7 @@ mod tests {
     #[tokio::test]
     async fn test_connecting_in_keyed_futures() {
         let (tx, rx) = tokio::sync::oneshot::channel::<MockService>();
-        let connecting =
-            ConnectingChannel::new(Box::pin(async move { rx.await.unwrap() }), test_addr());
+        let connecting = ConnectingChannel::new(Box::pin(async move { rx.await.unwrap() }));
 
         let mut set: KeyedFutures<EndpointAddress, MockService> = KeyedFutures::new();
         set.add(test_addr(), connecting).unwrap();
@@ -537,8 +533,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_connecting_cancelled_via_keyed_futures() {
-        let connecting =
-            ConnectingChannel::new(Box::pin(future::pending::<MockService>()), test_addr());
+        let connecting = ConnectingChannel::new(Box::pin(future::pending::<MockService>()));
 
         let mut set: KeyedFutures<EndpointAddress, MockService> = KeyedFutures::new();
         set.add(test_addr(), connecting).unwrap();
