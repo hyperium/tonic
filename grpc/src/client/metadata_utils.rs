@@ -23,7 +23,6 @@
  */
 
 use tokio::sync::oneshot;
-use tonic::metadata::MetadataMap;
 
 use crate::client::CallOptions;
 use crate::client::InvokeOnce;
@@ -31,6 +30,7 @@ use crate::client::RecvStream;
 use crate::client::interceptor::Intercept;
 use crate::client::interceptor::InterceptOnce;
 use crate::core::RequestHeaders;
+use crate::metadata::MetadataMap;
 
 /// An interceptor that attaches metadata to outgoing RPC headers.
 pub struct AttachHeadersInterceptor {
@@ -53,16 +53,16 @@ impl<I: InvokeOnce> Intercept<I> for AttachHeadersInterceptor {
         options: CallOptions,
         next: I,
     ) -> (Self::SendStream, Self::RecvStream) {
-        headers
-            .metadata_mut()
-            .as_mut()
-            .extend(self.md.as_ref().clone());
-
-        let md = headers.metadata_mut();
-        for entry in self.md.iter() {
-            match entry {
-                tonic::metadata::KeyAndValueRef::Ascii(k, v) => _ = md.insert(k, v.clone()),
-                tonic::metadata::KeyAndValueRef::Binary(k, v) => _ = md.insert_bin(k, v.clone()),
+        let incoming_meta = headers.metadata_mut();
+        incoming_meta.reserve(self.md.len());
+        for kv in self.md.iter() {
+            match kv {
+                crate::metadata::KeyAndValueRef::Ascii(key, value) => {
+                    incoming_meta.append(key, value.clone())
+                }
+                crate::metadata::KeyAndValueRef::Binary(key, value) => {
+                    incoming_meta.append_bin(key, value.clone())
+                }
             }
         }
         next.invoke_once(headers, options).await
@@ -174,13 +174,12 @@ impl<R: RecvStream> RecvStream for CaptureTrailersRecvStream<R> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Status;
-    use crate::StatusCode;
     use crate::client::test_util::MockInvoker;
     use crate::client::test_util::NopRecvMessage;
     use crate::core::ClientResponseStreamItem;
     use crate::core::ResponseHeaders;
     use crate::core::Trailers;
+    use crate::metadata::BinaryMetadataValue;
 
     #[tokio::test]
     async fn test_attach_headers_interceptor() {
@@ -189,7 +188,7 @@ mod tests {
         md.insert("x-test-header", "test-value".parse().unwrap());
         md.insert_bin(
             "x-test-header-bin",
-            tonic::metadata::MetadataValue::from_bytes(b"test-bin"),
+            BinaryMetadataValue::from_bytes(b"test-bin"),
         );
         let interceptor = AttachHeadersInterceptor::new(md);
 
@@ -265,7 +264,7 @@ mod tests {
         // Send a Trailers response on the call.
         let mut trailers_md = MetadataMap::new();
         trailers_md.insert("x-trailer", "trailer-value".parse().unwrap());
-        let mut trailers = Trailers::new(Status::new(StatusCode::Ok, "ok"));
+        let mut trailers = Trailers::new(Ok(()));
         *trailers.metadata_mut() = trailers_md;
         controller
             .send_resp(ClientResponseStreamItem::Trailers(trailers))

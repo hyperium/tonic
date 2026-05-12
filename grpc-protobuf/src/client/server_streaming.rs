@@ -23,10 +23,10 @@
  */
 
 use std::marker::PhantomData;
+use std::pin::Pin;
 
 use grpc::client::CallOptions;
 use grpc::client::InvokeOnce;
-use grpc::client::RecvStream;
 use grpc::client::SendOptions;
 use grpc::client::SendStream as _;
 use grpc::client::stream_util::RecvStreamValidator;
@@ -67,9 +67,9 @@ impl<'a, C, ReqMsgView, Res> ServerStreamingCallBuilder<'a, C, ReqMsgView, Res> 
     }
 }
 
-impl<'a, C, ReqMsgView, Res> ServerStreamingCallBuilder<'a, C, ReqMsgView, Res>
+impl<'a, C, ReqMsgView, Res> IntoFuture for ServerStreamingCallBuilder<'a, C, ReqMsgView, Res>
 where
-    C: InvokeOnce,
+    C: InvokeOnce + 'a,
     // ReqMsgView is a proto message view. (Ideally we could just require
     // "AsView" and protobuf would automatically include the rest.)
     ReqMsgView: AsView + Send + Sync + 'a,
@@ -80,13 +80,18 @@ where
     Res: Message + ClearAndParse,
     for<'b> Res::Mut<'b>: MessageMut<'b>,
 {
-    pub async fn start(self) -> GrpcStreamingResponse<Res, impl RecvStream> {
-        let headers = RequestHeaders::new().with_method_name(self.method);
-        let (mut tx, rx) = self.channel.invoke_once(headers, self.args).await;
-        let rx = RecvStreamValidator::new(rx, false);
-        let req = &ProtoSendMessage::from_view(&self.req);
-        let _ = tx.send(req, SendOptions::new().with_final_msg(true)).await;
-        GrpcStreamingResponse::new(rx)
+    type Output = GrpcStreamingResponse<Res, RecvStreamValidator<C::RecvStream>>;
+    type IntoFuture = Pin<Box<dyn Future<Output = Self::Output> + Send + 'a>>;
+
+    fn into_future(self) -> Self::IntoFuture {
+        Box::pin(async move {
+            let headers = RequestHeaders::new().with_method_name(self.method);
+            let (mut tx, rx) = self.channel.invoke_once(headers, self.args).await;
+            let rx = RecvStreamValidator::new(rx, false);
+            let req = &ProtoSendMessage::from_view(&self.req);
+            let _ = tx.send(req, SendOptions::new().with_final_msg(true)).await;
+            GrpcStreamingResponse::new(rx)
+        })
     }
 }
 

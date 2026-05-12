@@ -22,37 +22,37 @@
  *
  */
 
-use crate::status::Status;
-use crate::status::status_code::StatusCode;
+use crate::status::StatusError;
+use crate::status::status_code::StatusCodeError;
 
 /// Represents a gRPC status on the server.
 ///
 /// This is a separate type from `Status` to prevent accidental conversion and
 /// leaking of sensitive information from the server to the client.
 #[derive(Debug, Clone)]
-pub struct ServerStatus(Status);
+pub struct ServerStatusErr(StatusError);
 
-impl std::ops::Deref for ServerStatus {
-    type Target = Status;
+impl std::ops::Deref for ServerStatusErr {
+    type Target = StatusError;
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl ServerStatus {
+impl ServerStatusErr {
     /// Create a new `ServerStatus` with the given code and message.
-    pub fn new(code: StatusCode, message: impl Into<String>) -> Self {
-        ServerStatus(Status::new(code, message))
+    pub fn new(code: StatusCodeError, message: impl Into<String>) -> Self {
+        ServerStatusErr(StatusError::new(code, message))
     }
 
     /// Create a new `ServerStatus` from a `Status`.
-    pub fn from_status(status: Status) -> Self {
-        ServerStatus(status)
+    pub fn from_status(status: StatusError) -> Self {
+        ServerStatusErr(status)
     }
 
     /// Converts the `ServerStatus` to a `Status` for client responses.
-    pub(crate) fn into_status(self) -> Status {
+    pub(crate) fn into_status(self) -> StatusError {
         self.0
     }
 }
@@ -63,28 +63,28 @@ mod tests {
 
     #[test]
     fn test_server_status_new() {
-        let status = ServerStatus::new(StatusCode::Ok, "ok");
-        assert_eq!(status.code(), StatusCode::Ok);
-        assert_eq!(status.message(), "ok");
+        let status = ServerStatusErr::new(StatusCodeError::Internal, "not ok");
+        assert_eq!(status.code(), StatusCodeError::Internal);
+        assert_eq!(status.message(), "not ok");
     }
 
     #[test]
     fn test_server_status_deref() {
-        let status = ServerStatus::new(StatusCode::Ok, "ok");
-        assert_eq!(status.code(), StatusCode::Ok);
+        let status = ServerStatusErr::new(StatusCodeError::FailedPrecondition, "x");
+        assert_eq!(status.code(), StatusCodeError::FailedPrecondition);
     }
 
     #[test]
     fn test_server_status_from_status() {
-        let status = Status::new(StatusCode::Ok, "ok");
-        let server_status = ServerStatus::from_status(status);
-        assert_eq!(server_status.code(), StatusCode::Ok);
+        let status = StatusError::new(StatusCodeError::DeadlineExceeded, "DE");
+        let server_status = ServerStatusErr::from_status(status);
+        assert_eq!(server_status.code(), StatusCodeError::DeadlineExceeded);
     }
 
     #[test]
     fn test_server_status_into_status() {
-        let server_status = ServerStatus::new(StatusCode::Ok, "ok");
+        let server_status = ServerStatusErr::new(StatusCodeError::DataLoss, "DL");
         let status = server_status.into_status();
-        assert_eq!(status.code(), StatusCode::Ok);
+        assert_eq!(status.code(), StatusCodeError::DataLoss);
     }
 }

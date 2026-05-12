@@ -29,8 +29,8 @@ use std::hash::Hasher;
 use std::sync::Arc;
 use std::sync::Mutex;
 
-use crate::Status;
-use crate::StatusCode;
+use crate::StatusCodeError;
+use crate::StatusError;
 use crate::client::load_balancing::ChannelController;
 use crate::client::load_balancing::LbPolicy;
 use crate::client::load_balancing::LbState;
@@ -268,8 +268,8 @@ impl Picker for UnwrapPicker {
         match result {
             PickResult::Pick(mut pick) => {
                 let Some(subchannel) = pick.subchannel.downcast_ref::<SharedSubchannel>() else {
-                    return PickResult::Fail(Status::new(
-                        StatusCode::Internal,
+                    return PickResult::Fail(StatusError::new(
+                        StatusCodeError::Internal,
                         format!(
                             "received unexpected subchannel type: {:?}",
                             pick.subchannel.type_id()
@@ -291,8 +291,6 @@ mod tests {
     use std::sync::Mutex;
     use std::sync::mpsc;
 
-    use tonic::metadata::MetadataMap;
-
     use super::*;
     use crate::client::ConnectivityState;
     use crate::client::load_balancing::LbPolicy;
@@ -309,6 +307,7 @@ mod tests {
     use crate::client::load_balancing::test_utils::new_request_headers;
     use crate::client::name_resolution::Address;
     use crate::client::name_resolution::ResolverUpdate;
+    use crate::metadata::MetadataMap;
     use crate::rt::default_runtime;
 
     fn test_lb_policy_options(tx_events: mpsc::Sender<TestEvent>) -> LbPolicyOptions {

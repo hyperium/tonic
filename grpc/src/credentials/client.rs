@@ -203,16 +203,17 @@ impl<T: ChannelCredentials> ChannelCredentials for CompositeChannelCredentials<T
 mod tests {
     use tokio::net::TcpListener;
     use tonic::async_trait;
-    use tonic::metadata::MetadataMap;
-    use tonic::metadata::MetadataValue;
 
     use super::*;
-    use crate::Status;
+    use crate::StatusError;
     use crate::credentials::call::CallCredentials;
     use crate::credentials::call::CallDetails;
     use crate::credentials::call::ClientConnectionSecurityInfo;
     use crate::credentials::insecure::InsecureChannelCredentials;
     use crate::credentials::local::LocalChannelCredentials;
+    use crate::metadata::AsciiMetadataKey;
+    use crate::metadata::AsciiMetadataValue;
+    use crate::metadata::MetadataMap;
     use crate::rt;
     use crate::rt::TcpOptions;
 
@@ -230,12 +231,10 @@ mod tests {
             _call_details: &CallDetails,
             _auth_info: &ClientConnectionSecurityInfo,
             metadata: &mut MetadataMap,
-        ) -> Result<(), Status> {
+        ) -> Result<(), StatusError> {
             metadata.insert(
-                self.key
-                    .parse::<tonic::metadata::MetadataKey<tonic::metadata::Ascii>>()
-                    .unwrap(),
-                MetadataValue::try_from(self.value).unwrap(),
+                self.key.parse::<AsciiMetadataKey>().unwrap(),
+                AsciiMetadataValue::try_from(self.value).unwrap(),
             );
             Ok(())
         }

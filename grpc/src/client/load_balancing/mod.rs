@@ -29,16 +29,15 @@ use std::fmt::Debug;
 use std::fmt::Display;
 use std::sync::Arc;
 
-use tonic::metadata::MetadataMap;
-
-use crate::Status;
-use crate::StatusCode;
+use crate::StatusCodeError;
+use crate::StatusError;
 use crate::client::ConnectivityState;
 use crate::client::load_balancing::subchannel::Subchannel;
 use crate::client::load_balancing::subchannel::SubchannelState;
 use crate::client::name_resolution::Address;
 use crate::client::name_resolution::ResolverUpdate;
 use crate::core::RequestHeaders;
+use crate::metadata::MetadataMap;
 use crate::rt::GrpcRuntime;
 
 pub(crate) mod child_manager;
@@ -234,7 +233,7 @@ pub(crate) enum PickResult {
     /// (with the code converted to UNAVAILABLE).  If the RPC is wait-for-ready,
     /// then it will not be terminated, but instead attempted on a new picker if
     /// one is produced before it is cancelled.
-    Fail(Status),
+    Fail(StatusError),
     /// Indicates that the request should fail with the included status
     /// immediately, even if the RPC is wait-for-ready.  The channel will
     /// convert the status code to INTERNAL if it is not a valid code for the
@@ -242,7 +241,7 @@ pub(crate) enum PickResult {
     ///
     /// [gRFC A54]:
     ///     https://github.com/grpc/proposal/blob/master/A54-restrict-control-plane-status-codes.md
-    Drop(Status),
+    Drop(StatusError),
 }
 
 impl PickResult {
@@ -375,7 +374,10 @@ pub(crate) struct FailingPicker {
 
 impl Picker for FailingPicker {
     fn pick(&self, _: &RequestHeaders) -> PickResult {
-        PickResult::Fail(Status::new(StatusCode::Unavailable, self.error.clone()))
+        PickResult::Fail(StatusError::new(
+            StatusCodeError::Unavailable,
+            self.error.clone(),
+        ))
     }
 }
 

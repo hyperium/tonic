@@ -4,7 +4,9 @@ use crate::transport::{
     tls::{Certificate, Identity},
 };
 use http::Uri;
+use std::sync::Arc;
 use std::time::Duration;
+use tokio_rustls::rustls::client::danger::ServerCertVerifier;
 use tokio_rustls::rustls::pki_types::TrustAnchor;
 
 /// Configures TLS settings for endpoints.
@@ -134,6 +136,22 @@ impl ClientTlsConfig {
     }
 
     pub(crate) fn into_tls_connector(self, uri: &Uri) -> Result<TlsConnector, crate::BoxError> {
+        self.build_tls_connector(uri, None)
+    }
+
+    pub(crate) fn into_tls_connector_with_verifier(
+        self,
+        uri: &Uri,
+        verifier: Arc<dyn ServerCertVerifier>,
+    ) -> Result<TlsConnector, crate::BoxError> {
+        self.build_tls_connector(uri, Some(verifier))
+    }
+
+    fn build_tls_connector(
+        self,
+        uri: &Uri,
+        server_cert_verifier: Option<Arc<dyn ServerCertVerifier>>,
+    ) -> Result<TlsConnector, crate::BoxError> {
         let domain = match &self.domain {
             Some(domain) => domain,
             None => uri.host().ok_or_else(Error::new_invalid_uri)?,
@@ -142,6 +160,7 @@ impl ClientTlsConfig {
             self.certs,
             self.trust_anchors,
             self.identity,
+            server_cert_verifier,
             domain,
             self.assume_http2,
             self.use_key_log,

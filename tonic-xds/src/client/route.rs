@@ -40,6 +40,8 @@ pub(crate) struct XdsRoutingService<S> {
     inner: S,
     /// The router used to make routing decisions based on the request.
     router: Arc<dyn Router>,
+    /// Channel-level authority used as the routing key.
+    authority: Arc<str>,
 }
 
 impl<S, B> Service<Request<B>> for XdsRoutingService<S>
@@ -58,14 +60,14 @@ where
 
     fn call(&mut self, mut request: Request<B>) -> Self::Future {
         let router = self.router.clone();
+        let authority = self.authority.clone();
         let mut inner_service = self.inner.clone();
         Box::pin(async move {
-            let authority = request
-                .uri()
-                .authority()
-                .map_or("", http::uri::Authority::as_str);
             let headers = &request.headers();
-            let route_input = RouteInput { authority, headers };
+            let route_input = RouteInput {
+                authority: &authority,
+                headers,
+            };
             let route_decision = router.route(&route_input).await?;
             request.extensions_mut().insert(route_decision);
             inner_service.call(request).await.map_err(Into::into)
@@ -78,13 +80,17 @@ where
 #[allow(dead_code)]
 pub(crate) struct XdsRoutingLayer {
     router: Arc<dyn Router>,
+    authority: Arc<str>,
 }
 
 impl XdsRoutingLayer {
-    /// Creates a new `XdsRoutingLayer` with the given [`Router`].
+    /// Creates a new `XdsRoutingLayer` with the given [`Router`] and authority.
+    ///
+    /// `authority` is the routing key matched against `VirtualHost.domains`
+    /// in RDS. It should be the endpoint portion of the xDS target.
     #[allow(dead_code)]
-    pub(crate) fn new(router: Arc<dyn Router>) -> Self {
-        Self { router }
+    pub(crate) fn new(router: Arc<dyn Router>, authority: Arc<str>) -> Self {
+        Self { router, authority }
     }
 }
 
@@ -95,6 +101,73 @@ impl<S> Layer<S> for XdsRoutingLayer {
         XdsRoutingService {
             inner: service,
             router: self.router.clone(),
+            authority: self.authority.clone(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Mutex;
+    use tower::ServiceExt;
+    use tower::service_fn;
+
+    /// Mock router that records the `authority` it was called with.
+    struct CaptureAuthorityRouter {
+        captured: Arc<Mutex<Option<String>>>,
+    }
+
+    impl Router for CaptureAuthorityRouter {
+        fn route(&self, input: &RouteInput<'_>) -> BoxFuture<Result<RouteDecision, RoutingError>> {
+            *self.captured.lock().unwrap() = Some(input.authority.to_string());
+            Box::pin(async move {
+                Ok(RouteDecision {
+                    cluster: "test-cluster".to_string(),
+                })
+            })
+        }
+    }
+
+    /// Verifies the routing layer always sources `authority` from its layer
+    /// config, not from the request URI.
+    #[tokio::test]
+    async fn uses_layer_authority_regardless_of_request_uri() {
+        let captured = Arc::new(Mutex::new(None));
+        let router: Arc<dyn Router> = Arc::new(CaptureAuthorityRouter {
+            captured: captured.clone(),
+        });
+        let layer = XdsRoutingLayer::new(router, Arc::from("greeter.svc:50051"));
+
+        let inner =
+            service_fn(
+                |_req: Request<()>| async move { Ok::<_, BoxError>(http::Response::new(())) },
+            );
+        let svc = layer.layer(inner);
+
+        // Case 1: request with no authority on the URI (typical tonic-generated
+        // client — see `tonic/src/client/grpc.rs::prepare_request`).
+        let req = Request::builder()
+            .uri("/pkg.Greeter/SayHello")
+            .body(())
+            .unwrap();
+        svc.clone().oneshot(req).await.unwrap();
+        assert_eq!(
+            captured.lock().unwrap().as_deref(),
+            Some("greeter.svc:50051"),
+        );
+
+        // Case 2: request with a different authority on the URI — the layer
+        // must still use its own configured authority.
+        *captured.lock().unwrap() = None;
+        let req = Request::builder()
+            .uri("http://other.example:443/pkg.Greeter/SayHello")
+            .body(())
+            .unwrap();
+        svc.oneshot(req).await.unwrap();
+        assert_eq!(
+            captured.lock().unwrap().as_deref(),
+            Some("greeter.svc:50051"),
+        );
     }
 }

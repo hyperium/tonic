@@ -257,9 +257,7 @@ mod test {
     use std::sync::Arc;
     use std::sync::mpsc;
 
-    use tonic::metadata::MetadataMap;
-
-    use crate::StatusCode;
+    use crate::StatusCodeError;
     use crate::client::ConnectivityState;
     use crate::client::load_balancing::ChannelController;
     use crate::client::load_balancing::FailingPicker;
@@ -286,6 +284,7 @@ mod test {
     use crate::client::name_resolution::Endpoint;
     use crate::client::name_resolution::ResolverUpdate;
     use crate::core::RequestHeaders;
+    use crate::metadata::MetadataMap;
     use crate::rt::default_runtime;
 
     const DEFAULT_TEST_SHORT_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(100);
@@ -674,7 +673,7 @@ mod test {
                 let req = test_utils::new_request_headers();
                 match update.picker.pick(&req) {
                     PickResult::Fail(status) => {
-                        assert!(status.code() == StatusCode::Unavailable);
+                        assert!(status.code() == StatusCodeError::Unavailable);
                         dbg!(status.message());
                         dbg!(&want_error);
                         assert!(status.message().contains(&want_error));

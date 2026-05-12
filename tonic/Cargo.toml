@@ -15,7 +15,7 @@ keywords = ["rpc", "grpc", "async", "futures", "protobuf"]
 license = "MIT"
 readme = "../README.md"
 repository = "https://github.com/hyperium/tonic"
-version = "0.14.5"
+version = "0.14.6"
 rust-version = {workspace = true}
 exclude = ["benches-disabled"]
 
@@ -128,6 +128,7 @@ allowed_external_types = [
   "axum::routing::Router",
   "futures_core::stream::Stream",
   "h2::error::Error",
+  "rustls::verify::ServerCertVerifier",
   "tower_service::Service",
   "tower_layer::Layer",
   "tower_layer::stack::Stack",
