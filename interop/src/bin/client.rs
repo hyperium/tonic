@@ -79,11 +79,14 @@ impl Opts {
             additional_metadata: pargs.opt_value_from_str("--additional_metadata")?,
             google_c2p_universe_domain: pargs.opt_value_from_str("--google_c2p_universe_domain")?,
             soak_iterations: pargs.opt_value_from_str("--soak_iterations")?.unwrap_or(10),
-            soak_max_failures: pargs.opt_value_from_str("--soak_max_failures")?.unwrap_or(0),
+            soak_max_failures: pargs
+                .opt_value_from_str("--soak_max_failures")?
+                .unwrap_or(0),
             soak_per_iteration_max_acceptable_latency_ms: pargs
                 .opt_value_from_str("--soak_per_iteration_max_acceptable_latency_ms")?
                 .unwrap_or(1000),
-            soak_overall_timeout_seconds: pargs.opt_value_from_str("--soak_overall_timeout_seconds")?,
+            soak_overall_timeout_seconds: pargs
+                .opt_value_from_str("--soak_overall_timeout_seconds")?,
             soak_min_time_ms_between_rpcs: pargs
                 .opt_value_from_str("--soak_min_time_ms_between_rpcs")?
                 .unwrap_or(0),
@@ -114,8 +117,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 if key_str.ends_with("-bin") {
                     use base64::Engine;
-                    let decoded_val = base64::engine::general_purpose::STANDARD
-                        .decode(val_str)?;
+                    let decoded_val = base64::engine::general_purpose::STANDARD.decode(val_str)?;
                     let key = tonic::metadata::BinaryMetadataKey::from_str(key_str)?;
                     let value = tonic::metadata::MetadataValue::from_bytes(&decoded_val);
                     map.insert_bin(key, value);
@@ -164,8 +166,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 metadata: additional_metadata.unwrap_or_default(),
             };
             (
-                Box::new(client_prost::TestClient::new(tonic::codegen::InterceptedService::new(channel.clone(), interceptor.clone()))),
-                Box::new(client_prost::UnimplementedClient::new(tonic::codegen::InterceptedService::new(channel, interceptor))),
+                Box::new(client_prost::TestClient::new(
+                    tonic::codegen::InterceptedService::new(channel.clone(), interceptor.clone()),
+                )),
+                Box::new(client_prost::UnimplementedClient::new(
+                    tonic::codegen::InterceptedService::new(channel, interceptor),
+                )),
             )
         }
         Codec::Protobuf => {
@@ -180,20 +186,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if matches.use_test_ca {
                     let pem = std::fs::read_to_string("interop/data/ca.pem")?;
                     let root_certs = RootCertificates::from_pem(pem);
-                    tls_config = tls_config.with_root_certificates_provider(StaticProvider::new(root_certs));
+                    tls_config =
+                        tls_config.with_root_certificates_provider(StaticProvider::new(root_certs));
                 }
                 let creds = RustlsChannelCredendials::new(tls_config)?;
                 let domain_name = matches
                     .server_host_override
                     .as_deref()
                     .unwrap_or("test.test.google.fr");
-                let channel_options =
-                    ChannelOptions::default().override_authority(domain_name);
-                grpc::client::Channel::new(
-                    &target_uri,
-                    Arc::new(creds),
-                    channel_options,
-                )
+                let channel_options = ChannelOptions::default().override_authority(domain_name);
+                grpc::client::Channel::new(&target_uri, Arc::new(creds), channel_options)
             } else {
                 grpc::client::Channel::new(
                     &target_uri,
@@ -218,8 +220,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         match test_case {
             Testcase::EmptyUnary => client.empty_unary(&mut test_results).await,
             Testcase::CacheableUnary => client.cacheable_unary(&mut test_results).await,
-            Testcase::ClientCompressedUnary => client.client_compressed_unary(&mut test_results).await,
-            Testcase::ServerCompressedUnary => client.server_compressed_unary(&mut test_results).await,
+            Testcase::ClientCompressedUnary => {
+                client.client_compressed_unary(&mut test_results).await
+            }
+            Testcase::ServerCompressedUnary => {
+                client.server_compressed_unary(&mut test_results).await
+            }
             Testcase::LargeUnary => client.large_unary(&mut test_results).await,
             Testcase::ClientStreaming => client.client_streaming(&mut test_results).await,
             Testcase::ServerStreaming => client.server_streaming(&mut test_results).await,
@@ -239,8 +245,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             Testcase::CustomMetadata => client.custom_metadata(&mut test_results).await,
             Testcase::CancelAfterBegin => client.cancel_after_begin(&mut test_results).await,
-            Testcase::CancelAfterFirstResponse => client.cancel_after_first_response(&mut test_results).await,
-            Testcase::TimeoutOnSleepingServer => client.timeout_on_sleeping_server(&mut test_results).await,
+            Testcase::CancelAfterFirstResponse => {
+                client.cancel_after_first_response(&mut test_results).await
+            }
+            Testcase::TimeoutOnSleepingServer => {
+                client.timeout_on_sleeping_server(&mut test_results).await
+            }
             _ => unimplemented!(),
         }
 

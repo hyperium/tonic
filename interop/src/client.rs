@@ -7,7 +7,10 @@ pub struct MetadataInterceptor {
 }
 
 impl tonic::service::Interceptor for MetadataInterceptor {
-    fn call(&mut self, mut request: tonic::Request<()>) -> Result<tonic::Request<()>, tonic::Status> {
+    fn call(
+        &mut self,
+        mut request: tonic::Request<()>,
+    ) -> Result<tonic::Request<()>, tonic::Status> {
         for key_and_val in self.metadata.iter() {
             match key_and_val {
                 tonic::metadata::KeyAndValueRef::Ascii(key, val) => {

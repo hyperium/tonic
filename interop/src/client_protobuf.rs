@@ -425,7 +425,8 @@ impl InteropTest for TestClient {
         md1.insert("x-user-ip", "1.2.3.4".parse().unwrap());
         let attacher1 = AttachHeadersInterceptor::new(md1);
 
-        let result1 = self.cacheable_unary_call(req.clone())
+        let result1 = self
+            .cacheable_unary_call(req.clone())
             .with_interceptor(attacher1)
             .await;
 
@@ -439,7 +440,8 @@ impl InteropTest for TestClient {
         md2.insert("x-user-ip", "1.2.3.4".parse().unwrap());
         let attacher2 = AttachHeadersInterceptor::new(md2);
 
-        let result2 = self.cacheable_unary_call(req)
+        let result2 = self
+            .cacheable_unary_call(req)
             .with_interceptor(attacher2)
             .await;
 
