@@ -191,7 +191,7 @@ impl XdsChannelBuilder {
         // and pass it to XdsClusterDiscovery so data-plane connections can use
         // TLS/mTLS when CDS clusters specify UpstreamTlsContext.
 
-        let node = Node::from(bootstrap.node);
+        let node = Node::try_from(bootstrap.node)?;
         let client_config = ClientConfig::new(node, &server_uri);
         let xds_client =
             XdsClient::builder(client_config, transport_builder, ProstCodec, TokioRuntime).build();
@@ -224,7 +224,7 @@ impl XdsChannelBuilder {
             _xds_client: xds_client,
         });
 
-        let routing_layer = XdsRoutingLayer::new(router);
+        let routing_layer = XdsRoutingLayer::new(router, self.authority());
         let retry_layer = RetryLayer::new(retry_policy);
         let cluster_registry = Arc::new(ClusterClientRegistryGrpc::new());
         let lb_service = XdsLbService::new(cluster_registry, discovery);
@@ -258,7 +258,7 @@ impl XdsChannelBuilder {
         discovery: Arc<dyn ClusterDiscovery<EndpointAddress, EndpointChannel<Channel>>>,
         retry_policy: GrpcRetryPolicy,
     ) -> XdsChannelGrpc {
-        let routing_layer = XdsRoutingLayer::new(router);
+        let routing_layer = XdsRoutingLayer::new(router, self.authority());
         let retry_layer = RetryLayer::new(retry_policy);
         let cluster_registry = Arc::new(ClusterClientRegistryGrpc::new());
         let lb_service = XdsLbService::new(cluster_registry, discovery);
@@ -274,6 +274,12 @@ impl XdsChannelBuilder {
             inner,
             _resources: None,
         })
+    }
+
+    /// Channel-level authority used as the routing key for matching against
+    /// `VirtualHost.domains` in RDS.
+    fn authority(&self) -> Arc<str> {
+        Arc::from(self.config.target_uri.target.as_str())
     }
 }
 
