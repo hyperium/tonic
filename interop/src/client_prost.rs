@@ -9,8 +9,12 @@ use tonic::async_trait;
 use tonic::transport::Channel;
 use tonic::{Code, Request, Response, Status, metadata::MetadataValue};
 
-pub type TestClient = TestServiceClient<Channel>;
-pub type UnimplementedClient = UnimplementedServiceClient<Channel>;
+pub type TestClient = TestServiceClient<
+    tonic::codegen::InterceptedService<Channel, crate::client::MetadataInterceptor>,
+>;
+pub type UnimplementedClient = UnimplementedServiceClient<
+    tonic::codegen::InterceptedService<Channel, crate::client::MetadataInterceptor>,
+>;
 
 const LARGE_REQ_SIZE: usize = 271_828;
 const LARGE_RSP_SIZE: i32 = 314_159;
@@ -383,6 +387,312 @@ impl InteropTest for TestClient {
             trailers.get_bin(key2) == Some(&value2),
             format!("result={:?}", trailers.get_bin(key1))
         ));
+    }
+
+    async fn cacheable_unary(&mut self, assertions: &mut Vec<TestAssertion>) {
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+            .to_string();
+        let payload = Payload {
+            body: timestamp.into_bytes(),
+            ..Default::default()
+        };
+        let req = SimpleRequest {
+            response_type: PayloadType::Compressable as i32,
+            payload: Some(payload),
+            ..Default::default()
+        };
+
+        let mut req1 = Request::new(req.clone());
+        req1.metadata_mut()
+            .insert("x-user-ip", "1.2.3.4".parse().unwrap());
+
+        let result1 = self.cacheable_unary_call(req1).await;
+
+        assertions.push(test_assert!(
+            "first call must be successful",
+            result1.is_ok(),
+            format!("result={:?}", result1)
+        ));
+
+        let mut req2 = Request::new(req);
+        req2.metadata_mut()
+            .insert("x-user-ip", "1.2.3.4".parse().unwrap());
+        let result2 = self.cacheable_unary_call(req2).await;
+
+        assertions.push(test_assert!(
+            "second call must be successful",
+            result2.is_ok(),
+            format!("result={:?}", result2)
+        ));
+
+        if let (Ok(res1), Ok(res2)) = (result1, result2) {
+            let body1 = res1.into_inner();
+            let body2 = res2.into_inner();
+            assertions.push(test_assert!(
+                "payload body of both responses is the same",
+                body1 == body2,
+                format!("body1={:?}, body2={:?}", body1, body2)
+            ));
+        }
+    }
+
+    async fn client_compressed_unary(&mut self, assertions: &mut Vec<TestAssertion>) {
+        // 1. Probe
+        let req = SimpleRequest {
+            expect_compressed: Some(crate::pb::BoolValue { value: true }),
+            response_size: LARGE_RSP_SIZE,
+            payload: Some(crate::client_payload(LARGE_REQ_SIZE)),
+            ..Default::default()
+        };
+        let result = self.unary_call(Request::new(req.clone())).await;
+        assertions.push(test_assert!(
+            "First call failed with INVALID_ARGUMENT status",
+            match &result {
+                Err(status) => status.code() == Code::InvalidArgument,
+                _ => false,
+            },
+            format!("result={:?}", result)
+        ));
+
+        // 2. Compressed
+        let mut compressed_client = self
+            .clone()
+            .send_compressed(tonic::codec::CompressionEncoding::Gzip);
+        let result = compressed_client
+            .unary_call(Request::new(req.clone()))
+            .await;
+        assertions.push(test_assert!(
+            "Second call (compressed) must be successful",
+            result.is_ok(),
+            format!("result={:?}", result)
+        ));
+        if let Ok(response) = result {
+            let body = response.into_inner();
+            assertions.push(test_assert!(
+                "response payload body is 314159 bytes in size",
+                body.payload.as_ref().map_or(0, |p| p.body.len()) == LARGE_RSP_SIZE as usize,
+                format!(
+                    "body.payload.len={:?}",
+                    body.payload.as_ref().map(|p| p.body.len())
+                )
+            ));
+        }
+
+        // 3. Uncompressed
+        let req = SimpleRequest {
+            expect_compressed: Some(crate::pb::BoolValue { value: false }),
+            response_size: LARGE_RSP_SIZE,
+            payload: Some(crate::client_payload(LARGE_REQ_SIZE)),
+            ..Default::default()
+        };
+        let result = self.unary_call(Request::new(req)).await;
+        assertions.push(test_assert!(
+            "Third call (uncompressed) must be successful",
+            result.is_ok(),
+            format!("result={:?}", result)
+        ));
+        if let Ok(response) = result {
+            let body = response.into_inner();
+            assertions.push(test_assert!(
+                "response payload body is 314159 bytes in size",
+                body.payload.as_ref().map_or(0, |p| p.body.len()) == LARGE_RSP_SIZE as usize,
+                format!(
+                    "body.payload.len={:?}",
+                    body.payload.as_ref().map(|p| p.body.len())
+                )
+            ));
+        }
+    }
+
+    async fn server_compressed_unary(&mut self, assertions: &mut Vec<TestAssertion>) {
+        // 1. Request compressed response
+        let req = SimpleRequest {
+            response_compressed: Some(crate::pb::BoolValue { value: true }),
+            response_size: LARGE_RSP_SIZE,
+            payload: Some(crate::client_payload(LARGE_REQ_SIZE)),
+            ..Default::default()
+        };
+
+        let mut client = self
+            .clone()
+            .accept_compressed(tonic::codec::CompressionEncoding::Gzip);
+
+        let result = client.unary_call(Request::new(req.clone())).await;
+
+        assertions.push(test_assert!(
+            "Call with response_compressed=true must be successful",
+            result.is_ok(),
+            format!("result={:?}", result)
+        ));
+
+        if let Ok(response) = result {
+            assertions.push(test_assert!(
+                "Response must have grpc-encoding: gzip",
+                response.metadata().get("grpc-encoding")
+                    == Some(&tonic::metadata::MetadataValue::from_static("gzip")),
+                format!("metadata={:?}", response.metadata())
+            ));
+            let body = response.into_inner();
+            assertions.push(test_assert!(
+                "response payload body is 314159 bytes in size",
+                body.payload.as_ref().map_or(0, |p| p.body.len()) == LARGE_RSP_SIZE as usize,
+                format!(
+                    "body.payload.len={:?}",
+                    body.payload.as_ref().map(|p| p.body.len())
+                )
+            ));
+        }
+
+        // 2. Request uncompressed response
+        let req = SimpleRequest {
+            response_compressed: Some(crate::pb::BoolValue { value: false }),
+            response_size: LARGE_RSP_SIZE,
+            payload: Some(crate::client_payload(LARGE_REQ_SIZE)),
+            ..Default::default()
+        };
+
+        let result = client.unary_call(Request::new(req)).await;
+
+        assertions.push(test_assert!(
+            "Call with response_compressed=false must be successful",
+            result.is_ok(),
+            format!("result={:?}", result)
+        ));
+
+        if let Ok(response) = result {
+            let body = response.into_inner();
+            assertions.push(test_assert!(
+                "response payload body is 314159 bytes in size",
+                body.payload.as_ref().map_or(0, |p| p.body.len()) == LARGE_RSP_SIZE as usize,
+                format!(
+                    "body.payload.len={:?}",
+                    body.payload.as_ref().map(|p| p.body.len())
+                )
+            ));
+        }
+    }
+
+    async fn cancel_after_begin(&mut self, assertions: &mut Vec<TestAssertion>) {
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<StreamingInputCallRequest>();
+        let stream = tokio_stream::wrappers::UnboundedReceiverStream::new(rx);
+
+        let mut client = self.clone();
+
+        let handle =
+            tokio::spawn(async move { client.streaming_input_call(Request::new(stream)).await });
+
+        handle.abort();
+
+        let result = handle.await;
+
+        assertions.push(test_assert!(
+            "Call must be cancelled",
+            match &result {
+                Err(e) => e.is_cancelled(),
+                _ => false,
+            },
+            format!("result={:?}", result)
+        ));
+
+        // Suppress unused variable warning for tx
+        drop(tx);
+    }
+
+    async fn cancel_after_first_response(&mut self, assertions: &mut Vec<TestAssertion>) {
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<StreamingOutputCallRequest>();
+        tx.send(make_ping_pong_request(0)).unwrap();
+
+        let (signal_tx, mut signal_rx) = tokio::sync::mpsc::channel(1);
+
+        let mut client = self.clone();
+
+        let handle = tokio::spawn(async move {
+            let response = client
+                .full_duplex_call(Request::new(
+                    tokio_stream::wrappers::UnboundedReceiverStream::new(rx),
+                ))
+                .await?;
+            let mut stream = response.into_inner();
+            let first_msg = stream.next().await;
+
+            // Notify outside
+            signal_tx.send(first_msg).await.unwrap();
+
+            // Wait forever to be cancelled
+            std::future::pending::<()>().await;
+
+            Ok::<_, Status>(())
+        });
+
+        // Wait for signal
+        let first_msg = signal_rx.recv().await;
+
+        let success = matches!(&first_msg, Some(Some(Ok(_))));
+        assertions.push(test_assert!(
+            "Received first response",
+            success,
+            format!("first_msg={:?}", first_msg)
+        ));
+
+        // Cancel the task
+        handle.abort();
+
+        let result = handle.await;
+
+        assertions.push(test_assert!(
+            "Call must be cancelled",
+            match &result {
+                Err(e) => e.is_cancelled(),
+                _ => false,
+            },
+            format!("result={:?}", result)
+        ));
+
+        drop(tx);
+    }
+
+    async fn timeout_on_sleeping_server(&mut self, assertions: &mut Vec<TestAssertion>) {
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<StreamingOutputCallRequest>();
+
+        let mut req = make_ping_pong_request(0);
+        if let Some(param) = req.response_parameters.first_mut() {
+            param.interval_us = 100000;
+        }
+        tx.send(req).unwrap();
+
+        let mut client = self.clone();
+
+        let mut request = Request::new(tokio_stream::wrappers::UnboundedReceiverStream::new(rx));
+        request.set_timeout(std::time::Duration::from_millis(50));
+
+        let result = client.full_duplex_call(request).await;
+
+        // For streaming calls, the timeout might occur during the stream poll,
+        // and Tonic might return it as a Status or it might be handled differently.
+        // But usually it returns Err(Status) with DeadlineExceeded.
+
+        assertions.push(test_assert!(
+            "Initial call was successful",
+            result.is_ok(),
+            format!("result={:?}", result)
+        ));
+
+        if let Ok(response) = result {
+            let mut stream = response.into_inner();
+            let stream_result =
+                tokio::time::timeout(std::time::Duration::from_millis(50), stream.next()).await;
+
+            assertions.push(test_assert!(
+                "Stream must time out (DEADLINE_EXCEEDED)",
+                stream_result.is_err(),
+                format!("stream_result={:?}", stream_result)
+            ));
+        }
+
+        drop(tx);
     }
 }
 

@@ -29,7 +29,19 @@ impl pb::test_service_server::TestService for TestService {
     }
 
     async fn unary_call(&self, request: Request<SimpleRequest>) -> Result<SimpleResponse> {
+        let is_compressed = request.metadata().get("grpc-encoding")
+            == Some(&tonic::metadata::MetadataValue::from_static("gzip"));
+
         let req = request.into_inner();
+
+        if let Some(expect_compressed) = req.expect_compressed {
+            if expect_compressed.value && !is_compressed {
+                return Err(Status::new(
+                    Code::InvalidArgument,
+                    "Requested compression but message was not compressed",
+                ));
+            }
+        }
 
         if let Some(echo_status) = req.response_status {
             let status = Status::new(Code::from_i32(echo_status.code), echo_status.message);
@@ -51,11 +63,24 @@ impl pb::test_service_server::TestService for TestService {
             ..Default::default()
         };
 
-        Ok(Response::new(res))
+        let mut response = Response::new(res);
+        let compress = req.response_compressed.map_or(false, |v| v.value);
+        if !compress {
+            response.disable_compression();
+        }
+        Ok(response)
     }
 
-    async fn cacheable_unary_call(&self, _: Request<SimpleRequest>) -> Result<SimpleResponse> {
-        unimplemented!()
+    async fn cacheable_unary_call(
+        &self,
+        request: Request<SimpleRequest>,
+    ) -> Result<SimpleResponse> {
+        let req = request.into_inner();
+        let res = SimpleResponse {
+            payload: req.payload,
+            ..Default::default()
+        };
+        Ok(Response::new(res))
     }
 
     type StreamingOutputCallStream = Stream<StreamingOutputCallResponse>;

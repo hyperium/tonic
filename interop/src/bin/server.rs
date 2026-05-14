@@ -7,6 +7,8 @@ use tonic::transport::{Identity, ServerTlsConfig};
 struct Opts {
     use_tls: bool,
     codec: Codec,
+    port: u16,
+    address_type: AddressType,
 }
 
 #[derive(Debug)]
@@ -27,12 +29,36 @@ impl FromStr for Codec {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+enum AddressType {
+    Ipv4,
+    Ipv6,
+    Ipv4Ipv6,
+}
+
+impl FromStr for AddressType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_uppercase().as_str() {
+            "IPV4" => Ok(AddressType::Ipv4),
+            "IPV6" => Ok(AddressType::Ipv6),
+            "IPV4_IPV6" => Ok(AddressType::Ipv4Ipv6),
+            _ => Err(format!("Invalid address type: {}", s)),
+        }
+    }
+}
+
 impl Opts {
     fn parse() -> Result<Self, pico_args::Error> {
         let mut pargs = pico_args::Arguments::from_env();
         Ok(Self {
             use_tls: pargs.contains("--use_tls"),
             codec: pargs.value_from_str("--codec")?,
+            port: pargs.opt_value_from_str("--port")?.unwrap_or(10000),
+            address_type: pargs
+                .opt_value_from_str("--address_type")?
+                .unwrap_or(AddressType::Ipv4Ipv6),
         })
     }
 }
@@ -43,7 +69,12 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
     let matches = Opts::parse()?;
 
-    let addr = "127.0.0.1:10000".parse().unwrap();
+    let host = match matches.address_type {
+        AddressType::Ipv4 => "127.0.0.1",
+        AddressType::Ipv6 => "[::1]",
+        AddressType::Ipv4Ipv6 => "[::]",
+    };
+    let addr = format!("{host}:{}", matches.port).parse().unwrap();
 
     let mut builder = Server::builder();
 
@@ -58,7 +89,9 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     match matches.codec {
         Codec::Prost => {
             let test_service =
-                server_prost::TestServiceServer::new(server_prost::TestService::default());
+                server_prost::TestServiceServer::new(server_prost::TestService::default())
+                    .accept_compressed(tonic::codec::CompressionEncoding::Gzip)
+                    .send_compressed(tonic::codec::CompressionEncoding::Gzip);
             let unimplemented_service = server_prost::UnimplementedServiceServer::new(
                 server_prost::UnimplementedService::default(),
             );

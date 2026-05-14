@@ -23,7 +23,7 @@ http-body-util = "0.1"
 prost = "0.14"
 tokio = {version = "1.0", features = ["rt-multi-thread", "time", "macros"]}
 tokio-stream = "0.1"
-tonic = {path = "../tonic", features = ["tls-ring"]}
+tonic = {path = "../tonic", features = ["tls-ring", "gzip"]}
 tonic-prost = {path = "../tonic-prost"}
 tower = "0.5"
 tracing-subscriber = {version = "0.3"}
@@ -35,6 +35,8 @@ protobuf = { version = "4.34.0-release" }
 tonic-protobuf = {path = "../tonic-protobuf"}
 grpc-protobuf = {path = "../grpc-protobuf"}
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
+base64 = "0.22"
+
 
 [build-dependencies]
 tonic-prost-build = {path = "../tonic-prost-build"}
