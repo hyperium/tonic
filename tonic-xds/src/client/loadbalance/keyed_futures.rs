@@ -89,6 +89,11 @@ where
         self.futures.len()
     }
 
+    /// True if a live (non-cancelled) future is tracked for `key`.
+    pub(crate) fn contains_key(&self, key: &K) -> bool {
+        self.cancellations.contains_key(key)
+    }
+
     /// Advance the internal futures. Yields `(K, T)` when a future completes,
     /// skipping cancelled futures silently.
     ///

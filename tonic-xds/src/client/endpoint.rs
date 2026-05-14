@@ -5,7 +5,7 @@ use std::task::{Context, Poll};
 use tower::{Service, load::Load};
 
 /// Represents the host part of an endpoint address
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum EndpointHost {
     Ipv4(std::net::Ipv4Addr),
     Ipv6(std::net::Ipv6Addr),
@@ -25,7 +25,7 @@ impl From<String> for EndpointHost {
 }
 
 /// Represents a validated endpoint address extracted from xDS
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct EndpointAddress {
     /// The IP address or hostname
     host: EndpointHost,

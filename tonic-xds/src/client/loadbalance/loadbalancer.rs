@@ -1,28 +1,43 @@
 //! Load balancer tower service.
 //!
-//! Receives endpoint updates via [`tower::discover::Discover`] (yielding
-//! [`IdleChannel`]s), manages the connection lifecycle via the channel state
-//! machine, and routes requests to ready endpoints via a [`ChannelPicker`].
+//! Receives endpoint updates via [`tower::discover::Discover`],
+//! manages the connection lifecycle via the channel state machine,
+//! and routes requests to ready endpoints via a [`ChannelPicker`].
+//!
+//! Outlier detection (gRFC A50) is integrated via an optional
+//! [`OutlierDetector`]. Eject requests arrive on an mpsc channel from
+//! the data path; the LB consumes the matching [`ReadyChannel`] via
+//! [`ReadyChannel::eject`] and tracks the resulting
+//! [`EjectedChannel`] in [`Self::ejected`]. When the timer fires, the
+//! resolved [`UnejectedChannel`] is routed back into `ready` or
+//! `connecting`.
+//!
+//! [`EjectedChannel`]: crate::client::loadbalance::channel_state::EjectedChannel
+//! [`UnejectedChannel`]: crate::client::loadbalance::channel_state::UnejectedChannel
 
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll, ready};
+use std::time::{Duration, Instant};
 
 use indexmap::IndexMap;
 use tower::Service;
 use tower::discover::{Change, Discover};
 
 use crate::client::endpoint::{Connector, EndpointAddress};
-use crate::client::loadbalance::channel_state::{IdleChannel, ReadyChannel};
+use crate::client::loadbalance::channel_state::{
+    EjectionConfig, IdleChannel, OutlierChannelState, ReadyChannel, UnejectedChannel,
+};
 use crate::client::loadbalance::errors::LbError;
 use crate::client::loadbalance::keyed_futures::KeyedFutures;
+use crate::client::loadbalance::outlier_detection::{
+    OutlierDetector, OutlierStatsRegistry, RegistryAlreadyWired,
+};
 use crate::client::loadbalance::pickers::ChannelPicker;
 
-/// Future returned by [`LoadBalancer::call`].
-///
-/// Either resolves immediately with an [`LbError`], or drives `poll_ready` +
-/// `call` on the selected channel asynchronously.
+/// Future returned by [`LoadBalancer::call`]. Either resolves
+/// immediately with an [`LbError`] or drives the selected channel.
 pub(crate) enum LbFuture<Resp> {
     Error(Option<LbError>),
     Pending(Pin<Box<dyn Future<Output = Result<Resp, LbError>> + Send>>),
@@ -53,15 +68,18 @@ impl<Resp> Future for LbFuture<Resp> {
 ///   `C::Service` is the underlying service type held in ready channels.
 /// - `Req`: The request type.
 pub(crate) struct LoadBalancer<D, C: Connector, Req> {
-    /// Discovery stream providing endpoint additions/removals.
     discovery: D,
-    /// Connector for creating connections from idle channels.
     connector: Arc<C>,
-    /// In-flight connection attempts, keyed by endpoint address.
-    connecting: KeyedFutures<EndpointAddress, ReadyChannel<C::Service>>,
-    /// Ready-to-serve channels, keyed by endpoint address.
+    /// In-flight connection attempts.
+    connecting: KeyedFutures<EndpointAddress, C::Service>,
+    /// Ready-to-serve channels.
     ready: IndexMap<EndpointAddress, ReadyChannel<C::Service>>,
-    /// Channel picker for load balancing.
+    /// Currently-ejected channels. Each entry is an
+    /// [`EjectedChannel`] whose `Sleep` fires when the ejection
+    /// window expires.
+    ejected: KeyedFutures<EndpointAddress, UnejectedChannel<C::Service>>,
+    /// `None` disables outlier detection.
+    outlier: Option<OutlierDetector>,
     picker: Arc<dyn ChannelPicker<ReadyChannel<C::Service>, Req> + Send + Sync>,
 }
 
@@ -70,57 +88,209 @@ where
     D: Discover<Key = EndpointAddress, Service = IdleChannel> + Unpin,
     D::Error: Into<tower::BoxError>,
     C: Connector + Send + Sync + 'static,
-    C::Service: Send + 'static,
+    C::Service: Clone + Send + 'static,
 {
-    /// Create a new load balancer with the given picker.
+    /// Create a load balancer with no outlier detection.
     pub(crate) fn new(
         discovery: D,
         connector: Arc<C>,
         picker: Arc<dyn ChannelPicker<ReadyChannel<C::Service>, Req> + Send + Sync>,
     ) -> Self {
-        Self {
+        // Infallible: `with_outlier(.., None)` never wires a registry.
+        Self::with_outlier(discovery, connector, picker, None)
+            .expect("with_outlier(.., None) is infallible")
+    }
+
+    /// Create a load balancer, optionally enabling outlier detection.
+    /// When `outlier` is `Some`, the registry's housekeeping actor is
+    /// spawned and bound to this LB. Returns
+    /// [`RegistryAlreadyWired`] if the registry already drives
+    /// another LB.
+    pub(crate) fn with_outlier(
+        discovery: D,
+        connector: Arc<C>,
+        picker: Arc<dyn ChannelPicker<ReadyChannel<C::Service>, Req> + Send + Sync>,
+        outlier: Option<Arc<OutlierStatsRegistry>>,
+    ) -> Result<Self, RegistryAlreadyWired> {
+        let outlier = outlier.map(OutlierDetector::new).transpose()?;
+        Ok(Self {
             discovery,
             connector,
             connecting: KeyedFutures::new(),
             ready: IndexMap::new(),
+            ejected: KeyedFutures::new(),
+            outlier,
             picker,
+        })
+    }
+
+    /// Purge all state for `addr`, including the outlier-detection
+    /// registry entry. Called on `Change::Remove`.
+    fn purge_endpoint(&mut self, addr: &EndpointAddress) {
+        let _ = self.connecting.cancel(addr);
+        self.ready.swap_remove(addr);
+        let _ = self.ejected.cancel(addr);
+        if let Some(o) = self.outlier.as_ref() {
+            o.registry().remove_channel(addr);
         }
     }
 
-    /// Drain pending discovery events. Either resolves to an error
-    /// ([`LbError::DiscoverClosed`] or [`LbError::DiscoverError`]) or stays
-    /// pending — there is no success outcome since the loop only exits on
-    /// pending or error.
+    /// Clear stale connecting/ready/ejected slots for `addr` but
+    /// preserve the outlier-detection registry entry. Called on
+    /// `Change::Insert` so transient discovery flaps don't lose
+    /// counters or ejection state, matching grpc-go and Envoy.
+    fn reset_active_slots(&mut self, addr: &EndpointAddress) {
+        let _ = self.connecting.cancel(addr);
+        self.ready.swap_remove(addr);
+        let _ = self.ejected.cancel(addr);
+    }
+
+    /// Drain pending discovery events. Resolves to an error
+    /// ([`LbError::DiscoverClosed`] or [`LbError::DiscoverError`])
+    /// or stays pending — there is no success outcome.
     fn poll_discover(&mut self, cx: &mut Context<'_>) -> Poll<LbError> {
         loop {
             match ready!(Pin::new(&mut self.discovery).poll_discover(cx)) {
                 None => {
-                    // tower::discover::Discover::poll_discover() returns Ready(None) when the
-                    // discover object is closed, as indicated by Stream trait.
                     tracing::error!("discover object is closed");
                     return Poll::Ready(LbError::DiscoverClosed);
                 }
                 Some(Err(e)) => return Poll::Ready(LbError::DiscoverError(e.into())),
                 Some(Ok(Change::Insert(addr, idle))) => {
                     tracing::trace!("discovery: insert {addr}");
-                    let _ = self.connecting.cancel(&addr);
-                    self.ready.swap_remove(&addr);
+                    self.reset_active_slots(&addr);
                     let connecting = idle.connect(self.connector.clone());
                     let _ = self.connecting.add(addr, connecting);
                 }
                 Some(Ok(Change::Remove(addr))) => {
                     tracing::trace!("discovery: remove {addr}");
-                    let _ = self.connecting.cancel(&addr);
-                    self.ready.swap_remove(&addr);
+                    self.purge_endpoint(&addr);
                 }
             }
         }
     }
 
-    /// Drain completed connection futures into the ready set.
+    /// Drain completed connection futures. If the outlier state for
+    /// a re-discovered endpoint is still ejected, the new channel is
+    /// re-ejected for the *remaining* duration; if the deadline has
+    /// already passed, it is un-ejected and routed to `ready`.
     fn poll_connecting(&mut self, cx: &mut Context<'_>) {
-        while let Poll::Ready(Some((addr, ready))) = self.connecting.poll_next(cx) {
-            self.ready.insert(addr, ready);
+        while let Poll::Ready(Some((addr, svc))) = self.connecting.poll_next(cx) {
+            let state = match self.outlier.as_ref() {
+                Some(o) => o.registry().add_channel(addr.clone()),
+                None => Arc::new(OutlierChannelState::new(addr.clone())),
+            };
+            let ready = ReadyChannel::new(addr.clone(), svc, state.clone());
+            let remaining = self
+                .outlier
+                .as_ref()
+                .and_then(|o| o.registry().remaining_ejection(&state, Instant::now()));
+            self.place_after_connect(addr, ready, remaining);
+        }
+    }
+
+    /// Route a freshly-connected `ReadyChannel` based on its
+    /// preserved outlier state: `None` → ready; `Some(0)` → un-eject
+    /// then ready; `Some(d)` → ejected for `d`.
+    fn place_after_connect(
+        &mut self,
+        addr: EndpointAddress,
+        ready: ReadyChannel<C::Service>,
+        remaining: Option<Duration>,
+    ) {
+        match remaining {
+            None => {
+                self.ready.insert(addr, ready);
+            }
+            Some(d) if d.is_zero() => {
+                if let Some(o) = self.outlier.as_ref() {
+                    o.registry().note_uneject(ready.outlier());
+                }
+                self.ready.insert(addr, ready);
+            }
+            Some(d) => {
+                let ejected = ready.eject(
+                    EjectionConfig {
+                        timeout: d,
+                        needs_reconnect: false,
+                    },
+                    self.connector.clone(),
+                );
+                tracing::debug!("outlier detection: re-eject {addr} for {d:?}");
+                let _ = self.ejected.add(addr, ejected);
+            }
+        }
+    }
+
+    /// Drain eject requests from the outlier detector's mpsc and
+    /// move each named `ReadyChannel` into [`Self::ejected`]. The
+    /// per-channel ejection flag has already been set by
+    /// `record_outcome`.
+    fn poll_eject_requests(&mut self, cx: &mut Context<'_>) {
+        loop {
+            let Some(o) = self.outlier.as_mut() else {
+                return;
+            };
+            let addr = match o.poll_eject_request(cx) {
+                Poll::Ready(Some(a)) => a,
+                _ => return,
+            };
+            let registry = o.registry().clone();
+            // Channel may have been removed by discovery in the
+            // meantime; if so, nothing to eject.
+            let Some(ch) = self.ready.swap_remove(&addr) else {
+                continue;
+            };
+            let state = ch.outlier().clone();
+            match registry.remaining_ejection(&state, Instant::now()) {
+                Some(d) if !d.is_zero() => {
+                    let ejected = ch.eject(
+                        EjectionConfig {
+                            timeout: d,
+                            needs_reconnect: false,
+                        },
+                        self.connector.clone(),
+                    );
+                    tracing::debug!("outlier detection: eject {addr} for {d:?}");
+                    let _ = self.ejected.add(addr, ejected);
+                }
+                Some(_) => {
+                    // Deadline already past — un-eject.
+                    registry.note_uneject(&state);
+                    self.ready.insert(addr, ch);
+                }
+                None => {
+                    // No longer ejected (raced with un-eject).
+                    self.ready.insert(addr, ch);
+                }
+            }
+        }
+    }
+
+    /// Drain completed `EjectedChannel` timers. Clears the
+    /// registry-level ejection counter and routes the resolved
+    /// channel back into `ready` (with its outlier state already
+    /// reattached) or `connecting`.
+    fn poll_unejection(&mut self, cx: &mut Context<'_>) {
+        while let Poll::Ready(Some((addr, unejected))) = self.ejected.poll_next(cx) {
+            match unejected {
+                UnejectedChannel::Ready(ready) => {
+                    if let Some(o) = self.outlier.as_ref() {
+                        o.registry().note_uneject(ready.outlier());
+                    }
+                    tracing::debug!("outlier detection: uneject {addr}");
+                    self.ready.insert(addr, ready);
+                }
+                // `needs_reconnect = false` for A50; this arm is
+                // reserved for future policies.
+                UnejectedChannel::Connecting(future) => {
+                    if let Some(o) = self.outlier.as_ref() {
+                        let state = o.registry().add_channel(addr.clone());
+                        o.registry().note_uneject(&state);
+                    }
+                    let _ = self.connecting.add(addr, future);
+                }
+            }
         }
     }
 }
@@ -142,21 +312,23 @@ where
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         let discover_result = self.poll_discover(cx);
+        // Un-ejections before ejections so `ejected_count` is current
+        // when the next eject is evaluated.
+        self.poll_unejection(cx);
         self.poll_connecting(cx);
+        self.poll_eject_requests(cx);
 
         if !self.ready.is_empty() {
             return Poll::Ready(Ok(()));
         }
 
-        // No ready endpoints. Check if we should fail fast.
+        // No ready endpoints. Fail fast iff discovery is closed and
+        // nothing else can produce one.
         match discover_result {
             Poll::Ready(LbError::DiscoverClosed) if self.connecting.len() == 0 => {
-                // Discovery is closed and nothing is connecting — no progress is possible.
                 Poll::Ready(Err(LbError::Stagnation))
             }
             Poll::Ready(e) => {
-                // Other discovery errors (or DiscoverClosed with connecting in flight)
-                // are non-fatal — log and stay pending.
                 tracing::warn!("discovery yielded error: {e}");
                 Poll::Pending
             }
@@ -174,16 +346,20 @@ where
         let Some(picked) = self.picker.pick(&req, &self.ready) else {
             return LbFuture::Error(Some(LbError::Unavailable));
         };
-        // `picked` is a read-only borrow into `self.ready`. Clone to get an
-        // owned service we can drive in the async block.
+        // Cheap clones (all Arc-shared internals) so the async block
+        // can take ownership without holding the picker borrow.
         let mut svc = picked.clone();
+        let outlier_state = picked.outlier().clone();
+        let registry = self.outlier.as_ref().map(|o| o.registry().clone());
         LbFuture::Pending(Box::pin(async move {
             tower::ServiceExt::ready(&mut svc)
                 .await
                 .map_err(|e| LbError::LbChannelPollReadyError(e.into()))?;
-            svc.call(req)
-                .await
-                .map_err(|e| LbError::LbChannelCallError(e.into()))
+            let result = svc.call(req).await;
+            if let Some(registry) = registry.as_ref() {
+                registry.record_outcome(&outlier_state, result.is_ok());
+            }
+            result.map_err(|e| LbError::LbChannelCallError(e.into()))
         }))
     }
 }
@@ -657,5 +833,336 @@ mod tests {
             matches!(result, Err(LbError::LbChannelCallError(_))),
             "expected LbChannelCallError, got {result:?}"
         );
+    }
+
+    // -- Outlier-detection integration tests --
+
+    use crate::client::loadbalance::outlier_detection::OutlierStatsRegistry;
+    use crate::xds::resource::outlier_detection::{
+        FailurePercentageConfig, OutlierDetectionConfig, Percentage,
+    };
+    use std::time::Duration;
+
+    fn pct(v: u32) -> Percentage {
+        Percentage::new(v).unwrap()
+    }
+
+    fn fp_config(
+        threshold: u32,
+        request_volume: u32,
+        minimum_hosts: u32,
+    ) -> OutlierDetectionConfig {
+        OutlierDetectionConfig {
+            interval: Duration::from_secs(60),
+            base_ejection_time: Duration::from_secs(30),
+            max_ejection_time: Duration::from_secs(300),
+            max_ejection_percent: pct(100),
+            success_rate: None,
+            failure_percentage: Some(FailurePercentageConfig {
+                threshold: pct(threshold),
+                enforcing_failure_percentage: pct(100),
+                minimum_hosts,
+                request_volume,
+            }),
+        }
+    }
+
+    /// Build an LB with outlier detection enabled.
+    fn make_lb_with_outlier(
+        discover: MockDiscover,
+        config: OutlierDetectionConfig,
+    ) -> (Lb, Arc<MockConnector>, Arc<OutlierStatsRegistry>) {
+        let connector = Arc::new(MockConnector::new());
+        let picker: Arc<dyn ChannelPicker<ReadyChannel<MockService>, &'static str> + Send + Sync> =
+            Arc::new(P2cPicker);
+        let registry = OutlierStatsRegistry::new(config);
+        let lb =
+            LoadBalancer::with_outlier(discover, connector.clone(), picker, Some(registry.clone()))
+                .expect("registry not yet wired");
+        (lb, connector, registry)
+    }
+
+    /// Drive the LB through one call per port. Asserts each succeeds.
+    async fn call_each(lb: &mut Lb, n: usize) {
+        for _ in 0..n {
+            lb.call("hello").await.unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn test_outlier_detection_ejects_failing_endpoint() {
+        // 5 endpoints, all healthy except 8084. Once 8084's failures
+        // cross the threshold, it should be moved out of `ready` and
+        // into `ejected`.
+        let (tx, discover) = new_discover();
+        let (mut lb, connector, registry) = make_lb_with_outlier(
+            discover,
+            fp_config(
+                /*threshold*/ 50, /*request_volume*/ 5, /*minimum_hosts*/ 3,
+            ),
+        );
+
+        for port in 8080..=8084 {
+            tx.send(Ok(Change::Insert(addr(port), IdleChannel::new(addr(port)))))
+                .await
+                .unwrap();
+        }
+        drive_to_ready(&mut lb, &connector).await;
+        assert_eq!(lb.ready.len(), 5);
+
+        // Configure 8084 to always fail. Other endpoints stay healthy.
+        connector
+            .service(&addr(8084))
+            .fail_call
+            .store(true, Ordering::Relaxed);
+
+        // Drive enough calls to ensure 8084 reaches request_volume
+        // and its failure rate triggers ejection. With 5 endpoints
+        // and P2C picking, each gets ~k/5 calls; drive 100 to be safe.
+        for _ in 0..100 {
+            let _ = lb.call("hello").await;
+        }
+
+        // poll_ready drains the eject mpsc and transitions 8084 into
+        // `self.ejected` via `ReadyChannel::eject`.
+        let _ = poll_ready_now(&mut lb);
+        assert!(
+            lb.ejected.contains_key(&addr(8084)),
+            "8084 should be ejected; ejected.len()={}, ready keys: {:?}",
+            lb.ejected.len(),
+            lb.ready.keys().collect::<Vec<_>>(),
+        );
+        assert!(!lb.ready.contains_key(&addr(8084)));
+        // The registry's `ejected_count` should reflect the same.
+        assert!(registry.len() == 5);
+    }
+
+    #[tokio::test]
+    async fn test_outlier_detection_healthy_cluster_no_ejections() {
+        let (tx, discover) = new_discover();
+        let (mut lb, connector, _registry) = make_lb_with_outlier(discover, fp_config(50, 5, 3));
+
+        for port in 8080..=8084 {
+            tx.send(Ok(Change::Insert(addr(port), IdleChannel::new(addr(port)))))
+                .await
+                .unwrap();
+        }
+        drive_to_ready(&mut lb, &connector).await;
+        assert_eq!(lb.ready.len(), 5);
+
+        call_each(&mut lb, 50).await;
+
+        let _ = poll_ready_now(&mut lb);
+        assert_eq!(lb.ejected.len(), 0);
+        assert_eq!(lb.ready.len(), 5);
+    }
+
+    #[tokio::test]
+    async fn test_outlier_detection_endpoint_removal_cleans_registry() {
+        let (tx, discover) = new_discover();
+        let (mut lb, connector, registry) = make_lb_with_outlier(discover, fp_config(50, 5, 3));
+
+        tx.send(Ok(Change::Insert(addr(8080), IdleChannel::new(addr(8080)))))
+            .await
+            .unwrap();
+        drive_to_ready(&mut lb, &connector).await;
+        assert_eq!(registry.len(), 1);
+
+        tx.send(Ok(Change::Remove(addr(8080)))).await.unwrap();
+        let _ = poll_ready_now(&mut lb);
+        assert_eq!(registry.len(), 0);
+        assert_eq!(lb.ready.len(), 0);
+    }
+
+    /// Re-discovering an endpoint (Insert for an address the LB
+    /// already tracks) must preserve its outlier-detection counters
+    /// and multiplier. Matches grpc-go / Envoy behavior.
+    #[tokio::test]
+    async fn test_outlier_detection_reinsert_preserves_state() {
+        let (tx, discover) = new_discover();
+        let (mut lb, connector, registry) = make_lb_with_outlier(discover, fp_config(50, 5, 3));
+
+        tx.send(Ok(Change::Insert(addr(8080), IdleChannel::new(addr(8080)))))
+            .await
+            .unwrap();
+        drive_to_ready(&mut lb, &connector).await;
+        let state = registry.add_channel(addr(8080)); // idempotent — returns the existing state
+        // Drive some successes through the data path so the channel
+        // accumulates counter state worth preserving.
+        for _ in 0..3 {
+            lb.call("hello").await.unwrap();
+        }
+        let (s_before, f_before) = state.counters();
+        assert!(
+            s_before > 0,
+            "expected accumulated successes before re-insert"
+        );
+        let registry_before = Arc::as_ptr(&state);
+
+        // Re-insert the same address. State must survive.
+        tx.send(Ok(Change::Insert(addr(8080), IdleChannel::new(addr(8080)))))
+            .await
+            .unwrap();
+        drive_to_ready(&mut lb, &connector).await;
+
+        let state_after = registry.add_channel(addr(8080));
+        assert_eq!(
+            Arc::as_ptr(&state_after),
+            registry_before,
+            "registry entry should be the same Arc — state continuity preserved",
+        );
+        let (s_after, f_after) = state_after.counters();
+        assert_eq!(
+            (s_after, f_after),
+            (s_before, f_before),
+            "counters must survive re-insert",
+        );
+        assert_eq!(registry.len(), 1);
+    }
+
+    /// A re-discovered endpoint whose preserved state says "ejected"
+    /// is placed directly into the ejected pool, not the ready set, so
+    /// no traffic is routed to it until the housekeeping actor
+    /// un-ejects it.
+    #[tokio::test]
+    async fn test_outlier_detection_reinsert_while_ejected_stays_ejected() {
+        let (tx, discover) = new_discover();
+        let (mut lb, connector, registry) = make_lb_with_outlier(discover, fp_config(50, 5, 3));
+
+        // Bring up 5 endpoints; make 8084 fail enough to be ejected.
+        for port in 8080..=8084 {
+            tx.send(Ok(Change::Insert(addr(port), IdleChannel::new(addr(port)))))
+                .await
+                .unwrap();
+        }
+        drive_to_ready(&mut lb, &connector).await;
+        connector
+            .service(&addr(8084))
+            .fail_call
+            .store(true, Ordering::Relaxed);
+        for _ in 0..100 {
+            let _ = lb.call("hello").await;
+        }
+        let _ = poll_ready_now(&mut lb);
+        let state_8084 = registry.add_channel(addr(8084));
+        assert!(
+            state_8084.is_ejected(),
+            "8084 must be ejected before re-insert"
+        );
+        assert!(
+            lb.ejected.contains_key(&addr(8084)),
+            "8084 should be in the ejected pool"
+        );
+
+        // Re-insert 8084. The ejected slot's old EjectedChannel is
+        // cancelled, but the registry entry (is_ejected=true,
+        // ejected_at_nanos preserved) survives. The new channel
+        // should be re-ejected with the *remaining* ejection time.
+        // Drive the steps explicitly because `lb.ready` is non-empty
+        // throughout (8080..=8083), so `drive_to_ready` may return
+        // before the new 8084 connect resolves.
+        tx.send(Ok(Change::Insert(addr(8084), IdleChannel::new(addr(8084)))))
+            .await
+            .unwrap();
+        // 1. Drain the Insert into `self.connecting`.
+        let _ = poll_ready_now(&mut lb);
+        // 2. Synchronously resolve the new connect future.
+        connector.resolve_all();
+        // 3. Drain the now-ready connecting future; `poll_connecting`
+        //    sees `state.is_ejected() == true` and re-ejects.
+        let _ = poll_ready_now(&mut lb);
+
+        assert!(
+            !lb.ready.contains_key(&addr(8084)),
+            "8084 must not be in ready while still logically ejected"
+        );
+        assert!(
+            lb.ejected.contains_key(&addr(8084)),
+            "8084 must remain in the ejected pool after re-insert"
+        );
+        assert!(state_8084.is_ejected());
+    }
+
+    /// Once `base × multiplier` time elapses on an ejected channel,
+    /// the [`EjectedChannel`]'s timer fires and the LB's
+    /// `poll_unejection` should move the channel back to `ready`.
+    #[tokio::test(start_paused = true)]
+    async fn test_outlier_detection_timer_driven_unejection() {
+        let mut config = fp_config(50, 5, 3);
+        // Short base for fast test; multiplier is 1 on first eject.
+        config.base_ejection_time = Duration::from_secs(10);
+        config.max_ejection_time = Duration::from_secs(60);
+
+        let (tx, discover) = new_discover();
+        let (mut lb, connector, registry) = make_lb_with_outlier(discover, config);
+
+        for port in 8080..=8084 {
+            tx.send(Ok(Change::Insert(addr(port), IdleChannel::new(addr(port)))))
+                .await
+                .unwrap();
+        }
+        drive_to_ready(&mut lb, &connector).await;
+        connector
+            .service(&addr(8084))
+            .fail_call
+            .store(true, Ordering::Relaxed);
+        for _ in 0..100 {
+            let _ = lb.call("hello").await;
+        }
+        let _ = poll_ready_now(&mut lb);
+        assert!(
+            lb.ejected.contains_key(&addr(8084)),
+            "8084 must be ejected before the timer fires"
+        );
+        assert!(registry.add_channel(addr(8084)).is_ejected());
+
+        // Stop 8084 from failing so it can serve again, then advance
+        // past `base × multiplier = 10s`.
+        connector
+            .service(&addr(8084))
+            .fail_call
+            .store(false, Ordering::Relaxed);
+        tokio::time::advance(Duration::from_secs(11)).await;
+        // Drive poll_ready; `EjectedChannel`'s timer fires and
+        // `poll_unejection` routes 8084 back to ready.
+        let _ = poll_ready_now(&mut lb);
+
+        assert!(
+            !lb.ejected.contains_key(&addr(8084)),
+            "8084 must leave the ejected pool once the timer fires"
+        );
+        assert!(
+            lb.ready.contains_key(&addr(8084)),
+            "8084 must be back in ready after un-ejection"
+        );
+        assert!(!registry.add_channel(addr(8084)).is_ejected());
+    }
+
+    /// Sharing one `OutlierStatsRegistry` across two `LoadBalancer`s is
+    /// not supported — the eject-signal receiver is one-shot. The
+    /// second `with_outlier` call must return an error rather than
+    /// panic.
+    #[tokio::test]
+    async fn test_outlier_registry_cannot_be_wired_twice() {
+        let (_tx1, discover1) = new_discover();
+        let (_tx2, discover2) = new_discover();
+        let connector = Arc::new(MockConnector::new());
+        let picker: Arc<dyn ChannelPicker<ReadyChannel<MockService>, &'static str> + Send + Sync> =
+            Arc::new(P2cPicker);
+        let registry = OutlierStatsRegistry::new(fp_config(50, 5, 3));
+
+        // First wiring succeeds.
+        LoadBalancer::with_outlier(
+            discover1,
+            connector.clone(),
+            picker.clone(),
+            Some(registry.clone()),
+        )
+        .expect("first wire");
+
+        // Second wiring of the same registry must error, not panic.
+        let result =
+            LoadBalancer::with_outlier(discover2, connector, picker, Some(registry.clone()));
+        assert!(result.is_err());
     }
 }

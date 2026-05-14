@@ -2,27 +2,19 @@
 //!
 //! [`OutlierDetectionConfig`] is the input to the outlier-detection
 //! algorithm. The two sub-configs gate which ejection algorithms run.
-//!
-//! Note: A50 specifies outlier detection as a load-balancing policy
-//! wrapping a `child_policy`. `tonic-xds` currently runs P2C as its only
-//! load balancer and integrates outlier detection as a filter on the
-//! `Discover` stream feeding it, so there is no `child_policy` field
-//! here yet. It will be added when more balancers are supported.
+//! The `child_policy` field from A50 is not modeled — `tonic-xds`
+//! currently runs P2C as its only load balancer.
 //!
 //! [gRFC A50]: https://github.com/grpc/proposal/blob/master/A50-xds-outlier-detection.md
 
 use std::time::Duration;
 
-/// A 0–100 percentage. Construction is fallible; once held, every
-/// `Percentage` is guaranteed to be in range, so the algorithm never
-/// has to re-validate.
+/// A 0–100 percentage, validated at construction.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Percentage(u8);
 
 impl Percentage {
     /// Construct from a raw value, returning `Err` if it exceeds 100.
-    /// Accepts `u32` to match the proto wire type without forcing callers
-    /// to cast at every site.
     pub(crate) fn new(value: u32) -> Result<Self, PercentageError> {
         if value > 100 {
             Err(PercentageError(value))
@@ -68,7 +60,8 @@ pub(crate) struct SuccessRateConfig {
     /// An endpoint is a candidate for ejection when its success rate falls
     /// below `mean - stdev * (stdev_factor / 1000.0)`.
     pub stdev_factor: u32,
-    /// Probability that a candidate is actually ejected.
+    /// Probability that a flagged candidate is actually ejected.
+    /// Set to 0 to compute statistics without enforcing.
     pub enforcing_success_rate: Percentage,
     /// Minimum number of candidate endpoints required to run the algorithm.
     pub minimum_hosts: u32,
@@ -83,7 +76,8 @@ pub(crate) struct FailurePercentageConfig {
     /// Failure rate at or above which an endpoint is a candidate for
     /// ejection.
     pub threshold: Percentage,
-    /// Probability that a candidate is actually ejected.
+    /// Probability that a flagged candidate is actually ejected.
+    /// Set to 0 to compute statistics without enforcing.
     pub enforcing_failure_percentage: Percentage,
     /// Minimum number of candidate endpoints required to run the algorithm.
     pub minimum_hosts: u32,
@@ -93,8 +87,7 @@ pub(crate) struct FailurePercentageConfig {
 }
 
 impl OutlierDetectionConfig {
-    /// True when at least one ejection algorithm is enabled and the detector
-    /// should do work. If false, the cluster can skip instantiating detection.
+    /// True when at least one ejection algorithm is enabled.
     pub(crate) fn is_enabled(&self) -> bool {
         self.success_rate.is_some() || self.failure_percentage.is_some()
     }
