@@ -163,11 +163,16 @@ fn parse_san_matchers(ctx: &CertificateValidationContext) -> xds_client::Result<
             .map(SanMatcher::from_proto)
             .collect();
     }
+    // Deprecated `match_subject_alt_names` field carries untyped `StringMatcher`s.
+    // Per grpc-go behavior, each one applies against any SAN entry type in the
+    // peer cert. This matters for Istio interop: istiod emits SPIFFE URIs
+    // (`spiffe://...`) in this deprecated field, and the cert's matching SAN
+    // is a URI entry.
     #[allow(deprecated)]
     ctx.match_subject_alt_names
         .iter()
         .cloned()
-        .map(|m| StringMatcher::from_proto(m).map(SanMatcher::Dns))
+        .map(|m| StringMatcher::from_proto(m).map(SanMatcher::AnyType))
         .collect()
 }
 
@@ -179,17 +184,6 @@ fn reject_unsupported_common_fields(ctx: &CommonTlsContext) -> xds_client::Resul
         ctx.custom_handshaker.is_some(),
         "CommonTlsContext.custom_handshaker",
     )?;
-    #[allow(deprecated)]
-    {
-        reject(
-            ctx.tls_certificate_certificate_provider.is_some(),
-            "CommonTlsContext.tls_certificate_certificate_provider",
-        )?;
-        reject(
-            ctx.tls_certificate_certificate_provider_instance.is_some(),
-            "CommonTlsContext.tls_certificate_certificate_provider_instance",
-        )?;
-    }
     Ok(())
 }
 
@@ -390,8 +384,7 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(cfg.san_matchers.len(), 1);
-        // Legacy field treats entries as DNS SAN matchers.
-        assert!(matches!(cfg.san_matchers[0], SanMatcher::Dns(_)));
+        assert!(matches!(cfg.san_matchers[0], SanMatcher::AnyType(_)));
     }
 
     #[test]
@@ -567,5 +560,67 @@ mod tests {
         };
         let err = parse_transport_socket(Some(wrap_upstream(common_ctx(cvc)))).unwrap_err();
         assert!(err.to_string().contains("custom_validator_config"));
+    }
+
+    /// Real-world control planes (Istio in particular) emit both the current
+    /// `tls_certificate_provider_instance` field and the deprecated
+    /// `tls_certificate_certificate_provider_instance` for backward compat.
+    /// Our parser must accept this shape and read identity from the current
+    /// field.
+    #[test]
+    fn deprecated_and_current_identity_fields_coexist() {
+        use envoy_types::pb::envoy::extensions::transport_sockets::tls::v3::common_tls_context::CertificateProviderInstance;
+
+        #[allow(deprecated)]
+        let common = CommonTlsContext {
+            tls_certificate_provider_instance: Some(provider_instance("identity")),
+            // Istio also emits this older field with the same instance name.
+            tls_certificate_certificate_provider_instance: Some(CertificateProviderInstance {
+                instance_name: "identity".into(),
+                certificate_name: String::new(),
+            }),
+            validation_context_type: Some(
+                common_tls_context::ValidationContextType::ValidationContext(ca_validation_ctx(
+                    "root_ca",
+                )),
+            ),
+            ..Default::default()
+        };
+        let cfg = parse_transport_socket(Some(wrap_upstream(common)))
+            .unwrap()
+            .unwrap();
+        assert_eq!(cfg.ca_instance_name, "root_ca");
+        assert_eq!(cfg.identity_instance_name.as_deref(), Some("identity"));
+    }
+
+    /// Deprecated `match_subject_alt_names` (untyped string matchers) must
+    /// produce `SanMatcher::AnyType` so that SPIFFE URI content emitted by
+    /// Istio matches against the cert's URI SAN entry. Without this, the
+    /// matchers would only match DNS SANs and fail handshake against
+    /// URI-only certs.
+    #[test]
+    fn deprecated_match_subject_alt_names_produces_any_type() {
+        use crate::xds::resource::san_matcher::{SanEntry, SanMatcher};
+
+        let cvc = CertificateValidationContext {
+            ca_certificate_provider_instance: Some(provider_instance("root_ca")),
+            #[allow(deprecated)]
+            match_subject_alt_names: vec![StringMatcherProto {
+                match_pattern: Some(MatchPattern::Exact(
+                    "spiffe://cluster.local/ns/xds-test/sa/greeter".into(),
+                )),
+                ignore_case: false,
+            }],
+            ..Default::default()
+        };
+        let cfg = parse_transport_socket(Some(wrap_upstream(common_ctx(cvc))))
+            .unwrap()
+            .unwrap();
+        assert_eq!(cfg.san_matchers.len(), 1);
+        assert!(matches!(cfg.san_matchers[0], SanMatcher::AnyType(_)));
+        // The matcher must match a URI-typed SAN entry, not just DNS.
+        assert!(cfg.san_matchers[0].matches_any(&[SanEntry::Uri(
+            "spiffe://cluster.local/ns/xds-test/sa/greeter".into(),
+        )]));
     }
 }

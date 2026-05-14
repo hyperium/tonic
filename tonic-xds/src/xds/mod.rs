@@ -1,5 +1,6 @@
 pub(crate) mod bootstrap;
 pub(crate) mod cache;
+#[cfg(feature = "_tls-any")]
 pub(crate) mod cert_provider;
 pub(crate) mod cluster_discovery;
 pub(crate) mod endpoint_manager;

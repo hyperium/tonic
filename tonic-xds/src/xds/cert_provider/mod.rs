@@ -1,5 +1,3 @@
-// TODO: remove once A29 data plane TLS consumes all types.
-#![allow(dead_code)]
 //! Certificate provider plugin framework for gRFC A29.
 //!
 //! The xDS control plane references certificate providers by instance name
@@ -11,12 +9,12 @@
 //! [`CertificateProviderPluginInstance`]: https://github.com/envoyproxy/envoy/blob/main/api/envoy/extensions/transport_sockets/tls/v3/common.proto
 
 pub(crate) mod file_watcher;
-#[cfg(any(feature = "tls-ring", feature = "tls-aws-lc"))]
 pub(crate) mod verifier;
 
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use rustls::RootCertStore;
 use serde::Deserialize;
 
 use crate::xds::bootstrap::CertProviderPluginConfig;
@@ -29,6 +27,11 @@ pub(crate) struct Identity {
 }
 
 /// Certificate material returned by a [`CertificateProvider`] plugin.
+///
+/// CA roots are pre-parsed into an [`Arc<RootCertStore>`] so consumers reach
+/// for it on every TLS handshake without paying parse cost. Identity material
+/// stays as PEM bytes since [`tonic::transport::Identity::from_pem`] is
+/// itself bytes-only.
 ///
 /// The variants encode two invariants from gRFC A29 and A65 at the type level:
 ///
@@ -47,18 +50,21 @@ pub(crate) struct Identity {
 pub(crate) enum CertificateData {
     /// CA trust bundle only — used by TLS clients that don't present an
     /// identity.
-    RootsOnly { roots: Vec<u8> },
+    RootsOnly { roots: Arc<RootCertStore> },
     /// Identity only — used by TLS servers that don't validate peers
     /// (non-mTLS). Peer validation falls back to system roots at the
     /// consumer layer if needed.
     IdentityOnly { identity: Identity },
     /// Both roots and identity — used for mTLS on either end.
-    Both { roots: Vec<u8>, identity: Identity },
+    Both {
+        roots: Arc<RootCertStore>,
+        identity: Identity,
+    },
 }
 
 impl CertificateData {
-    /// PEM-encoded CA trust bundle, if present.
-    pub(crate) fn roots(&self) -> Option<&[u8]> {
+    /// Parsed CA trust bundle, if present.
+    pub(crate) fn roots(&self) -> Option<&Arc<RootCertStore>> {
         match self {
             Self::RootsOnly { roots } | Self::Both { roots, .. } => Some(roots),
             Self::IdentityOnly { .. } => None,
@@ -76,12 +82,14 @@ impl CertificateData {
 
 /// Errors from certificate provider operations.
 #[derive(Debug, thiserror::Error)]
-pub(crate) enum CertProviderError {
+pub enum CertProviderError {
     #[error("failed to read certificate file '{path}': {source}")]
     FileRead {
         path: String,
         source: std::io::Error,
     },
+    #[error("failed to parse PEM in '{path}': {reason}")]
+    PemParse { path: String, reason: String },
     #[error("unknown certificate provider plugin: {0}")]
     UnknownPlugin(String),
     #[error("invalid config for plugin '{plugin}': {source}")]
@@ -174,11 +182,6 @@ impl CertProviderRegistry {
     pub(crate) fn get(&self, instance_name: &str) -> Option<&Arc<dyn CertificateProvider>> {
         self.providers.get(instance_name)
     }
-
-    /// Returns `true` if the given instance name is configured.
-    pub(crate) fn contains(&self, instance_name: &str) -> bool {
-        self.providers.contains_key(instance_name)
-    }
 }
 
 #[cfg(test)]
@@ -209,8 +212,8 @@ mod tests {
     }
 
     #[test]
-    fn contains_returns_false_for_missing_instance() {
+    fn get_returns_none_for_missing_instance() {
         let registry = CertProviderRegistry::from_bootstrap(&HashMap::new()).unwrap();
-        assert!(!registry.contains("nonexistent"));
+        assert!(registry.get("nonexistent").is_none());
     }
 }

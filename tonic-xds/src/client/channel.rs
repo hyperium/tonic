@@ -5,9 +5,9 @@ use crate::client::lb::{ClusterDiscovery, XdsLbService};
 use crate::client::route::{Router, XdsRoutingLayer};
 use crate::xds::bootstrap::{BootstrapConfig, BootstrapError};
 use crate::xds::cache::XdsCache;
-use crate::xds::cluster_discovery::{
-    EndpointConnector, XdsClusterDiscovery, default_endpoint_connector,
-};
+#[cfg(feature = "_tls-any")]
+use crate::xds::cert_provider::{CertProviderError, CertProviderRegistry};
+use crate::xds::cluster_discovery::XdsClusterDiscovery;
 use crate::xds::resource_manager::XdsResourceManager;
 use crate::xds::routing::XdsRouter;
 use http::Request;
@@ -67,6 +67,10 @@ pub enum BuildError {
     /// Bootstrap configuration could not be loaded.
     #[error("bootstrap: {0}")]
     Bootstrap(#[from] BootstrapError),
+    /// A `certificate_providers` entry in the bootstrap failed to initialize.
+    #[cfg(feature = "_tls-any")]
+    #[error("certificate provider: {0}")]
+    CertProvider(#[from] CertProviderError),
 }
 
 /// Holds owned resources whose background tasks must live as long as the channel.
@@ -187,9 +191,10 @@ impl XdsChannelBuilder {
             )));
         }
 
-        // TODO(PR2/A29): Build CertProviderRegistry from bootstrap.certificate_providers
-        // and pass it to XdsClusterDiscovery so data-plane connections can use
-        // TLS/mTLS when CDS clusters specify UpstreamTlsContext.
+        #[cfg(feature = "_tls-any")]
+        let cert_provider_registry = Arc::new(CertProviderRegistry::from_bootstrap(
+            &bootstrap.certificate_providers,
+        )?);
 
         let node = Node::try_from(bootstrap.node)?;
         let client_config = ClientConfig::new(node, &server_uri);
@@ -200,7 +205,13 @@ impl XdsChannelBuilder {
         let resource_manager =
             XdsResourceManager::new(xds_client.clone(), cache.clone(), listener_name);
 
-        Ok(self.build_from_cache(cache, xds_client, resource_manager))
+        Ok(self.build_from_cache(
+            cache,
+            #[cfg(feature = "_tls-any")]
+            cert_provider_registry,
+            xds_client,
+            resource_manager,
+        ))
     }
 
     /// Internal builder that wires the service stack from a pre-built cache.
@@ -210,13 +221,19 @@ impl XdsChannelBuilder {
     fn build_from_cache(
         &self,
         cache: Arc<XdsCache>,
+        #[cfg(feature = "_tls-any")] cert_provider_registry: Arc<CertProviderRegistry>,
         xds_client: XdsClient,
         resource_manager: XdsResourceManager,
     ) -> XdsChannelGrpc {
         let router: Arc<dyn Router> = Arc::new(XdsRouter::new(&cache));
-        let connector: EndpointConnector = Arc::new(default_endpoint_connector);
-        let discovery: Arc<dyn ClusterDiscovery<EndpointAddress, EndpointChannel<Channel>>> =
-            Arc::new(XdsClusterDiscovery::new(cache, connector));
+        #[cfg(feature = "_tls-any")]
+        let discovery: Arc<
+            dyn ClusterDiscovery<EndpointAddress, EndpointChannel<Channel>>,
+        > = Arc::new(XdsClusterDiscovery::new(cache, cert_provider_registry));
+        #[cfg(not(feature = "_tls-any"))]
+        let discovery: Arc<
+            dyn ClusterDiscovery<EndpointAddress, EndpointChannel<Channel>>,
+        > = Arc::new(XdsClusterDiscovery::new(cache));
         let retry_policy = GrpcRetryPolicy::new(GrpcRetryPolicyConfig::default());
 
         let resources = Arc::new(XdsChannelResources {
@@ -535,6 +552,19 @@ mod tests {
         assert_eq!(response.into_inner().message, "retry-server: retry-test");
     }
 
+    /// Helper: creates a minimal plaintext `ClusterResource` for tests that
+    /// drive `XdsClusterDiscovery`. The cluster watch in `discover_cluster`
+    /// blocks until a cluster is in the cache.
+    fn make_test_cluster(cluster_name: &str) -> Arc<crate::xds::resource::ClusterResource> {
+        use crate::xds::resource::cluster::{ClusterResource, LbPolicy};
+        Arc::new(ClusterResource {
+            name: cluster_name.to_string(),
+            eds_service_name: None,
+            lb_policy: LbPolicy::RoundRobin,
+            security: None,
+        })
+    }
+
     /// Helper: creates a `RouteConfigResource` that routes all traffic to the given cluster.
     fn make_test_route_config(cluster_name: &str) -> Arc<RouteConfigResource> {
         use crate::xds::resource::route_config::*;
@@ -582,15 +612,24 @@ mod tests {
     /// Builds an XdsChannelGrpc using real XdsRouter and XdsClusterDiscovery
     /// backed by the given cache.
     async fn build_xds_channel_from_cache(cache: Arc<XdsCache>) -> XdsChannelGrpc {
-        use crate::xds::cluster_discovery::{
-            EndpointConnector, XdsClusterDiscovery, default_endpoint_connector,
-        };
+        use crate::xds::cluster_discovery::XdsClusterDiscovery;
         use crate::xds::routing::XdsRouter;
 
         let router: Arc<dyn Router> = Arc::new(XdsRouter::new(&cache));
-        let connector: EndpointConnector = Arc::new(default_endpoint_connector);
-        let discovery: Arc<dyn ClusterDiscovery<EndpointAddress, EndpointChannel<Channel>>> =
-            Arc::new(XdsClusterDiscovery::new(cache, connector));
+
+        #[cfg(feature = "_tls-any")]
+        let discovery: Arc<
+            dyn ClusterDiscovery<EndpointAddress, EndpointChannel<Channel>>,
+        > = {
+            use crate::xds::cert_provider::CertProviderRegistry;
+            let registry =
+                Arc::new(CertProviderRegistry::from_bootstrap(&Default::default()).unwrap());
+            Arc::new(XdsClusterDiscovery::new(cache, registry))
+        };
+        #[cfg(not(feature = "_tls-any"))]
+        let discovery: Arc<
+            dyn ClusterDiscovery<EndpointAddress, EndpointChannel<Channel>>,
+        > = Arc::new(XdsClusterDiscovery::new(cache));
 
         let builder = XdsChannelBuilder::new(test_config());
         builder.build_grpc_channel_from_parts(router, discovery, GrpcRetryPolicy::default())
@@ -608,6 +647,7 @@ mod tests {
 
         let cache = Arc::new(XdsCache::new());
         cache.update_route_config(make_test_route_config(cluster_name));
+        cache.update_cluster(cluster_name, make_test_cluster(cluster_name));
         cache.update_endpoints(cluster_name, make_test_endpoints(cluster_name, &servers));
 
         let channel = build_xds_channel_from_cache(cache).await;
@@ -641,6 +681,7 @@ mod tests {
 
         let cache = Arc::new(XdsCache::new());
         cache.update_route_config(make_test_route_config(cluster_name));
+        cache.update_cluster(cluster_name, make_test_cluster(cluster_name));
         // Start with only the first server.
         cache.update_endpoints(
             cluster_name,
@@ -692,6 +733,15 @@ mod tests {
             XdsResourceManager::new(xds_client.clone(), cache.clone(), "test-listener".into());
 
         let builder = XdsChannelBuilder::new(test_config());
+
+        #[cfg(feature = "_tls-any")]
+        let _channel = {
+            use crate::xds::cert_provider::CertProviderRegistry;
+            let registry =
+                Arc::new(CertProviderRegistry::from_bootstrap(&Default::default()).unwrap());
+            builder.build_from_cache(cache, registry, xds_client, resource_manager)
+        };
+        #[cfg(not(feature = "_tls-any"))]
         let _channel = builder.build_from_cache(cache, xds_client, resource_manager);
         // Construction should succeed without panicking.
     }

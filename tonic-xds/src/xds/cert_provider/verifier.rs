@@ -15,34 +15,41 @@ use std::sync::Arc;
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::client::verify_server_cert_signed_by_trust_anchor;
 use rustls::crypto::{WebPkiSupportedAlgorithms, verify_tls12_signature, verify_tls13_signature};
-use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName, UnixTime};
+use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 use rustls::server::ParsedCertificate;
-use rustls::{
-    CertificateError, ClientConfig, DigitallySignedStruct, Error as RustlsError, RootCertStore,
-    SignatureScheme,
-};
+use rustls::{CertificateError, DigitallySignedStruct, Error as RustlsError, SignatureScheme};
 use x509_parser::extensions::{GeneralName, ParsedExtension};
 use x509_parser::oid_registry::OID_X509_EXT_SUBJECT_ALT_NAME;
 use x509_parser::prelude::FromDer;
 
-use crate::xds::cert_provider::{CertProviderError, CertProviderRegistry, CertificateData};
+use crate::xds::cert_provider::CertificateProvider;
 use crate::xds::resource::san_matcher::{SanEntry, SanMatcher};
-use crate::xds::resource::security::ClusterSecurityConfig;
 
 /// Verifier that chain-validates the peer cert and enforces gRFC A29 SAN
-/// matching.
-#[derive(Debug)]
+/// matching. Sources CA roots from a [`CertificateProvider`] per handshake
+/// so cert rotation in the provider is picked up automatically.
 pub(crate) struct XdsServerCertVerifier {
-    roots: Arc<RootCertStore>,
+    ca_provider: Arc<dyn CertificateProvider>,
     supported_algs: WebPkiSupportedAlgorithms,
     san_matchers: Vec<SanMatcher>,
 }
 
+impl std::fmt::Debug for XdsServerCertVerifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("XdsServerCertVerifier")
+            .field("san_matchers", &self.san_matchers)
+            .finish_non_exhaustive()
+    }
+}
+
 impl XdsServerCertVerifier {
-    pub(crate) fn new(roots: RootCertStore, san_matchers: Vec<SanMatcher>) -> Self {
+    pub(crate) fn new(
+        ca_provider: Arc<dyn CertificateProvider>,
+        san_matchers: Vec<SanMatcher>,
+    ) -> Self {
         let provider = default_crypto_provider();
         Self {
-            roots: Arc::new(roots),
+            ca_provider,
             supported_algs: provider.signature_verification_algorithms,
             san_matchers,
         }
@@ -74,10 +81,18 @@ impl ServerCertVerifier for XdsServerCertVerifier {
     ) -> Result<ServerCertVerified, RustlsError> {
         // `server_name` is intentionally unused — gRFC A29 replaces stdlib
         // hostname verification with the SAN matcher list below.
+        let data = self
+            .ca_provider
+            .fetch()
+            .map_err(|e| RustlsError::General(format!("CA provider fetch failed: {e}")))?;
+        let roots = data
+            .roots()
+            .ok_or_else(|| RustlsError::General("CA provider has no roots".into()))?;
+
         let cert = ParsedCertificate::try_from(end_entity)?;
         verify_server_cert_signed_by_trust_anchor(
             &cert,
-            &self.roots,
+            roots,
             intermediates,
             now,
             self.supported_algs.all,
@@ -176,113 +191,12 @@ fn parse_ip_san(bytes: &[u8]) -> Option<IpAddr> {
     }
 }
 
-/// Errors building a [`rustls::ClientConfig`] from a cluster's security config.
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum ClientConfigError {
-    /// Provider lookup or contents (missing roots/identity, unknown instance).
-    #[error("provider: {0}")]
-    Provider(String),
-    /// Provider failed to fetch certificate material.
-    #[error("provider fetch: {0}")]
-    Fetch(#[from] CertProviderError),
-    /// PEM parsing failed or yielded no usable cert/key.
-    #[error("pem: {0}")]
-    Pem(String),
-    /// rustls rejected the supplied verifier or client-auth identity.
-    #[error("rustls: {0}")]
-    Rustls(String),
-}
-
-/// Build a [`rustls::ClientConfig`] for a cluster from its [`ClusterSecurityConfig`]
-/// and the bootstrap [`CertProviderRegistry`].
-///
-/// Resolves the CA + (optional) identity provider instances by name, fetches
-/// the certificate material, builds an [`XdsServerCertVerifier`] with the
-/// cluster's SAN matchers, and assembles a `ClientConfig` with the custom
-/// verifier installed via `.dangerous().with_custom_certificate_verifier(...)`.
-///
-/// The returned config is ready to be plugged into a TLS connector once an
-/// upstream API exists for that — see the TODO in
-/// [`crate::xds::cluster_discovery::build_connector`].
-pub(crate) fn build_client_config(
-    registry: &CertProviderRegistry,
-    security: &ClusterSecurityConfig,
-) -> Result<ClientConfig, ClientConfigError> {
-    let ca_data = fetch_provider_data(registry, &security.ca_instance_name, "CA")?;
-    let ca_pem = ca_data.roots().ok_or_else(|| {
-        ClientConfigError::Provider(format!(
-            "CA instance '{}' has no roots",
-            security.ca_instance_name
-        ))
-    })?;
-    let root_store = build_root_store(ca_pem)?;
-
-    let verifier = Arc::new(XdsServerCertVerifier::new(
-        root_store,
-        security.san_matchers.clone(),
-    ));
-
-    let builder = ClientConfig::builder()
-        .dangerous()
-        .with_custom_certificate_verifier(verifier);
-
-    let config = match &security.identity_instance_name {
-        Some(name) => {
-            let id_data = fetch_provider_data(registry, name, "identity")?;
-            let identity = id_data.identity().ok_or_else(|| {
-                ClientConfigError::Provider(format!("identity instance '{name}' has no identity"))
-            })?;
-            let cert_chain = parse_pem_certs(&identity.cert_chain)?;
-            let key = parse_pem_key(&identity.key)?;
-            builder
-                .with_client_auth_cert(cert_chain, key)
-                .map_err(|e| ClientConfigError::Rustls(e.to_string()))?
-        }
-        None => builder.with_no_client_auth(),
-    };
-
-    Ok(config)
-}
-
-fn fetch_provider_data(
-    registry: &CertProviderRegistry,
-    name: &str,
-    role: &str,
-) -> Result<Arc<CertificateData>, ClientConfigError> {
-    let provider = registry
-        .get(name)
-        .ok_or_else(|| ClientConfigError::Provider(format!("unknown {role} instance '{name}'")))?;
-    Ok(provider.fetch()?)
-}
-
-fn build_root_store(pem: &[u8]) -> Result<RootCertStore, ClientConfigError> {
-    let certs = parse_pem_certs(pem)?;
-    let mut store = RootCertStore::empty();
-    let (added, _) = store.add_parsable_certificates(certs);
-    if added == 0 {
-        return Err(ClientConfigError::Pem("no certificates in PEM".into()));
-    }
-    Ok(store)
-}
-
-fn parse_pem_certs(pem: &[u8]) -> Result<Vec<CertificateDer<'static>>, ClientConfigError> {
-    let mut reader = std::io::Cursor::new(pem);
-    rustls_pemfile::certs(&mut reader)
-        .collect::<Result<_, _>>()
-        .map_err(|e| ClientConfigError::Pem(e.to_string()))
-}
-
-fn parse_pem_key(pem: &[u8]) -> Result<PrivateKeyDer<'static>, ClientConfigError> {
-    let mut reader = std::io::Cursor::new(pem);
-    rustls_pemfile::private_key(&mut reader)
-        .map_err(|e| ClientConfigError::Pem(e.to_string()))?
-        .ok_or_else(|| ClientConfigError::Pem("no private key in PEM".into()))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::xds::cert_provider::{CertProviderError, CertificateData, Identity};
     use rcgen::{CertificateParams, SanType as RcgenSanType};
+    use rustls::RootCertStore;
 
     /// Generate a self-signed DER cert carrying the given SANs.
     fn gen_cert_with_sans(sans: Vec<RcgenSanType>) -> CertificateDer<'static> {
@@ -405,6 +319,21 @@ mod tests {
         store
     }
 
+    /// Test shim: a [`CertificateProvider`] that returns a fixed snapshot.
+    struct StaticProvider(Arc<CertificateData>);
+
+    impl CertificateProvider for StaticProvider {
+        fn fetch(&self) -> Result<Arc<CertificateData>, CertProviderError> {
+            Ok(self.0.clone())
+        }
+    }
+
+    fn provider_with_roots(store: RootCertStore) -> Arc<dyn CertificateProvider> {
+        Arc::new(StaticProvider(Arc::new(CertificateData::RootsOnly {
+            roots: Arc::new(store),
+        })))
+    }
+
     fn uri_matcher(spiffe_uri: &str) -> SanMatcher {
         use envoy_types::pb::envoy::extensions::transport_sockets::tls::v3::{
             SubjectAltNameMatcher, subject_alt_name_matcher::SanType,
@@ -426,7 +355,7 @@ mod tests {
     fn spiffe_uri_only_cert_with_matching_uri_matcher_passes() {
         let (ca_der, leaf_der) = build_chain_with_spiffe_leaf("spiffe://td/ns/prod/sa/api");
         let verifier = XdsServerCertVerifier::new(
-            root_store_with(ca_der),
+            provider_with_roots(root_store_with(ca_der)),
             vec![uri_matcher("spiffe://td/ns/prod/sa/api")],
         );
 
@@ -440,7 +369,7 @@ mod tests {
     fn spiffe_uri_only_cert_with_non_matching_matcher_fails() {
         let (ca_der, leaf_der) = build_chain_with_spiffe_leaf("spiffe://td/ns/prod/sa/api");
         let verifier = XdsServerCertVerifier::new(
-            root_store_with(ca_der),
+            provider_with_roots(root_store_with(ca_der)),
             vec![uri_matcher("spiffe://td/ns/prod/sa/other")],
         );
 
@@ -458,11 +387,34 @@ mod tests {
     fn spiffe_uri_only_cert_with_empty_matchers_passes_ca_only() {
         // per gRFC A29 §'Server Authorization': an empty matcher list passes
         let (ca_der, leaf_der) = build_chain_with_spiffe_leaf("spiffe://td/ns/prod/sa/api");
-        let verifier = XdsServerCertVerifier::new(root_store_with(ca_der), vec![]);
+        let verifier =
+            XdsServerCertVerifier::new(provider_with_roots(root_store_with(ca_der)), vec![]);
 
         let server_name = ServerName::try_from("any.connect.hostname").unwrap();
         let result =
             verifier.verify_server_cert(&leaf_der, &[], &server_name, &[], UnixTime::now());
         assert!(result.is_ok(), "expected Ok, got {result:?}");
+    }
+
+    #[test]
+    fn verify_fails_when_provider_has_no_roots() {
+        let (_ca_der, leaf_der) = build_chain_with_spiffe_leaf("spiffe://td/ns/prod/sa/api");
+        let provider: Arc<dyn CertificateProvider> =
+            Arc::new(StaticProvider(Arc::new(CertificateData::IdentityOnly {
+                identity: Identity {
+                    cert_chain: b"chain".to_vec(),
+                    key: b"key".to_vec(),
+                },
+            })));
+        let verifier = XdsServerCertVerifier::new(provider, vec![]);
+
+        let server_name = ServerName::try_from("any.connect.hostname").unwrap();
+        let err = verifier
+            .verify_server_cert(&leaf_der, &[], &server_name, &[], UnixTime::now())
+            .unwrap_err();
+        assert!(
+            matches!(err, RustlsError::General(ref msg) if msg.contains("no roots")),
+            "expected General(\"...no roots...\"), got {err:?}",
+        );
     }
 }
