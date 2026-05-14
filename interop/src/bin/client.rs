@@ -72,7 +72,11 @@ impl Opts {
                 .unwrap_or_else(|| "localhost".to_string()),
             server_port: pargs.opt_value_from_str("--server_port")?.unwrap_or(10000),
             server_host_override: pargs.opt_value_from_str("--server_host_override")?,
-            use_test_ca: pargs.contains("--use_test_ca"),
+            use_test_ca: match pargs.opt_value_from_str::<_, bool>("--use_test_ca") {
+                Ok(Some(val)) => val,
+                Ok(None) => true,
+                Err(_) => true,
+            },
             default_service_account: pargs.opt_value_from_str("--default_service_account")?,
             oauth_scope: pargs.opt_value_from_str("--oauth_scope")?,
             service_account_key_file: pargs.opt_value_from_str("--service_account_key_file")?,
