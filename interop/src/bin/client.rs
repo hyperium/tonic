@@ -16,6 +16,7 @@ use tonic::transport::Certificate;
 use tonic::transport::ClientTlsConfig;
 use tonic::transport::Endpoint;
 
+#[allow(dead_code)]
 #[derive(Debug)]
 struct Opts {
     use_tls: bool,
