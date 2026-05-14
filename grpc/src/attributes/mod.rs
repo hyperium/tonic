@@ -22,7 +22,23 @@
  *
  */
 
-//! A generic key/value store for use in many different parts of gRPC.
+//! A generic key/value store.
+//!
+//! This module provides the [`Attributes`] type, used by many different
+//! components of gRPC including plugins like name resolvers, load balancers,
+//! and credentials, and stores arbitrary configuration data or state.
+//!
+//! # Examples
+//!
+//! ```rust
+//! use grpc::attributes::Attributes;
+//!
+//! #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+//! struct MyConfig(i32);
+//!
+//! let attrs = Attributes::new().add(MyConfig(42));
+//! assert_eq!(attrs.get::<MyConfig>(), Some(&MyConfig(42)));
+//! ```
 
 use std::any::Any;
 use std::any::TypeId;

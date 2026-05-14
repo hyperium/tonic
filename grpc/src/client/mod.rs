@@ -23,6 +23,20 @@
  */
 
 //! Client-side gRPC implementation and utilities.
+//!
+//! This module provides the core types and traits for building gRPC clients.
+//! While most applications will use generated code (e.g. using
+//! `protoc-gen-rust-grpc`) to interact with gRPC services, this module provides
+//! the underlying primitives.
+//!
+//! # Key Concepts
+//!
+//! - **[`Channel`]:** The main entry point for client-side gRPC operations. It
+//!   manages connections to servers and load balancing between them.
+//! - **[`Invoke`]:** A trait for executing RPCs. Both [`Channel`] and
+//!   references to it implement this trait.
+//! - **[`SendStream`] / [`RecvStream`]:** Represent the sending and receiving
+//!   sides of an RPC call, returned by [`Invoke::invoke`].
 
 use std::fmt::Display;
 use std::time::Instant;

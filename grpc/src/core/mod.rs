@@ -22,11 +22,23 @@
  *
  */
 
-//! Types used to implement core gRPC functionality common to clients and
-//! servers.
+//! Core gRPC types common to clients and servers.
 //!
-//! Note that most gRPC applications should not need these types
-//! unless they are implementing custom interceptors.
+//! This module provides the fundamental types used in gRPC communication, such
+//! as message traits, headers, and trailers.
+//!
+//! Most applications should not need to use these types directly, as they are
+//! typically used by generated code.  However, they may be necessary when
+//! implementing custom interceptors or advanced features.
+//!
+//! # Key Concepts
+//!
+//! - **[`SendMessage`] / [`RecvMessage`]:** Traits for encoding and decoding
+//!   messages.
+//! - **[`RequestHeaders`]:** Represents gRPC headers sent to the server to
+//!   initiate a request.
+//! - **[`ResponseHeaders`] / [`Trailers`]:** Represents gRPC headers and
+//!   trailers received from the server during its response.
 
 use std::any::TypeId;
 

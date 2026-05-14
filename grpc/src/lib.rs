@@ -61,7 +61,7 @@ pub(crate) mod server;
 mod macros;
 mod status;
 
-pub use status::ServerStatusErr;
+pub(crate) use status::ServerStatusErr;
 pub use status::Status;
 pub use status::StatusCodeError;
 pub use status::StatusError;

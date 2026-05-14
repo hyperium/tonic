@@ -22,8 +22,18 @@
  *
  */
 
-//! Definitions and implementations for client and server credentials (e.g.
-//! TLS or OAuth2).
+//! Authentication and security credentials (e.g. TLS and OAuth2).
+//!
+//! This module provides traits and types for handling credentials in gRPC,
+//! including channel credentials (for securing connections) and call
+//! credentials (for authenticating individual RPCs).
+//!
+//! # Key Concepts
+//!
+//! - **[`ChannelCredentials`]:** Trait for client-side transport security
+//!   (e.g., TLS). May also include [`CallCredentials`] by using
+//!   [`CompositeChannelCredentials`].
+//! - **[`ServerCredentials`]:** Trait for server-side transport security.
 
 pub mod call;
 pub(crate) mod client;

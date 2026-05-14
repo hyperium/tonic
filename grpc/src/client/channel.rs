@@ -154,9 +154,10 @@ impl ChannelOptions {
 
 /// A virtual, persistent connection to a gRPC service.
 ///
-/// A `Channel` begins in an "idle" state and connects upon the first call to
-/// its [`Invoke`] implementation or its [`get_state`](Channel::get_state)
-/// method.
+/// A `Channel` begins in an "idle" state and connects when the first RPC is
+/// made or its [`get_state`](Channel::get_state) method is called.
+///
+/// To perform RPCs, use the [`Invoke`] trait implemented by `Channel`.
 #[derive(Clone)]
 pub struct Channel {
     inner: Arc<PersistentChannel>,
