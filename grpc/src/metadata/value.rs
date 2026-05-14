@@ -25,6 +25,7 @@
 use std::cmp;
 use std::error::Error;
 use std::fmt;
+use std::fmt::Debug;
 use std::fmt::Write;
 use std::hash::Hash;
 use std::hash::Hasher;
@@ -55,18 +56,26 @@ pub struct MetadataValue<VE> {
     _phantom: PhantomData<VE>,
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone)]
 pub struct UnencodedHeaderValue {
     data: Bytes,
     is_sensitive: bool,
 }
+
+impl PartialEq for UnencodedHeaderValue {
+    fn eq(&self, other: &Self) -> bool {
+        self.data == other.data
+    }
+}
+
+impl Eq for UnencodedHeaderValue {}
 
 impl UnencodedHeaderValue {
     // Assumes that the bytes have already been validated.
     pub(crate) fn from_bytes(bytes: Bytes) -> Self {
         UnencodedHeaderValue {
             data: bytes,
-            is_sensitive: false,
+            is_sensitive: true,
         }
     }
 
@@ -83,7 +92,7 @@ const fn is_visible_ascii(b: u8) -> bool {
     b >= 32 && b < 127 || b == b'\t'
 }
 
-impl fmt::Debug for UnencodedHeaderValue {
+impl Debug for UnencodedHeaderValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.is_sensitive {
             f.write_str("Sensitive")
@@ -139,7 +148,10 @@ impl<VE> MetadataValue<VE> {
         }
     }
 
-    /// Mark that the metadata value represents sensitive information.
+    /// Mark that the metadata value represents sensitive information. Sensitive
+    /// values are not included in the [std::fmt::Debug] output.
+    ///
+    /// Metadata values are sensitive by default.
     ///
     /// # Examples
     ///
@@ -147,7 +159,6 @@ impl<VE> MetadataValue<VE> {
     /// # use grpc::metadata::*;
     /// let mut val = AsciiMetadataValue::from_static("my secret");
     ///
-    /// val.set_sensitive(true);
     /// assert!(val.is_sensitive());
     ///
     /// val.set_sensitive(false);
@@ -160,10 +171,7 @@ impl<VE> MetadataValue<VE> {
 
     /// Returns `true` if the value represents sensitive data.
     ///
-    /// Sensitive data could represent passwords or other data that should not
-    /// be stored on disk or in memory. This setting can be used by components
-    /// like caches to avoid storing the value. HPACK encoders must set the
-    /// metadata field to never index when `is_sensitive` returns true.
+    /// Sensitive values are not included in the [std::fmt::Debug] output.
     ///
     /// Note that sensitivity is not factored into equality or ordering.
     ///
@@ -451,9 +459,9 @@ impl MetadataValue<Binary> {
     }
 }
 
-impl<VE: ValueEncoding> fmt::Debug for MetadataValue<VE> {
+impl<VE: ValueEncoding> Debug for MetadataValue<VE> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        VE::fmt(&self.inner, f, private::Internal)
+        Debug::fmt(&self.inner, f)
     }
 }
 
@@ -735,14 +743,15 @@ mod test {
         ];
 
         for &(value, expected) in cases {
-            let val = AsciiMetadataValue::try_from(value.as_bytes()).unwrap();
+            let mut val = AsciiMetadataValue::try_from(value.as_bytes()).unwrap();
+            // vales are sensitive by default.
+            let actual = format!("{val:?}");
+            assert_eq!("Sensitive", actual);
+
+            val.set_sensitive(false);
             let actual = format!("{val:?}");
             assert_eq!(expected, actual);
         }
-
-        let mut sensitive = AsciiMetadataValue::from_static("password");
-        sensitive.set_sensitive(true);
-        assert_eq!("Sensitive", format!("{sensitive:?}"));
     }
 
     #[test]
@@ -785,6 +794,21 @@ mod test {
                 Bmv::from_shared_unchecked(Bytes::from_static(b"{}.."))
             );
         }
+    }
+
+    #[test]
+    fn test_value_eq_ignores_sensitivity() {
+        let mut val1 = AsciiMetadataValue::from_static("abc");
+        let val2 = AsciiMetadataValue::from_static("abc");
+        assert_eq!(val1, val2);
+        val1.set_sensitive(false);
+        assert_eq!(val1, val2);
+
+        let mut val1 = BinaryMetadataValue::from_bytes(b"abc");
+        let val2 = BinaryMetadataValue::from_bytes(b"abc");
+        assert_eq!(val1, val2);
+        val1.set_sensitive(false);
+        assert_eq!(val1, val2);
     }
 
     #[test]

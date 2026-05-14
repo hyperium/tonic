@@ -180,16 +180,14 @@ impl MetadataMap {
             if Ascii::is_valid_key(key_str) {
                 // We copy the header value here because the `HeaderValue`
                 // struct doesn't provide an API to fetch the underlying `Bytes`.
-                if let Ok(mut mv) = MetadataValue::<Ascii>::try_from(value.as_bytes()) {
-                    mv.set_sensitive(value.is_sensitive());
+                if let Ok(mv) = MetadataValue::<Ascii>::try_from(value.as_bytes()) {
                     ret.push((k.clone(), mv.into_inner()));
                 }
             } else if Binary::is_valid_key(key_str) {
                 let b = Binary::decode(value.as_bytes(), private::Internal).map_err(|e| {
                     format!("failed to decode base64 value for key '{key_str}': {e}")
                 })?;
-                let mut mv = unsafe { MetadataValue::<Binary>::from_shared_unchecked(b) };
-                mv.set_sensitive(value.is_sensitive());
+                let mv = unsafe { MetadataValue::<Binary>::from_shared_unchecked(b) };
                 ret.push((k.clone(), mv.into_inner()));
             }
         }
@@ -198,6 +196,10 @@ impl MetadataMap {
     }
 
     /// Convert a MetadataMap into a HTTP HeaderMap.
+    ///
+    /// Note that the "sensitive" field is not propagated as that will disable
+    /// use of dynamic table in HPACK compression. Other gRPC implementations
+    /// don't disable HPACK, so we don't do it too.
     pub(crate) fn into_headers(self) -> HeaderMap {
         let mut ret = HeaderMap::with_capacity(self.capacity());
         for (key, value) in self.headers {
@@ -1574,9 +1576,17 @@ mod tests {
         assert_eq!(tonic_map.get("x-host").unwrap(), "example.com");
         assert_eq!(tonic_map.get_bin("trace-proto-bin").unwrap(), "Hello!!");
 
+        // The sensitive field must not be propagated.
+        assert!(!tonic_map.get("x-host").unwrap().is_sensitive());
+        assert!(!tonic_map.get_bin("trace-proto-bin").unwrap().is_sensitive());
+
         let back_map: MetadataMap = tonic_map.try_into().unwrap();
         assert_eq!(back_map.len(), 2);
         assert_eq!(back_map.get("x-host").unwrap(), "example.com");
         assert_eq!(back_map.get_bin("trace-proto-bin").unwrap(), "Hello!!");
+
+        // Values are marked as sensitive by default.
+        assert!(back_map.get("x-host").unwrap().is_sensitive());
+        assert!(back_map.get_bin("trace-proto-bin").unwrap().is_sensitive());
     }
 }

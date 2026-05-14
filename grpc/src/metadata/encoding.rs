@@ -74,13 +74,6 @@ pub trait ValueEncoding: Clone + Eq + PartialEq + Hash {
         b: &UnencodedHeaderValue,
         _: private::Internal,
     ) -> bool;
-
-    #[doc(hidden)]
-    fn fmt(
-        value: &UnencodedHeaderValue,
-        f: &mut fmt::Formatter<'_>,
-        _: private::Internal,
-    ) -> fmt::Result;
 }
 
 /// gRPC metadata values can be either ASCII strings or binary. Note that only
@@ -203,14 +196,6 @@ impl ValueEncoding for Ascii {
         a == b
     }
 
-    fn fmt(
-        value: &UnencodedHeaderValue,
-        f: &mut fmt::Formatter<'_>,
-        _: private::Internal,
-    ) -> fmt::Result {
-        fmt::Debug::fmt(value, f)
-    }
-
     fn encode(value: Bytes, _: private::Internal) -> Bytes {
         value
     }
@@ -297,14 +282,6 @@ impl ValueEncoding for Binary {
         _: private::Internal,
     ) -> bool {
         a.as_bytes() == b.as_bytes()
-    }
-
-    fn fmt(
-        value: &UnencodedHeaderValue,
-        f: &mut fmt::Formatter<'_>,
-        _: private::Internal,
-    ) -> fmt::Result {
-        write!(f, "{:?}", value.as_bytes())
     }
 
     fn encode(value: Bytes, _: private::Internal) -> Bytes {
