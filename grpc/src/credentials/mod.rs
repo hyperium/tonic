@@ -38,7 +38,6 @@
 pub mod call;
 pub(crate) mod client;
 pub(crate) mod dyn_wrapper;
-mod insecure;
 mod local;
 #[cfg(feature = "tls-rustls")]
 pub mod rustls;
@@ -47,10 +46,6 @@ pub(crate) mod server;
 use std::sync::Arc;
 
 pub use client::CompositeChannelCredentials;
-#[allow(unused_imports)]
-pub(crate) use insecure::InsecureChannelCredentials;
-#[allow(unused_imports)]
-pub(crate) use insecure::InsecureServerCredentials;
 pub use local::LocalChannelCredentials;
 pub use local::LocalServerCredentials;
 

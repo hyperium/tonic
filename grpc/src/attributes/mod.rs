@@ -127,6 +127,7 @@ pub struct Attributes {
 }
 
 impl Attributes {
+    /// Constructs a new, empty instance.
     pub fn new() -> Self {
         Self::default()
     }

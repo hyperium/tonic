@@ -119,8 +119,8 @@ impl<R> CaptureHeadersRecvStream<R> {
 }
 
 impl<R: RecvStream> RecvStream for CaptureHeadersRecvStream<R> {
-    async fn next(&mut self, msg: &mut dyn super::RecvMessage) -> super::ResponseStreamItem {
-        let res = self.rx.next(msg).await;
+    async fn recv(&mut self, msg: &mut dyn super::RecvMessage) -> super::ResponseStreamItem {
+        let res = self.rx.recv(msg).await;
         if let super::ResponseStreamItem::Headers(headers) = &res
             && let Some(tx) = self.tx.take()
         {
@@ -175,8 +175,8 @@ impl<R> CaptureTrailersRecvStream<R> {
 }
 
 impl<R: RecvStream> RecvStream for CaptureTrailersRecvStream<R> {
-    async fn next(&mut self, msg: &mut dyn super::RecvMessage) -> super::ResponseStreamItem {
-        let res = self.rx.next(msg).await;
+    async fn recv(&mut self, msg: &mut dyn super::RecvMessage) -> super::ResponseStreamItem {
+        let res = self.rx.recv(msg).await;
         if let super::ResponseStreamItem::Trailers(trailers) = &res
             && let Some(tx) = self.tx.take()
         {
@@ -257,7 +257,7 @@ mod tests {
             .await;
 
         // Receive the sent Headers response.
-        let res = recv_stream.next(&mut NopRecvMessage).await;
+        let res = recv_stream.recv(&mut NopRecvMessage).await;
         assert!(matches!(res, ResponseStreamItem::Headers(_)));
 
         // Verify the received headers are correct.
@@ -286,7 +286,7 @@ mod tests {
             .await;
 
         // Receive the sent Trailers response.
-        let res = recv_stream.next(&mut NopRecvMessage).await;
+        let res = recv_stream.recv(&mut NopRecvMessage).await;
         assert!(matches!(res, ResponseStreamItem::Trailers(_)));
 
         // Verify the received trailers are correct.

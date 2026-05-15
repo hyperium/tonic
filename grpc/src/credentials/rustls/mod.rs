@@ -70,6 +70,7 @@ pub struct Identity {
     key: Vec<u8>,
 }
 
+/// Represents an ordered list of identities.
 pub type IdentityList = Vec<Identity>;
 
 impl Identity {
@@ -126,7 +127,10 @@ impl<T> Provider<T> for StaticProvider<T> {
     }
 }
 
+/// A provider for a single, fixed set of root certificates.
 pub type StaticRootCertificatesProvider = StaticProvider<RootCertificates>;
+
+/// A provider for a single, fixed identity.
 pub type StaticIdentityProvider = StaticProvider<Identity>;
 
 static TLS_PROTO_INFO: ProtocolInfo = ProtocolInfo {

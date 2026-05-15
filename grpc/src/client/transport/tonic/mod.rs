@@ -258,7 +258,7 @@ enum StreamState {
 }
 
 impl RecvStream for TonicRecvStream {
-    async fn next(&mut self, msg: &mut dyn RecvMessage) -> ResponseStreamItem {
+    async fn recv(&mut self, msg: &mut dyn RecvMessage) -> ResponseStreamItem {
         // Take the current state, leaving `Closed` in its place temporarily
         let state = std::mem::replace(&mut self.state, StreamState::Closed);
 

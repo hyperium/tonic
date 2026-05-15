@@ -25,7 +25,6 @@
 mod server_status;
 mod status_code;
 
-pub use server_status::ServerStatusErr;
 pub use status_code::StatusCodeError;
 
 /// Represents either a failing gRPC status or a successful result containing

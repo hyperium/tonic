@@ -38,7 +38,9 @@ use crate::core::RequestHeaders;
 /// times).
 #[trait_variant::make(Send)]
 pub trait Intercept<I>: Sync {
+    /// The sending stream returned by `intercept`.
     type SendStream: SendStream + 'static;
+    /// The receiving stream returned by `intercept`.
     type RecvStream: RecvStream + 'static;
 
     /// Intercepts the start of a call.  Implementations should generally use
@@ -55,9 +57,14 @@ pub trait Intercept<I>: Sync {
 /// A single-use form of [`Intercept`] that consumes `self`.
 #[trait_variant::make(Send)]
 pub trait InterceptOnce<I>: Sync {
+    /// The sending stream returned by `intercept_once`.
     type SendStream: SendStream + 'static;
+    /// The receiving stream returned by `intercept_once`.
     type RecvStream: RecvStream + 'static;
 
+    /// Intercepts the start of a call.  Implementations should generally use
+    /// `next` to create and start a call whose streams are optionally wrapped
+    /// before being returned.
     async fn intercept_once(
         self,
         headers: RequestHeaders,
@@ -468,7 +475,7 @@ mod test {
                 StatusError::new(StatusCodeError::Internal, ""),
             ))))
             .await;
-        let handle = task::spawn(async move { rx.next(&mut ByteRecvMsg::new()).await });
+        let handle = task::spawn(async move { rx.recv(&mut ByteRecvMsg::new()).await });
         assert_eq!(controller.recv_req().await.0, one);
         tx.send(&ByteSendMsg::new(&two), SendOptions::default())
             .await
@@ -511,7 +518,7 @@ mod test {
                 StatusError::new(crate::StatusCodeError::Internal, ""),
             ))))
             .await;
-        let handle = task::spawn(async move { rx.next(&mut ByteRecvMsg::new()).await });
+        let handle = task::spawn(async move { rx.recv(&mut ByteRecvMsg::new()).await });
         assert_eq!(controller.recv_req().await.0, one);
         tx.send(&ByteSendMsg::new(&two), SendOptions::default())
             .await
@@ -564,7 +571,7 @@ mod test {
             .send_resp(ResponseStreamItem::Headers(ResponseHeaders::default()))
             .await;
 
-        let resp = rx.next(&mut ByteRecvMsg::new()).await;
+        let resp = rx.recv(&mut ByteRecvMsg::new()).await;
         assert!(matches!(resp, ResponseStreamItem::Headers(_)));
 
         controller
@@ -573,7 +580,7 @@ mod test {
             ))))
             .await;
 
-        let resp = rx.next(&mut ByteRecvMsg::new()).await;
+        let resp = rx.recv(&mut ByteRecvMsg::new()).await;
         let ResponseStreamItem::Trailers(trailers) = resp else {
             panic!("unexpected resp: {resp:?}");
         };
@@ -649,7 +656,7 @@ mod test {
     }
     struct MockRecvStream(broadcast::Receiver<ResponseStreamItem>);
     impl RecvStream for MockRecvStream {
-        async fn next(&mut self, msg: &mut dyn RecvMessage) -> ResponseStreamItem {
+        async fn recv(&mut self, msg: &mut dyn RecvMessage) -> ResponseStreamItem {
             self.0.recv().await.unwrap()
         }
     }
@@ -764,8 +771,8 @@ mod test {
     const MAX_ATTEMPTS: usize = 3;
 
     impl<I: Invoke> RecvStream for RetryRecvStream<I> {
-        async fn next(&mut self, msg: &mut dyn RecvMessage) -> ResponseStreamItem {
-            let mut recv_resp = self.recv_stream.next(msg).await;
+        async fn recv(&mut self, msg: &mut dyn RecvMessage) -> ResponseStreamItem {
+            let mut recv_resp = self.recv_stream.recv(msg).await;
 
             if self.committed {
                 return recv_resp;
@@ -793,7 +800,7 @@ mod test {
 
                 // Run the current recv operation in parallel with replaying
                 // the stream.
-                let recv_fut = self.recv_stream.next(msg);
+                let recv_fut = self.recv_stream.recv(msg);
                 pin!(recv_fut);
                 let mut recv_state = RecvStreamState::Pending(recv_fut);
 
@@ -957,7 +964,7 @@ mod test {
         }
     }
     impl RecvStream for NopStream {
-        async fn next(&mut self, _msg: &mut dyn RecvMessage) -> crate::client::ResponseStreamItem {
+        async fn recv(&mut self, _msg: &mut dyn RecvMessage) -> crate::client::ResponseStreamItem {
             ResponseStreamItem::StreamClosed
         }
     }

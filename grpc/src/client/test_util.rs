@@ -49,7 +49,7 @@ impl SendStream for NopStream {
     }
 }
 impl RecvStream for NopStream {
-    async fn next(&mut self, _msg: &mut dyn RecvMessage) -> ResponseStreamItem {
+    async fn recv(&mut self, _msg: &mut dyn RecvMessage) -> ResponseStreamItem {
         ResponseStreamItem::StreamClosed
     }
 }
@@ -192,7 +192,7 @@ impl SendStream for MockSendStream {
 /// Implements the RecvStream for MockInvoker.
 pub(crate) struct MockRecvStream(pub broadcast::Receiver<ResponseStreamItem>);
 impl RecvStream for MockRecvStream {
-    async fn next(&mut self, _msg: &mut dyn RecvMessage) -> ResponseStreamItem {
+    async fn recv(&mut self, _msg: &mut dyn RecvMessage) -> ResponseStreamItem {
         match self.0.recv().await {
             Ok(item) => item,
             Err(_) => ResponseStreamItem::StreamClosed,

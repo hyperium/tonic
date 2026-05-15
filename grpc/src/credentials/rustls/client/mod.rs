@@ -71,6 +71,7 @@ pub struct ClientTlsConfig {
 }
 
 impl ClientTlsConfig {
+    /// Creates a new, unconfigured rustls credentials configuration instance.
     pub fn new() -> Self {
         ClientTlsConfig {
             pem_roots_provider: None,

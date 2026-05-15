@@ -120,7 +120,11 @@ pub enum TlsClientCertificateRequestType<R = StaticRootCertificatesProvider> {
     ///
     /// The client's key certificate pair must be valid for the TLS connection to
     /// be established.
-    RequestAndVerify { roots_provider: R },
+    RequestAndVerify {
+        /// The static root certificates provider to use to validate the clients
+        /// certs, if provided.
+        roots_provider: R,
+    },
 
     /// Server requests client certificate and enforces that the client presents a
     /// certificate.
@@ -131,7 +135,11 @@ pub enum TlsClientCertificateRequestType<R = StaticRootCertificatesProvider> {
     ///
     /// The client's key certificate pair must be valid for the TLS connection to
     /// be established.
-    RequireAndVerify { roots_provider: R },
+    RequireAndVerify {
+        /// The static root certificates provider to use to validate the clients
+        /// certs.
+        roots_provider: R,
+    },
 }
 
 enum InnerClientCertificateRequestType {
@@ -178,6 +186,9 @@ pub struct ServerTlsConfig {
 }
 
 impl ServerTlsConfig {
+    /// Creates a new rustls credentials configuration instance.  The instance
+    /// is not configured to request client certificates and does not log
+    /// session keys.
     pub fn new<I>(identities_provider: I) -> Self
     where
         I: Provider<IdentityList>,

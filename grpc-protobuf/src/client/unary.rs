@@ -94,7 +94,7 @@ where
         let _ = tx.send(req, SendOptions::new().with_final_msg(true)).await;
         let mut res = ProtoRecvMessage::from_mut(res);
         loop {
-            let i = rx.next(&mut res).await;
+            let i = rx.recv(&mut res).await;
             if let ResponseStreamItem::Trailers(t) = i {
                 return t.status().clone();
             }

@@ -43,7 +43,7 @@
 //! * [`credentials`] - Securing connections and providing access tokens
 //! * [`metadata`] - Data sent with all RPCs typically used by interceptors
 //! * [`core`] - Common types shared between clients and servers
-//! * [`attributes`] - Generic key/value storage used by gRPC plugins.
+//! * [`attributes`] - Generic key/value storage used by gRPC plugins
 //!
 //! [gRPC]: https://grpc.io
 //! [our website]: https://grpc.io/docs/languages/rust
@@ -61,7 +61,6 @@ pub(crate) mod server;
 mod macros;
 mod status;
 
-pub(crate) use status::ServerStatusErr;
 pub use status::Status;
 pub use status::StatusCodeError;
 pub use status::StatusError;

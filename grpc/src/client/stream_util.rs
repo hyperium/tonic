@@ -93,7 +93,7 @@ where
     /// accessed.
     ///
     /// If a protocol violation occurs, an error will be synthesized as
-    /// [`Trailers`].  Any calls to the [`RecvStream::next`] method beyond
+    /// [`Trailers`].  Any calls to the [`RecvStream::recv`] method beyond
     /// [`ResponseStreamItem::Trailers`] will not be propagated and will
     /// immediately return [`ResponseStreamItem::StreamClosed`].
     ///
@@ -122,13 +122,13 @@ impl<R> RecvStream for RecvStreamValidator<R>
 where
     R: RecvStream,
 {
-    async fn next(&mut self, msg: &mut dyn RecvMessage) -> ResponseStreamItem {
+    async fn recv(&mut self, msg: &mut dyn RecvMessage) -> ResponseStreamItem {
         // Never call the underlying RecvStream if done.
         if matches!(self.state, RecvStreamState::Done) {
             return ResponseStreamItem::StreamClosed;
         }
 
-        let item = self.recv_stream.next(msg).await;
+        let item = self.recv_stream.recv(msg).await;
 
         match item {
             ResponseStreamItem::Headers(_) => {
@@ -184,7 +184,7 @@ pub(crate) struct FailingRecvStream {
 }
 
 impl RecvStream for FailingRecvStream {
-    async fn next(&mut self, msg: &mut dyn RecvMessage) -> ResponseStreamItem {
+    async fn recv(&mut self, msg: &mut dyn RecvMessage) -> ResponseStreamItem {
         match self.status.take() {
             Some(status) => ResponseStreamItem::Trailers(Trailers::new(Err(status))),
             None => ResponseStreamItem::StreamClosed,
@@ -451,14 +451,14 @@ mod test {
         // validator.
         for item in &scenario[..scenario.len() - 1] {
             tx.send_resp(item.clone()).await;
-            let got = validator.next(&mut NopRecvMessage).await;
+            let got = validator.recv(&mut NopRecvMessage).await;
             // Assert that the item sent is the same type as the item received.
             println!("{got:?} vs {item:?}");
             assert_eq!(discriminant(&got), discriminant(item));
         }
         // Send the final item.
         tx.send_resp(scenario[scenario.len() - 1].clone()).await;
-        let got = validator.next(&mut NopRecvMessage).await;
+        let got = validator.recv(&mut NopRecvMessage).await;
         assert!(matches!(&got, expect));
         if let ResponseStreamItem::Trailers(got_t) = got {
             let ResponseStreamItem::Trailers(expect_t) = expect else {

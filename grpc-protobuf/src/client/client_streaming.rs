@@ -166,7 +166,7 @@ where
         drop(tx);
         let mut res = ProtoRecvMessage::from_mut(res);
         loop {
-            let i = rx.next(&mut res).await;
+            let i = rx.recv(&mut res).await;
             if let ResponseStreamItem::Trailers(t) = i {
                 return t.into_status();
             }

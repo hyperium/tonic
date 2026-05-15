@@ -74,7 +74,7 @@ pub struct ClientConnectionSecurityInfo {
 
 impl ClientConnectionSecurityInfo {
     /// Constructs a new instance containing the provided security info.
-    // TODO: change to builder to allow it to be stable?
+    // TODO: make attributes optional by removing from the constructor?
     pub fn new(
         security_protocol: &'static str,
         security_level: SecurityLevel,

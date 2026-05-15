@@ -68,7 +68,6 @@ use crate::core::ResponseHeaders;
 use crate::core::SendMessage;
 use crate::core::Trailers;
 use crate::credentials::CompositeChannelCredentials;
-use crate::credentials::InsecureChannelCredentials;
 use crate::credentials::LocalChannelCredentials;
 use crate::credentials::SecurityLevel;
 use crate::credentials::call::CallCredentials;
@@ -152,7 +151,7 @@ pub(crate) async fn tonic_transport_rpc() {
         .unwrap();
     let config = Arc::new(TransportOptions::default());
     let securty_opts = SecurityOpts {
-        credentials: InsecureChannelCredentials::new_arc(),
+        credentials: LocalChannelCredentials::new_arc(),
         authority: Authority::new("localhost".to_string(), None),
         handshake_info: ClientHandshakeInfo::default(),
     };
@@ -177,7 +176,7 @@ pub(crate) async fn tonic_transport_rpc() {
     // Spawn a sender task
     let client_handle = tokio::spawn(async move {
         let mut dummy_msg = WrappedEchoResponse(EchoResponse { message: "".into() });
-        match rx.next(&mut dummy_msg).await {
+        match rx.recv(&mut dummy_msg).await {
             ResponseStreamItem::Headers(_) => {
                 println!("Got headers");
             }
@@ -200,7 +199,7 @@ pub(crate) async fn tonic_transport_rpc() {
 
             // Wait for the reply
             let mut recv_msg = WrappedEchoResponse(EchoResponse { message: "".into() });
-            match rx.next(&mut recv_msg).await {
+            match rx.recv(&mut recv_msg).await {
                 ResponseStreamItem::Message => {
                     let echo_response = recv_msg.0;
                     println!("Got response: {echo_response:?}");
@@ -252,7 +251,7 @@ async fn grpc_invoke_tonic_unary() {
     let target = format!("dns:///{}", addr);
     let channel = Channel::new(
         &target,
-        InsecureChannelCredentials::new_arc(),
+        LocalChannelCredentials::new_arc(),
         Default::default(),
     );
 
@@ -606,16 +605,16 @@ async fn perform_unary_echo(
 
     let mut resp = WrappedEchoResponse(EchoResponse::default());
 
-    let ResponseStreamItem::Headers(headers) = rx.next(&mut resp).await else {
+    let ResponseStreamItem::Headers(headers) = rx.recv(&mut resp).await else {
         panic!("Expected Headers first");
     };
 
-    let ResponseStreamItem::Message = rx.next(&mut resp).await else {
+    let ResponseStreamItem::Message = rx.recv(&mut resp).await else {
         panic!("Expected Message after Headers");
     };
     let echo_resp = std::mem::take(&mut resp.0);
 
-    let ResponseStreamItem::Trailers(trailers) = rx.next(&mut resp).await else {
+    let ResponseStreamItem::Trailers(trailers) = rx.recv(&mut resp).await else {
         panic!("Expected Trailers, got StreamClosed or other item");
     };
 
@@ -631,7 +630,7 @@ async fn perform_unary_echo_failure(channel: &Channel) -> Trailers {
         .await;
 
     let mut resp = WrappedEchoResponse(EchoResponse::default());
-    let ResponseStreamItem::Trailers(t) = rx.next(&mut resp).await else {
+    let ResponseStreamItem::Trailers(t) = rx.recv(&mut resp).await else {
         panic!("Expected Trailers due to failure");
     };
     t
@@ -693,7 +692,7 @@ async fn tonic_transport_invalid_base64_headers() {
 
     let mut dummy_msg = WrappedEchoResponse(EchoResponse { message: "".into() });
 
-    match rx.next(&mut dummy_msg).await {
+    match rx.recv(&mut dummy_msg).await {
         ResponseStreamItem::Trailers(trailers) => {
             println!("Got trailers as expected due to invalid headers");
             let status = trailers.status().as_ref().unwrap_err();
@@ -744,7 +743,7 @@ async fn tonic_transport_recv_drop_cancels_send() {
         .unwrap();
     let config = Arc::new(TransportOptions::default());
     let securty_opts = SecurityOpts {
-        credentials: InsecureChannelCredentials::new_arc(),
+        credentials: LocalChannelCredentials::new_arc(),
         authority: Authority::new("localhost".to_string(), None),
         handshake_info: ClientHandshakeInfo::default(),
     };

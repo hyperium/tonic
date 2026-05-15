@@ -309,7 +309,7 @@ pub struct InMemoryClientRecvStream {
 }
 
 impl ClientRecvStream for InMemoryClientRecvStream {
-    async fn next(&mut self, msg: &mut dyn RecvMessage) -> ResponseStreamItem {
+    async fn recv(&mut self, msg: &mut dyn RecvMessage) -> ResponseStreamItem {
         match self.rx.recv().await {
             Some(InMemoryResponseStreamItem::Headers(h)) => ResponseStreamItem::Headers(h),
             Some(InMemoryResponseStreamItem::Message(mut buf)) => {
@@ -474,7 +474,7 @@ mod tests {
         };
 
         let mut msg = NopRecvMessage;
-        let item = stream.next(&mut msg).await;
+        let item = stream.recv(&mut msg).await;
 
         match item {
             ResponseStreamItem::Trailers(t) => {
