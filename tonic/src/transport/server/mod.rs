@@ -930,10 +930,12 @@ fn serve_connection<B, IO, S, E>(
 
             let mut conn = pin!(builder.serve_connection(hyper_io, hyper_svc));
 
-            let mut connection_timeout = pin!(connection_timeout_future(
-                max_connection_age,
-                max_connection_age_grace,
-            ));
+            let mut connection_timeout = pin!(Fuse {
+                inner: Some(connection_timeout_future(
+                    max_connection_age,
+                    max_connection_age_grace,
+                ))
+            });
 
             loop {
                 tokio::select! {
@@ -1326,6 +1328,36 @@ mod tests {
 
         let action = future.await;
         assert!(matches!(action, TimeoutAction::ForcefulShutdown));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn test_connection_timeout_fused_after_graceful_shutdown() {
+        // Reproduce #2522: connection_timeout polled after GracefulShutdown
+        let mut future = pin!(Fuse {
+            inner: Some(connection_timeout_future(
+                Some(Duration::from_secs(10)),
+                None,
+            ))
+        });
+
+        // First poll: should return GracefulShutdown after 10s
+        let action = tokio::select! {
+            action = &mut future => action,
+            _ = tokio::time::sleep(Duration::from_secs(11)) => {
+                panic!("timeout future should complete after max_connection_age");
+            }
+        };
+        assert!(matches!(action, TimeoutAction::GracefulShutdown));
+
+        // Second poll: Fuse should return Pending, not panic
+        tokio::select! {
+            _ = &mut future => {
+                panic!("fused future should not complete again");
+            }
+            _ = tokio::time::sleep(Duration::from_secs(1)) => {
+                // OK: future is fused, returns Pending
+            }
+        }
     }
 
     #[test]
