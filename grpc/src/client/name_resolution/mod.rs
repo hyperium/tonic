@@ -298,7 +298,7 @@ impl Hash for Endpoint {
 
 /// An Address is an identifier that indicates how to connect to a server.
 #[non_exhaustive]
-#[derive(Debug, Clone, Default, Ord, PartialOrd)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Ord, PartialOrd)]
 pub(crate) struct Address {
     /// The network type is used to identify what kind of transport to create
     /// when connecting to this address.  Typically TCP_IP_ADDRESS_TYPE.
@@ -311,14 +311,6 @@ pub(crate) struct Address {
     /// Attributes contains arbitrary data about this address intended for
     /// consumption by the subchannel.
     pub attributes: Attributes,
-}
-
-impl Eq for Address {}
-
-impl PartialEq for Address {
-    fn eq(&self, other: &Self) -> bool {
-        self.network_type == other.network_type && self.address == other.address
-    }
 }
 
 impl Hash for Address {
@@ -388,6 +380,12 @@ impl NopResolver {
 #[cfg(test)]
 mod test {
     use super::Target;
+    use crate::attributes::Attributes;
+    use crate::byte_str::ByteStr;
+    use crate::client::name_resolution::Address;
+    use std::collections::HashMap;
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
 
     #[test]
     pub fn parse_target() {
@@ -449,5 +447,87 @@ mod test {
             assert_eq!(target.path(), tc.want_path);
             assert_eq!(&target.to_string(), tc.want_str);
         }
+    }
+
+    // This test ensures that the Address struct correctly maintains its
+    // asymmetric PartialEq and Hash contracts.
+    // Specifically, two addresses with the same physical coordinates but
+    // different metadata attributes must hash to the same HashMap bucket
+    // (intentional collision) but fail strict equality, forcing collection
+    // layers (e.g., load balancers and connection pools) to safely treat them
+    // as distinct endpoints without corrupting the map.
+    #[test]
+    fn test_address_hashmap_asymmetric_collision() {
+        let addr_base = "127.0.0.1:8080";
+
+        // Address A: without metadata attributes
+        let addr_a = Address {
+            network_type: "tcp",
+            address: ByteStr::from(addr_base.to_string()),
+            attributes: Attributes::new(),
+        };
+
+        // Address B: with metadata attributes
+        let attrs = Attributes::new().add("metadata_payload".to_string());
+        let addr_b = Address {
+            network_type: "tcp",
+            address: ByteStr::from(addr_base.to_string()),
+            attributes: attrs,
+        };
+
+        // Hashing must ignore attributes (intentional collision)
+        let mut hasher_a = DefaultHasher::new();
+        let mut hasher_b = DefaultHasher::new();
+        addr_a.hash(&mut hasher_a);
+        addr_b.hash(&mut hasher_b);
+        assert_eq!(
+            hasher_a.finish(),
+            hasher_b.finish(),
+            "Identical Address hashes must route to the same HashMap memory bucket!"
+        );
+
+        let hash_a = hasher_a.finish();
+
+        // Verify that changing network_type changes the hash
+        let addr_diff_net = Address {
+            network_type: "uds",
+            address: ByteStr::from(addr_base.to_string()),
+            attributes: Attributes::new(),
+        };
+        let mut hasher_diff_net = DefaultHasher::new();
+        addr_diff_net.hash(&mut hasher_diff_net);
+        assert_ne!(
+            hash_a,
+            hasher_diff_net.finish(),
+            "Changing network_type must change the hash!"
+        );
+
+        // Verify that changing address changes the hash
+        let addr_diff_addr = Address {
+            network_type: "tcp",
+            address: ByteStr::from("127.0.0.1:8081".to_string()),
+            attributes: Attributes::new(),
+        };
+        let mut hasher_diff_addr = DefaultHasher::new();
+        addr_diff_addr.hash(&mut hasher_diff_addr);
+        assert_ne!(
+            hash_a,
+            hasher_diff_addr.finish(),
+            "Changing address must change the hash!"
+        );
+
+        // Map Functional Verification
+        let mut map = HashMap::new();
+        map.insert(addr_a.clone(), "subchannel_a");
+
+        // Removing using B (different attributes) should fail.
+        assert!(
+            map.remove(&addr_b).is_none(),
+            "HashMap incorrectly matched key despite mismatched attributes!"
+        );
+
+        // Removing using A (same attributes) should succeed.
+        assert_eq!(map.remove(&addr_a), Some("subchannel_a"));
+        assert!(map.is_empty());
     }
 }
