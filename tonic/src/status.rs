@@ -400,6 +400,7 @@ impl Status {
             | Some(h2::Reason::INTERNAL_ERROR)
             | Some(h2::Reason::FLOW_CONTROL_ERROR)
             | Some(h2::Reason::SETTINGS_TIMEOUT)
+            | Some(h2::Reason::FRAME_SIZE_ERROR)
             | Some(h2::Reason::COMPRESSION_ERROR)
             | Some(h2::Reason::CONNECT_ERROR) => Code::Internal,
             Some(h2::Reason::REFUSED_STREAM) => Code::Unavailable,
@@ -1005,6 +1006,13 @@ mod tests {
             .and_then(|err| err.downcast_ref::<h2::Error>())
             .unwrap();
         assert_eq!(source.reason(), Some(h2::Reason::CANCEL));
+    }
+
+    #[test]
+    #[cfg(feature = "server")]
+    fn code_from_h2_frame_size_error() {
+        let err = h2::Error::from(h2::Reason::FRAME_SIZE_ERROR);
+        assert_eq!(Status::code_from_h2(&err), Code::Internal);
     }
 
     #[test]
