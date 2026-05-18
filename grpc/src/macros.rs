@@ -52,7 +52,7 @@
 /// ```
 ///
 /// If you have modified the output directory or message path, you should use
-/// the include_generated_code macro below instead of using this macro or
+/// the include_generated_proto macro below instead of using this macro or
 /// manually include it yourself.
 ///
 /// ```rust,ignore

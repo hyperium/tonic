@@ -99,14 +99,14 @@ mod test {
     use crate::client::CallOptions;
     use crate::core::RecvMessage;
     use crate::core::RequestHeaders;
-    use crate::core::ServerResponseStreamItem;
+    use crate::server::ResponseStreamItem;
     use crate::server::SendOptions;
 
     struct MockSendStream;
     impl SendStream for MockSendStream {
         async fn send<'a>(
             &mut self,
-            _item: ServerResponseStreamItem<'a>,
+            _item: ResponseStreamItem<'a>,
             _options: SendOptions,
         ) -> Result<(), ()> {
             Ok(())

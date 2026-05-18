@@ -73,6 +73,7 @@ use crate::StatusError;
 use crate::client::CallOptions;
 use crate::client::Invoke;
 use crate::client::RecvStream;
+use crate::client::ResponseStreamItem;
 use crate::client::SendOptions;
 use crate::client::SendStream;
 use crate::client::name_resolution::TCP_IP_NETWORK_TYPE;
@@ -81,7 +82,6 @@ use crate::client::transport::SecurityOpts;
 use crate::client::transport::Transport;
 use crate::client::transport::TransportOptions;
 use crate::client::transport::registry::GLOBAL_TRANSPORT_REGISTRY;
-use crate::core::ClientResponseStreamItem;
 use crate::core::RecvMessage;
 use crate::core::RequestHeaders;
 use crate::core::ResponseHeaders;
@@ -202,10 +202,7 @@ impl Invoke for TonicTransport {
 }
 
 // Converts from a tonic status to a trailers stream item.
-fn trailers_from_tonic_status(
-    status: TonicStatus,
-    md: Option<TonicMeta>,
-) -> ClientResponseStreamItem {
+fn trailers_from_tonic_status(status: TonicStatus, md: Option<TonicMeta>) -> ResponseStreamItem {
     let status_res = match status.code() {
         Code::Ok => Ok(()),
         code => Err(StatusError::new(
@@ -217,7 +214,7 @@ fn trailers_from_tonic_status(
 }
 
 // Builds a trailers with a status
-fn trailers_from_status(status: Status, md: Option<TonicMeta>) -> ClientResponseStreamItem {
+fn trailers_from_status(status: Status, md: Option<TonicMeta>) -> ResponseStreamItem {
     let trailers = match md.map(TryInto::try_into) {
         Some(Err(e)) => Trailers::new(Err(StatusError::new(
             StatusCodeError::Internal,
@@ -226,7 +223,7 @@ fn trailers_from_status(status: Status, md: Option<TonicMeta>) -> ClientResponse
         Some(Ok(metadata)) => Trailers::new(status).with_metadata(metadata),
         None => Trailers::new(status),
     };
-    ClientResponseStreamItem::Trailers(trailers)
+    ResponseStreamItem::Trailers(trailers)
 }
 
 struct TonicSendStream {
@@ -261,17 +258,15 @@ enum StreamState {
 }
 
 impl RecvStream for TonicRecvStream {
-    async fn next(&mut self, msg: &mut dyn RecvMessage) -> ClientResponseStreamItem {
+    async fn recv(&mut self, msg: &mut dyn RecvMessage) -> ResponseStreamItem {
         // Take the current state, leaving `Closed` in its place temporarily
         let state = std::mem::replace(&mut self.state, StreamState::Closed);
 
         match state {
             // Closed is terminal.
-            StreamState::Closed => ClientResponseStreamItem::StreamClosed,
+            StreamState::Closed => ResponseStreamItem::StreamClosed,
             // Stay closed after sending trailers.
-            StreamState::Error(error) => {
-                ClientResponseStreamItem::Trailers(Trailers::new(Err(error)))
-            }
+            StreamState::Error(error) => ResponseStreamItem::Trailers(Trailers::new(Err(error))),
             StreamState::AwaitingHeaders(rx) => match rx.await {
                 Ok(Ok(response)) => {
                     let (metadata, stream, _extensions) = response.into_parts();
@@ -286,9 +281,7 @@ impl RecvStream for TonicRecvStream {
                         Ok(md) => {
                             // Start streaming and return the headers.
                             self.state = StreamState::Streaming(stream);
-                            ClientResponseStreamItem::Headers(
-                                ResponseHeaders::new().with_metadata(md),
-                            )
+                            ResponseStreamItem::Headers(ResponseHeaders::new().with_metadata(md))
                         }
                         Err(e) => {
                             if let Some(notify) = self.stop_notify.take() {
@@ -316,7 +309,7 @@ impl RecvStream for TonicRecvStream {
                     Ok(()) => {
                         // More messages may remain in the stream; set receiver again.
                         self.state = StreamState::Streaming(stream);
-                        ClientResponseStreamItem::Message
+                        ResponseStreamItem::Message
                     }
                     Err(e) => {
                         if let Some(notify) = self.stop_notify.take() {

@@ -31,7 +31,6 @@ use crate::credentials::SecurityLevel;
 use crate::credentials::call::CallCredentials;
 use crate::credentials::call::CompositeCallCredentials;
 use crate::credentials::common::Authority;
-use crate::credentials::insecure;
 use crate::private;
 use crate::rt::GrpcEndpoint;
 use crate::rt::GrpcRuntime;
@@ -153,11 +152,9 @@ pub struct CompositeChannelCredentials<T> {
 }
 
 impl<T: ChannelCredentials> CompositeChannelCredentials<T> {
-    pub fn new(channel_creds: T, call_creds: Arc<dyn CallCredentials>) -> Result<Self, String> {
-        if channel_creds.info().security_protocol() == insecure::PROTOCOL_NAME {
-            return Err("using tokens on an insecure credentials is disallowed".to_string());
-        }
-
+    /// Constructs a new instance that combines `channel_creds` and `call_creds`
+    /// so that both can be provided to a [`Channel`](crate::client::Channel).
+    pub fn new(channel_creds: T, call_creds: Arc<dyn CallCredentials>) -> Self {
         let combined_call_creds =
             if let Some(existing) = channel_creds.get_call_credentials(private::Internal) {
                 let composite_creds = CompositeCallCredentials::new(existing.clone(), call_creds);
@@ -166,10 +163,10 @@ impl<T: ChannelCredentials> CompositeChannelCredentials<T> {
                 call_creds
             };
 
-        Ok(Self {
+        Self {
             channel_creds,
             call_creds: combined_call_creds,
-        })
+        }
     }
 }
 
@@ -209,7 +206,6 @@ mod tests {
     use crate::credentials::call::CallCredentials;
     use crate::credentials::call::CallDetails;
     use crate::credentials::call::ClientConnectionSecurityInfo;
-    use crate::credentials::insecure::InsecureChannelCredentials;
     use crate::credentials::local::LocalChannelCredentials;
     use crate::metadata::AsciiMetadataKey;
     use crate::metadata::AsciiMetadataValue;
@@ -259,10 +255,10 @@ mod tests {
         });
 
         // First composition.
-        let composite1 = CompositeChannelCredentials::new(channel_creds, call_creds1).unwrap();
+        let composite1 = CompositeChannelCredentials::new(channel_creds, call_creds1);
 
         // Second composition (using the first composite as base).
-        let composite2 = CompositeChannelCredentials::new(composite1, call_creds2).unwrap();
+        let composite2 = CompositeChannelCredentials::new(composite1, call_creds2);
 
         // Verify call credentials
         let combined_call_creds = composite2.get_call_credentials(private::Internal).unwrap();
@@ -311,17 +307,5 @@ mod tests {
             .unwrap();
         assert_eq!(output.security.security_level(), SecurityLevel::NoSecurity);
         assert_eq!(output.security.security_protocol(), "local");
-    }
-
-    #[test]
-    fn test_composite_channel_credentials_insecure() {
-        let channel_creds = InsecureChannelCredentials::new();
-        let call_creds = Arc::new(MockCallCredentials {
-            key: "auth",
-            value: "val",
-            min_security_level: SecurityLevel::NoSecurity,
-        });
-        let result = CompositeChannelCredentials::new(channel_creds, call_creds);
-        assert!(result.is_err());
     }
 }

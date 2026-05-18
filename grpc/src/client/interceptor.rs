@@ -22,6 +22,8 @@
  *
  */
 
+//! Definitions and utilities for client-side interceptors.
+
 use crate::client::CallOptions;
 use crate::client::Invoke;
 use crate::client::InvokeOnce;
@@ -29,17 +31,20 @@ use crate::client::RecvStream;
 use crate::client::SendStream;
 use crate::core::RequestHeaders;
 
-/// A trait which allows intercepting an RPC invoke operation.  The trait is
-/// generic on I which should either be implemented as InvokeOnce (for
-/// interceptors that only need to call next once) or Invoke[+Clone+'static]
-/// (for interceptors that need to call next multiple times).
+/// A trait which allows intercepting an RPC [`Invoke`] operation.  The trait is
+/// generic on `I` which should either be implemented as [`InvokeOnce`] (for
+/// interceptors that only need to call next once) or [`Invoke`] (or
+/// [`Invoke`]`+Clone+'static` for interceptors that need to call next multiple
+/// times).
 #[trait_variant::make(Send)]
 pub trait Intercept<I>: Sync {
+    /// The sending stream returned by `intercept`.
     type SendStream: SendStream + 'static;
+    /// The receiving stream returned by `intercept`.
     type RecvStream: RecvStream + 'static;
 
     /// Intercepts the start of a call.  Implementations should generally use
-    /// next to create and start a call whose streams are optionally wrapped
+    /// `next` to create and start a call whose streams are optionally wrapped
     /// before being returned.
     async fn intercept(
         &self,
@@ -49,14 +54,16 @@ pub trait Intercept<I>: Sync {
     ) -> (Self::SendStream, Self::RecvStream);
 }
 
-/// Like Intercept, but not reusable.
+/// A single-use form of [`Intercept`] that consumes `self`.
 #[trait_variant::make(Send)]
 pub trait InterceptOnce<I>: Sync {
+    /// The sending stream returned by `intercept_once`.
     type SendStream: SendStream + 'static;
+    /// The receiving stream returned by `intercept_once`.
     type RecvStream: RecvStream + 'static;
 
     /// Intercepts the start of a call.  Implementations should generally use
-    /// next to create and start a call whose streams are optionally wrapped
+    /// `next` to create and start a call whose streams are optionally wrapped
     /// before being returned.
     async fn intercept_once(
         self,
@@ -66,11 +73,11 @@ pub trait InterceptOnce<I>: Sync {
     ) -> (Self::SendStream, Self::RecvStream);
 }
 
-/// Wraps an interceptor that implements Intercept, and implements InterceptOnce
-/// instead, allowing it to be paired with a non-reusable Invoke implementation
-/// inside an `Intercepted` struct.
+/// Wraps an interceptor that implements [`Intercept`], and implements
+/// [`InterceptOnce`] instead, allowing it to be paired with an [`InvokeOnce`]
+/// implementation inside an [`Intercepted`] struct.
 #[derive(Clone)]
-pub struct IntoOnce<T>(pub T);
+pub struct IntoOnce<T>(T);
 
 impl<I, T: Send + Sync, SS, RS> InterceptOnce<I> for IntoOnce<T>
 where
@@ -92,9 +99,9 @@ where
     }
 }
 
-/// Wraps `Invoke` and `Intercept` impls and implements `Invoke` for the
-/// combination.  Or wraps `InvokeOnce` and `InterceptOnce<InvokeOnce>` impls
-/// and implements `InvokeOnce` for the combination.
+/// Wraps an [`Invoke`] and an [`Intercept`] and implements [`Invoke`] for the
+/// combination.  Or wraps [`InvokeOnce`] and [`InterceptOnce<InvokeOnce>`]
+/// implementations and implements [`InvokeOnce`] for the combination.
 #[derive(Clone, Copy)]
 pub struct Intercepted<Inv, Int> {
     invoke: Inv,
@@ -102,6 +109,9 @@ pub struct Intercepted<Inv, Int> {
 }
 
 impl<Inv, Int> Intercepted<Inv, Int> {
+    /// Returns a new instance combining `invoke` and `intercept` into a new
+    /// [`Invoke`] or [`InvokeOnce`] implementation depending upon the types of
+    /// `Inv` and `Int`.
     pub fn new(invoke: Inv, intercept: Int) -> Self {
         Self { invoke, intercept }
     }
@@ -147,13 +157,16 @@ where
     }
 }
 
-/// Combines an `Invoke` with an `InterceptOnce` to implement `InvokeOnce`.
+/// Combines an [`Invoke`] with an [`InterceptOnce`] to implement
+/// [`InvokeOnce`].
 pub struct InterceptedOnce<Inv, Int> {
     invoke: Inv,
     intercept: Int,
 }
 
 impl<Inv, Int> InterceptedOnce<Inv, Int> {
+    /// Returns a new instance combining `invoke` and `intercept` into a new
+    /// [`InvokeOnce`] implementation.
     pub fn new(invoke: Inv, intercept: Int) -> Self {
         Self { invoke, intercept }
     }
@@ -180,10 +193,35 @@ where
     }
 }
 
-/// Implements methods for combining `Invoke` implementations with either
-/// `Intercept` or `InterceptOnce` interceptors.  Blanket implemented on any
-/// `Invoke`.
+/// Implements methods for combining [`Invoke`] implementations with either
+/// [`Intercept`] or [`InterceptOnce`] interceptors.  Blanket implemented on any
+/// [`Invoke`].
+///
+/// # Examples
+///
+/// ```
+/// use std::sync::Arc;
+/// use grpc::client::{Channel, ChannelOptions};
+/// use grpc::credentials::LocalChannelCredentials;
+/// use grpc::client::stream_util::ResponseValidator;
+/// use grpc::client::interceptor::InvokeExt;
+///
+/// // Create a channel:
+/// let channel = Channel::new(
+///     "dns:///localhost:123",
+///     Arc::new(LocalChannelCredentials::new()),
+///     ChannelOptions::default(),
+/// );
+/// // Create an interceptor:
+/// let interceptor = ResponseValidator::new(true);
+///
+/// // Combine them:
+/// let combined_invoker = channel.with_interceptor(interceptor);
+/// ```
+///
 pub trait InvokeExt: Invoke + Sized {
+    /// Attaches a reusable interceptor to this invoker and returns the pair as
+    /// an implementation of [`Invoke`].
     fn with_interceptor<Int>(self, interceptor: Int) -> Intercepted<Self, Int>
     where
         for<'a> Int: Intercept<&'a Self>,
@@ -191,6 +229,8 @@ pub trait InvokeExt: Invoke + Sized {
         Intercepted::new(self, interceptor)
     }
 
+    /// Attaches a non-reusable interceptor to this invoker and returns the pair
+    /// as an implementation of [`InvokeOnce`].
     fn with_once_interceptor<Int>(self, interceptor: Int) -> InterceptedOnce<Self, Int>
     where
         for<'a> Int: InterceptOnce<&'a Self>,
@@ -199,10 +239,34 @@ pub trait InvokeExt: Invoke + Sized {
     }
 }
 
-/// Implements methods for combining `InvokeOnce` implementations with
-/// `Intercept<InvokeOnce>` or `InterceptOnce<InvokeOnce>` interceptors.
-/// Blanket implemented on any `InvokeOnce`.
+/// Implements methods for combining [`InvokeOnce`] implementations with either
+/// [`Intercept<InvokeOnce>`] or [`InterceptOnce<InvokeOnce>`] interceptors.
+/// Blanket implemented on any [`InvokeOnce`].
+///
+/// # Examples
+///
+/// ```
+/// use std::sync::Arc;
+/// use grpc::client::{Channel, ChannelOptions};
+/// use grpc::credentials::LocalChannelCredentials;
+/// use grpc::client::stream_util::ResponseValidator;
+/// use grpc::client::interceptor::InvokeOnceExt;
+///
+/// // Create a channel:
+/// let channel = Channel::new(
+///     "dns:///localhost:123",
+///     Arc::new(LocalChannelCredentials::new()),
+///     ChannelOptions::default(),
+/// );
+/// // Create an interceptor:
+/// let interceptor = ResponseValidator::new(true);
+///
+/// // Combine them:
+/// let combined_invoke_once = (&channel).with_interceptor(interceptor);
+/// ```
 pub trait InvokeOnceExt: InvokeOnce + Sized {
+    /// Attaches a reusable interceptor to this non-reusable invoker and returns
+    /// the pair as an implementation of [`InvokeOnce`].
     fn with_interceptor<Int>(self, interceptor: Int) -> Intercepted<Self, IntoOnce<Int>>
     where
         for<'a> Int: Intercept<Self>,
@@ -210,6 +274,8 @@ pub trait InvokeOnceExt: InvokeOnce + Sized {
         Intercepted::new(self, IntoOnce(interceptor))
     }
 
+    /// Attaches a non-reusable interceptor to this non-reusable invoker and
+    /// returns the pair as an implementation of [`InvokeOnce`].
     fn with_once_interceptor<Int>(self, interceptor: Int) -> Intercepted<Self, Int>
     where
         Int: InterceptOnce<Self>,
@@ -261,9 +327,9 @@ mod test {
     use crate::client::CallOptions;
     use crate::client::Invoke;
     use crate::client::RecvStream;
+    use crate::client::ResponseStreamItem;
     use crate::client::SendOptions;
     use crate::client::SendStream;
-    use crate::core::ClientResponseStreamItem;
     use crate::core::RecvMessage;
     use crate::core::ResponseHeaders;
     use crate::core::SendMessage;
@@ -405,28 +471,28 @@ mod test {
             .unwrap();
         assert_eq!(controller.recv_req().await.0, one);
         controller
-            .send_resp(ClientResponseStreamItem::Trailers(Trailers::new(Err(
+            .send_resp(ResponseStreamItem::Trailers(Trailers::new(Err(
                 StatusError::new(StatusCodeError::Internal, ""),
             ))))
             .await;
-        let handle = task::spawn(async move { rx.next(&mut ByteRecvMsg::new()).await });
+        let handle = task::spawn(async move { rx.recv(&mut ByteRecvMsg::new()).await });
         assert_eq!(controller.recv_req().await.0, one);
         tx.send(&ByteSendMsg::new(&two), SendOptions::default())
             .await
             .unwrap();
         assert_eq!(controller.recv_req().await.0, two);
         controller
-            .send_resp(ClientResponseStreamItem::Trailers(Trailers::new(Err(
+            .send_resp(ResponseStreamItem::Trailers(Trailers::new(Err(
                 StatusError::new(StatusCodeError::Internal, ""),
             ))))
             .await;
         assert_eq!(controller.recv_req().await.0, one);
         assert_eq!(controller.recv_req().await.0, two);
         controller
-            .send_resp(ClientResponseStreamItem::Trailers(Trailers::new(Ok(()))))
+            .send_resp(ResponseStreamItem::Trailers(Trailers::new(Ok(()))))
             .await;
         let resp = handle.await.unwrap();
-        let ClientResponseStreamItem::Trailers(trailers) = resp else {
+        let ResponseStreamItem::Trailers(trailers) = resp else {
             panic!("unexpected resp: {resp:?}");
         };
         assert!(trailers.status().is_ok());
@@ -448,37 +514,37 @@ mod test {
             .unwrap();
         assert_eq!(controller.recv_req().await.0, one);
         controller
-            .send_resp(ClientResponseStreamItem::Trailers(Trailers::new(Err(
+            .send_resp(ResponseStreamItem::Trailers(Trailers::new(Err(
                 StatusError::new(crate::StatusCodeError::Internal, ""),
             ))))
             .await;
-        let handle = task::spawn(async move { rx.next(&mut ByteRecvMsg::new()).await });
+        let handle = task::spawn(async move { rx.recv(&mut ByteRecvMsg::new()).await });
         assert_eq!(controller.recv_req().await.0, one);
         tx.send(&ByteSendMsg::new(&two), SendOptions::default())
             .await
             .unwrap();
         assert_eq!(controller.recv_req().await.0, two);
         controller
-            .send_resp(ClientResponseStreamItem::Trailers(Trailers::new(Err(
+            .send_resp(ResponseStreamItem::Trailers(Trailers::new(Err(
                 StatusError::new(crate::StatusCodeError::Internal, ""),
             ))))
             .await;
         assert_eq!(controller.recv_req().await.0, one);
         assert_eq!(controller.recv_req().await.0, two);
         controller
-            .send_resp(ClientResponseStreamItem::Trailers(Trailers::new(Err(
+            .send_resp(ResponseStreamItem::Trailers(Trailers::new(Err(
                 StatusError::new(crate::StatusCodeError::Internal, ""),
             ))))
             .await;
         assert_eq!(controller.recv_req().await.0, one);
         assert_eq!(controller.recv_req().await.0, two);
         controller
-            .send_resp(ClientResponseStreamItem::Trailers(Trailers::new(Err(
+            .send_resp(ResponseStreamItem::Trailers(Trailers::new(Err(
                 StatusError::new(crate::StatusCodeError::Internal, ""),
             ))))
             .await;
         let resp = handle.await.unwrap();
-        let ClientResponseStreamItem::Trailers(trailers) = resp else {
+        let ResponseStreamItem::Trailers(trailers) = resp else {
             panic!("unexpected resp: {resp:?}");
         };
         assert_eq!(
@@ -502,20 +568,20 @@ mod test {
             .unwrap();
         assert_eq!(controller.recv_req().await.0, one);
         controller
-            .send_resp(ClientResponseStreamItem::Headers(ResponseHeaders::default()))
+            .send_resp(ResponseStreamItem::Headers(ResponseHeaders::default()))
             .await;
 
-        let resp = rx.next(&mut ByteRecvMsg::new()).await;
-        assert!(matches!(resp, ClientResponseStreamItem::Headers(_)));
+        let resp = rx.recv(&mut ByteRecvMsg::new()).await;
+        assert!(matches!(resp, ResponseStreamItem::Headers(_)));
 
         controller
-            .send_resp(ClientResponseStreamItem::Trailers(Trailers::new(Err(
+            .send_resp(ResponseStreamItem::Trailers(Trailers::new(Err(
                 StatusError::new(crate::StatusCodeError::Internal, ""),
             ))))
             .await;
 
-        let resp = rx.next(&mut ByteRecvMsg::new()).await;
-        let ClientResponseStreamItem::Trailers(trailers) = resp else {
+        let resp = rx.recv(&mut ByteRecvMsg::new()).await;
+        let ResponseStreamItem::Trailers(trailers) = resp else {
             panic!("unexpected resp: {resp:?}");
         };
         assert_eq!(
@@ -528,13 +594,13 @@ mod test {
     /// MockInvokerController.
     #[derive(Clone)]
     struct MockInvoker {
-        resp_tx: broadcast::Sender<ClientResponseStreamItem>,
+        resp_tx: broadcast::Sender<ResponseStreamItem>,
         req_tx: mpsc::Sender<(Bytes, SendOptions)>,
     }
     /// A controller used to control the behavior of its paired MockInvoker's
     /// SendStream and RecvStream.
     struct MockInvokerController {
-        resp_tx: broadcast::Sender<ClientResponseStreamItem>,
+        resp_tx: broadcast::Sender<ResponseStreamItem>,
         req_rx: mpsc::Receiver<(Bytes, SendOptions)>,
     }
     impl MockInvoker {
@@ -557,7 +623,7 @@ mod test {
         async fn recv_req(&mut self) -> (Bytes, SendOptions) {
             self.req_rx.recv().await.unwrap()
         }
-        async fn send_resp(&mut self, item: ClientResponseStreamItem) {
+        async fn send_resp(&mut self, item: ResponseStreamItem) {
             self.resp_tx.send(item).unwrap();
         }
     }
@@ -588,9 +654,9 @@ mod test {
                 .map_err(|_| ())
         }
     }
-    struct MockRecvStream(broadcast::Receiver<ClientResponseStreamItem>);
+    struct MockRecvStream(broadcast::Receiver<ResponseStreamItem>);
     impl RecvStream for MockRecvStream {
-        async fn next(&mut self, msg: &mut dyn RecvMessage) -> ClientResponseStreamItem {
+        async fn recv(&mut self, msg: &mut dyn RecvMessage) -> ResponseStreamItem {
             self.0.recv().await.unwrap()
         }
     }
@@ -694,8 +760,8 @@ mod test {
 
     // Returns true if we can retry a stream based on the response item -- i.e.
     // if it is any error status.  Any other response will commit the RPC.
-    fn should_retry(i: &ClientResponseStreamItem) -> bool {
-        if let ClientResponseStreamItem::Trailers(t) = &i {
+    fn should_retry(i: &ResponseStreamItem) -> bool {
+        if let ResponseStreamItem::Trailers(t) = &i {
             t.status().is_err()
         } else {
             false
@@ -705,8 +771,8 @@ mod test {
     const MAX_ATTEMPTS: usize = 3;
 
     impl<I: Invoke> RecvStream for RetryRecvStream<I> {
-        async fn next(&mut self, msg: &mut dyn RecvMessage) -> ClientResponseStreamItem {
-            let mut recv_resp = self.recv_stream.next(msg).await;
+        async fn recv(&mut self, msg: &mut dyn RecvMessage) -> ResponseStreamItem {
+            let mut recv_resp = self.recv_stream.recv(msg).await;
 
             if self.committed {
                 return recv_resp;
@@ -734,7 +800,7 @@ mod test {
 
                 // Run the current recv operation in parallel with replaying
                 // the stream.
-                let recv_fut = self.recv_stream.next(msg);
+                let recv_fut = self.recv_stream.recv(msg);
                 pin!(recv_fut);
                 let mut recv_state = RecvStreamState::Pending(recv_fut);
 
@@ -762,7 +828,7 @@ mod test {
     ) -> bool
     where
         S: SendStream,
-        F: Future<Output = ClientResponseStreamItem> + Unpin,
+        F: Future<Output = ResponseStreamItem> + Unpin,
     {
         for (data, options) in cached_sends {
             let send_msg = ByteSendMsg::new(data);
@@ -799,10 +865,10 @@ mod test {
     // Holds either a Pending() future to a recv call or its Done() result.
     enum RecvStreamState<F> {
         Pending(F),
-        Done(ClientResponseStreamItem),
+        Done(ResponseStreamItem),
     }
 
-    impl<F: Future<Output = ClientResponseStreamItem> + Unpin> RecvStreamState<F> {
+    impl<F: Future<Output = ResponseStreamItem> + Unpin> RecvStreamState<F> {
         /// Runs `fut` alongside `self` if it is Pending.  Returns None if `self`
         /// starts Pending and resolves before fut -- `self` then changes to Done
         /// with the result.  Otherwise, returns Some(fut's output) and keeps
@@ -823,7 +889,7 @@ mod test {
         }
         /// Resolves `self`: either returns the already-Done() result of the
         /// recv operation or awaits the future and returns the result.
-        async fn resolve(self) -> ClientResponseStreamItem {
+        async fn resolve(self) -> ResponseStreamItem {
             match self {
                 RecvStreamState::Pending(fut) => fut.await,
                 RecvStreamState::Done(resp) => resp,
@@ -898,11 +964,8 @@ mod test {
         }
     }
     impl RecvStream for NopStream {
-        async fn next(
-            &mut self,
-            _msg: &mut dyn RecvMessage,
-        ) -> crate::core::ClientResponseStreamItem {
-            ClientResponseStreamItem::StreamClosed
+        async fn recv(&mut self, _msg: &mut dyn RecvMessage) -> crate::client::ResponseStreamItem {
+            ResponseStreamItem::StreamClosed
         }
     }
 }

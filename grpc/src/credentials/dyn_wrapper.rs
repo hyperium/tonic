@@ -164,10 +164,10 @@ mod tests {
     use tokio::net::TcpStream;
 
     use super::*;
-    use crate::credentials::InsecureServerCredentials;
+    use crate::credentials::LocalChannelCredentials;
+    use crate::credentials::LocalServerCredentials;
     use crate::credentials::SecurityLevel;
     use crate::credentials::client::ClientHandshakeInfo;
-    use crate::credentials::insecure::InsecureChannelCredentials;
     use crate::rt::AsyncIoAdapter;
     use crate::rt::TcpOptions;
     use crate::rt::tokio::TokioIoStream;
@@ -178,7 +178,7 @@ mod tests {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
 
-        let dyn_creds = InsecureChannelCredentials::new_arc() as Arc<dyn DynChannelCredentials>;
+        let dyn_creds = LocalChannelCredentials::new_arc() as Arc<dyn DynChannelCredentials>;
 
         let authority = Authority::new("localhost".to_string(), Some(addr.port()));
 
@@ -199,7 +199,7 @@ mod tests {
         let security_info = output.security;
 
         assert!(!endpoint.get_local_address().is_empty());
-        assert_eq!(security_info.security_protocol(), "insecure");
+        assert_eq!(security_info.security_protocol(), "local");
         assert_eq!(security_info.security_level(), SecurityLevel::NoSecurity);
 
         // Verify data transfer.
@@ -228,11 +228,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_dyn_server_credential_dispatch() {
-        let creds = InsecureServerCredentials::new();
+        let creds = LocalServerCredentials::new();
         let dyn_creds: Box<dyn DynServerCredentials> = Box::new(creds);
 
         let info = dyn_creds.info();
-        assert_eq!(info.security_protocol, "insecure");
+        assert_eq!(info.security_protocol, "local");
 
         let addr = "127.0.0.1:0";
         let runtime = rt::default_runtime();
@@ -261,7 +261,7 @@ mod tests {
         let endpoint = output.endpoint;
         let security_info = output.security;
 
-        assert_eq!(security_info.security_protocol(), "insecure");
+        assert_eq!(security_info.security_protocol(), "local");
         assert_eq!(security_info.security_level(), SecurityLevel::NoSecurity);
 
         let mut buf = vec![0u8; 25];

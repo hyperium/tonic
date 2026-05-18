@@ -55,20 +55,19 @@ use crate::client::CallOptions;
 use crate::client::Channel;
 use crate::client::Invoke as _;
 use crate::client::RecvStream as _;
+use crate::client::ResponseStreamItem;
 use crate::client::SendOptions;
 use crate::client::SendStream as _;
 use crate::client::name_resolution::TCP_IP_NETWORK_TYPE;
 use crate::client::transport::SecurityOpts;
 use crate::client::transport::TransportOptions;
 use crate::client::transport::registry::GLOBAL_TRANSPORT_REGISTRY;
-use crate::core::ClientResponseStreamItem;
 use crate::core::RecvMessage;
 use crate::core::RequestHeaders;
 use crate::core::ResponseHeaders;
 use crate::core::SendMessage;
 use crate::core::Trailers;
 use crate::credentials::CompositeChannelCredentials;
-use crate::credentials::InsecureChannelCredentials;
 use crate::credentials::LocalChannelCredentials;
 use crate::credentials::SecurityLevel;
 use crate::credentials::call::CallCredentials;
@@ -152,7 +151,7 @@ pub(crate) async fn tonic_transport_rpc() {
         .unwrap();
     let config = Arc::new(TransportOptions::default());
     let securty_opts = SecurityOpts {
-        credentials: InsecureChannelCredentials::new_arc(),
+        credentials: LocalChannelCredentials::new_arc(),
         authority: Authority::new("localhost".to_string(), None),
         handshake_info: ClientHandshakeInfo::default(),
     };
@@ -177,8 +176,8 @@ pub(crate) async fn tonic_transport_rpc() {
     // Spawn a sender task
     let client_handle = tokio::spawn(async move {
         let mut dummy_msg = WrappedEchoResponse(EchoResponse { message: "".into() });
-        match rx.next(&mut dummy_msg).await {
-            ClientResponseStreamItem::Headers(_) => {
+        match rx.recv(&mut dummy_msg).await {
+            ResponseStreamItem::Headers(_) => {
                 println!("Got headers");
             }
             item => panic!("Expected headers, got {:?}", item),
@@ -200,8 +199,8 @@ pub(crate) async fn tonic_transport_rpc() {
 
             // Wait for the reply
             let mut recv_msg = WrappedEchoResponse(EchoResponse { message: "".into() });
-            match rx.next(&mut recv_msg).await {
-                ClientResponseStreamItem::Message => {
+            match rx.recv(&mut recv_msg).await {
+                ResponseStreamItem::Message => {
                     let echo_response = recv_msg.0;
                     println!("Got response: {echo_response:?}");
                     assert_eq!(echo_response.message, message);
@@ -252,7 +251,7 @@ async fn grpc_invoke_tonic_unary() {
     let target = format!("dns:///{}", addr);
     let channel = Channel::new(
         &target,
-        InsecureChannelCredentials::new_arc(),
+        LocalChannelCredentials::new_arc(),
         Default::default(),
     );
 
@@ -455,7 +454,7 @@ async fn grpc_invoke_tonic_unary_tls() {
         min_security_level: SecurityLevel::PrivacyAndIntegrity,
         should_fail: None,
     });
-    let composite_creds = CompositeChannelCredentials::new(creds, call_creds).unwrap();
+    let composite_creds = CompositeChannelCredentials::new(creds, call_creds);
 
     let target = format!("dns:///{}", addr);
     let channel = Channel::new(&target, Arc::new(composite_creds), Default::default());
@@ -509,7 +508,7 @@ async fn grpc_invoke_failure_cases() {
             min_security_level: SecurityLevel::PrivacyAndIntegrity,
             should_fail: None,
         });
-        let composite_creds = CompositeChannelCredentials::new(creds, call_creds).unwrap();
+        let composite_creds = CompositeChannelCredentials::new(creds, call_creds);
         let channel = Channel::new(&target, Arc::new(composite_creds), Default::default());
 
         let trailers = perform_unary_echo_failure(&channel).await;
@@ -530,7 +529,7 @@ async fn grpc_invoke_failure_cases() {
                 "test message",
             )),
         });
-        let composite_creds = CompositeChannelCredentials::new(creds, call_creds).unwrap();
+        let composite_creds = CompositeChannelCredentials::new(creds, call_creds);
         let channel = Channel::new(&target, Arc::new(composite_creds), Default::default());
 
         let trailers = perform_unary_echo_failure(&channel).await;
@@ -559,7 +558,7 @@ async fn grpc_invoke_failure_cases() {
                 "test message",
             )),
         });
-        let composite_creds = CompositeChannelCredentials::new(creds, call_creds).unwrap();
+        let composite_creds = CompositeChannelCredentials::new(creds, call_creds);
         let channel = Channel::new(&target, Arc::new(composite_creds), Default::default());
 
         let trailers = perform_unary_echo_failure(&channel).await;
@@ -606,16 +605,16 @@ async fn perform_unary_echo(
 
     let mut resp = WrappedEchoResponse(EchoResponse::default());
 
-    let ClientResponseStreamItem::Headers(headers) = rx.next(&mut resp).await else {
+    let ResponseStreamItem::Headers(headers) = rx.recv(&mut resp).await else {
         panic!("Expected Headers first");
     };
 
-    let ClientResponseStreamItem::Message = rx.next(&mut resp).await else {
+    let ResponseStreamItem::Message = rx.recv(&mut resp).await else {
         panic!("Expected Message after Headers");
     };
     let echo_resp = std::mem::take(&mut resp.0);
 
-    let ClientResponseStreamItem::Trailers(trailers) = rx.next(&mut resp).await else {
+    let ResponseStreamItem::Trailers(trailers) = rx.recv(&mut resp).await else {
         panic!("Expected Trailers, got StreamClosed or other item");
     };
 
@@ -631,7 +630,7 @@ async fn perform_unary_echo_failure(channel: &Channel) -> Trailers {
         .await;
 
     let mut resp = WrappedEchoResponse(EchoResponse::default());
-    let ClientResponseStreamItem::Trailers(t) = rx.next(&mut resp).await else {
+    let ResponseStreamItem::Trailers(t) = rx.recv(&mut resp).await else {
         panic!("Expected Trailers due to failure");
     };
     t
@@ -693,8 +692,8 @@ async fn tonic_transport_invalid_base64_headers() {
 
     let mut dummy_msg = WrappedEchoResponse(EchoResponse { message: "".into() });
 
-    match rx.next(&mut dummy_msg).await {
-        ClientResponseStreamItem::Trailers(trailers) => {
+    match rx.recv(&mut dummy_msg).await {
+        ResponseStreamItem::Trailers(trailers) => {
             println!("Got trailers as expected due to invalid headers");
             let status = trailers.status().as_ref().unwrap_err();
             assert_eq!(status.code(), StatusCodeError::Internal);
@@ -744,7 +743,7 @@ async fn tonic_transport_recv_drop_cancels_send() {
         .unwrap();
     let config = Arc::new(TransportOptions::default());
     let securty_opts = SecurityOpts {
-        credentials: InsecureChannelCredentials::new_arc(),
+        credentials: LocalChannelCredentials::new_arc(),
         authority: Authority::new("localhost".to_string(), None),
         handshake_info: ClientHandshakeInfo::default(),
     };

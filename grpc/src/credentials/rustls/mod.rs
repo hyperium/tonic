@@ -22,6 +22,9 @@
  *
  */
 
+//! gRPC [`ChannelCredentials`](super::ChannelCredentials) implemented for
+//! [`rustls`](https://docs.rs/rustls).
+
 use std::io::BufReader;
 
 use rustls::crypto::CryptoProvider;
@@ -67,6 +70,7 @@ pub struct Identity {
     key: Vec<u8>,
 }
 
+/// Represents an ordered list of identities.
 pub type IdentityList = Vec<Identity>;
 
 impl Identity {
@@ -83,15 +87,15 @@ impl Identity {
 /// A source of configuration or state of type `T` that allows for dynamic
 /// updates.
 ///
-/// This trait abstracts over the source of the data (e.g., static memory,
-/// file system, network) and provides a uniform interface for consumers to
-/// access the current value and subscribe to changes.
+/// This trait abstracts over the source of the data (e.g., static memory, file
+/// system, network) and provides a uniform interface for consumers to access
+/// the current value and subscribe to changes.
 ///
 /// # Sealed Trait
 ///
 /// This trait is **sealed**. It cannot be implemented by downstream crates.
 /// Users should rely on the provided implementations (e.g.,
-/// `StaticIdentityProvider`, `StaticRootsProvider`).
+/// [`StaticIdentityProvider`], [`StaticRootCertificatesProvider`]).
 pub trait Provider<T> {
     /// Returns a clone of the underlying watch receiver.
     ///
@@ -123,7 +127,10 @@ impl<T> Provider<T> for StaticProvider<T> {
     }
 }
 
+/// A provider for a single, fixed set of root certificates.
 pub type StaticRootCertificatesProvider = StaticProvider<RootCertificates>;
+
+/// A provider for a single, fixed identity.
 pub type StaticIdentityProvider = StaticProvider<Identity>;
 
 static TLS_PROTO_INFO: ProtocolInfo = ProtocolInfo {

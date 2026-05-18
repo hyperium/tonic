@@ -22,10 +22,22 @@
  *
  */
 
+//! Authentication and security credentials (e.g. TLS and OAuth2).
+//!
+//! This module provides traits and types for handling credentials in gRPC,
+//! including channel credentials (for securing connections) and call
+//! credentials (for authenticating individual RPCs).
+//!
+//! # Key Concepts
+//!
+//! - **[`ChannelCredentials`]:** Trait for client-side transport security
+//!   (e.g., TLS). May also include [`CallCredentials`] by using
+//!   [`CompositeChannelCredentials`].
+//! - **[`ServerCredentials`]:** Trait for server-side transport security.
+
 pub mod call;
 pub(crate) mod client;
 pub(crate) mod dyn_wrapper;
-mod insecure;
 mod local;
 #[cfg(feature = "tls-rustls")]
 pub mod rustls;
@@ -34,8 +46,6 @@ pub(crate) mod server;
 use std::sync::Arc;
 
 pub use client::CompositeChannelCredentials;
-pub use insecure::InsecureChannelCredentials;
-pub use insecure::InsecureServerCredentials;
 pub use local::LocalChannelCredentials;
 pub use local::LocalServerCredentials;
 
@@ -48,8 +58,11 @@ use crate::private;
 use crate::rt::GrpcEndpoint;
 use crate::rt::GrpcRuntime;
 
-/// Defines the common interface for all live gRPC wire protocols and supported
-/// transport security protocols (e.g., TLS, ALTS).
+/// Client-side trait for all live gRPC wire protocols and supported transport
+/// security protocols (e.g., TLS, ALTS).
+///
+/// Also includes the ability to attach [`CallCredentials`] when used with the
+/// [`CompositeChannelCredentials`].
 #[trait_variant::make(Send)]
 pub trait ChannelCredentials: Sync + 'static {
     #[doc(hidden)]
@@ -57,7 +70,7 @@ pub trait ChannelCredentials: Sync + 'static {
     #[doc(hidden)]
     type Output<I>;
 
-    //// Provides the ProtocolInfo of these credentials.
+    /// Provides the ProtocolInfo of these credentials.
     fn info(&self) -> &ProtocolInfo;
 
     /// Returns call credentials to be used for all RPCs made on a connection.
@@ -89,12 +102,14 @@ pub trait ChannelCredentials: Sync + 'static {
     ) -> Result<HandshakeOutput<Self::Output<Input>, Self::ContextType>, String>;
 }
 
+/// Server-side trait for all live gRPC wire protocols and supported
+/// transport security protocols (e.g., TLS, ALTS).
 #[trait_variant::make(Send)]
 pub trait ServerCredentials: Sync + 'static {
     #[doc(hidden)]
     type Output<I>;
 
-    //// Provides the ProtocolInfo of this credentials.
+    /// Provides the ProtocolInfo of these credentials.
     fn info(&self) -> &ProtocolInfo;
 
     /// Performs the server-side authentication handshake.
@@ -168,6 +183,8 @@ pub(crate) mod common {
     }
 }
 
+/// Contains information about a [`ChannelCredentials`] or
+/// [`ServerCredentials`].
 pub struct ProtocolInfo {
     security_protocol: &'static str,
 }
@@ -177,6 +194,7 @@ impl ProtocolInfo {
         Self { security_protocol }
     }
 
+    /// Returns the security protocol name currently in use, e.g. "tls".
     pub fn security_protocol(&self) -> &'static str {
         self.security_protocol
     }

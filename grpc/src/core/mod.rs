@@ -22,9 +22,23 @@
  *
  */
 
-//! Types used to implement core gRPC functionality common to clients and
-//! servers.  Note that most gRPC applications should not need these types
-//! unless they are implementing custom interceptors.
+//! Core gRPC types common to clients and servers.
+//!
+//! This module provides the fundamental types used in gRPC communication, such
+//! as message traits, headers, and trailers.
+//!
+//! Most applications should not need to use these types directly, as they are
+//! typically used by generated code.  However, they may be necessary when
+//! implementing custom interceptors or advanced features.
+//!
+//! # Key Concepts
+//!
+//! - **[`SendMessage`] / [`RecvMessage`]:** Traits for encoding and decoding
+//!   messages.
+//! - **[`RequestHeaders`]:** Represents gRPC headers sent to the server to
+//!   initiate a request.
+//! - **[`ResponseHeaders`] / [`Trailers`]:** Represents gRPC headers and
+//!   trailers received from the server during its response.
 
 use std::any::TypeId;
 
@@ -33,8 +47,10 @@ use bytes::Buf;
 use crate::metadata::MetadataMap;
 use crate::status::Status;
 
+/// Represents a message sent by either a client or a server.
 #[allow(unused)]
 pub trait SendMessage: Send + Sync {
+    /// Encodes the message (`self`) as binary data.
     fn encode(&self) -> Result<Box<dyn Buf + Send + Sync>, String>;
 
     #[doc(hidden)]
@@ -43,8 +59,10 @@ pub trait SendMessage: Send + Sync {
     }
 }
 
+/// Represents a message received by either a client or a server.
 #[allow(unused)]
 pub trait RecvMessage: Send + Sync {
+    /// Encodes `data` into `self`.
     fn decode(&mut self, data: &mut dyn Buf) -> Result<(), String>;
 
     #[doc(hidden)]
@@ -53,9 +71,10 @@ pub trait RecvMessage: Send + Sync {
     }
 }
 
-/// A MessageType describes what underlying message is inside a SendMessage or
-/// RecvMessage so that it can be downcast, e.g. by interceptors.  It allows for
-/// safe downcasting to views containing a lifetime.
+/// Describes what underlying message is inside a [`SendMessage`] or
+/// [`RecvMessage`] so that it can be downcast, e.g. by interceptors.
+///
+/// Allows for safe downcasting to views containing a lifetime.
 pub trait MessageType {
     /// The message view's type, which may have a lifetime.
     type Target<'a>;
@@ -99,37 +118,6 @@ impl dyn RecvMessage + '_ {
             }
         }
     }
-}
-
-/// ClientResponseStreamItem represents an item in a response stream from the client's view.
-///
-/// A response stream must always contain items exactly as follows:
-///
-/// [Headers *Message] Trailers *StreamClosed
-///
-/// That is: optionally, a Headers value and any number of Message values
-/// (including zero), followed by a required Trailers value.  A response stream
-/// should not be used after Trailers, but reads should return StreamClosed if
-/// it is.
-#[derive(Debug, Clone)]
-pub enum ClientResponseStreamItem {
-    /// Indicates the headers for the stream.
-    Headers(ResponseHeaders),
-    /// Indicates a message on the stream.
-    Message,
-    /// Indicates trailers were received on the stream and includes the trailers.
-    Trailers(Trailers),
-    /// Indicates the response stream was closed.  Trailers must have been
-    /// provided before this value may be used.
-    StreamClosed,
-}
-
-/// The server's view of a ResponseStream in a SendStream, using references to avoid allocations.
-pub enum ServerResponseStreamItem<'a> {
-    /// Indicates the headers for the stream.
-    Headers(ResponseHeaders),
-    /// Indicates a message on the stream.
-    Message(&'a dyn SendMessage),
 }
 
 /// Contains all information transmitted in the response headers of an RPC.

@@ -147,13 +147,15 @@ impl ChannelCredentials for LocalChannelCredentials {
     }
 }
 
-/// An implementation of [`ServerCredentials`] for local connections.
+/// An implementation of [`ServerCredentials`] for local connections to pair
+/// with a client using [`LocalChannelCredentials`].
 #[derive(Debug, Clone, Default)]
 pub struct LocalServerCredentials {
     _private: (),
 }
 
 impl LocalServerCredentials {
+    /// Creates a new instance of the server credentials.
     pub fn new() -> Self {
         Self { _private: () }
     }

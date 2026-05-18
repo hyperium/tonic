@@ -43,6 +43,7 @@ use crate::client::DynRecvStream as ClientDynRecvStream;
 use crate::client::DynSendStream as ClientDynSendStream;
 use crate::client::Invoke;
 use crate::client::RecvStream as ClientRecvStream;
+use crate::client::ResponseStreamItem;
 use crate::client::SendOptions as ClientSendOptions;
 use crate::client::SendStream as ClientSendStream;
 use crate::client::name_resolution::Address;
@@ -59,12 +60,10 @@ use crate::client::transport::GLOBAL_TRANSPORT_REGISTRY;
 use crate::client::transport::SecurityOpts;
 use crate::client::transport::Transport;
 use crate::client::transport::TransportOptions;
-use crate::core::ClientResponseStreamItem;
 use crate::core::RecvMessage;
 use crate::core::RequestHeaders;
 use crate::core::ResponseHeaders;
 use crate::core::SendMessage;
-use crate::core::ServerResponseStreamItem;
 use crate::core::Trailers;
 use crate::credentials::SecurityLevel;
 use crate::credentials::client::ClientConnectionSecurityContext;
@@ -75,6 +74,7 @@ use crate::rt::GrpcRuntime;
 use crate::server::Call as ServerCall;
 use crate::server::Listener as ServerListener;
 use crate::server::RecvStream as ServerRecvStream;
+use crate::server::ResponseStreamItem as ServerResponseStreamItem;
 use crate::server::SendOptions as ServerSendOptions;
 use crate::server::SendStream as ServerSendStream;
 
@@ -309,19 +309,19 @@ pub struct InMemoryClientRecvStream {
 }
 
 impl ClientRecvStream for InMemoryClientRecvStream {
-    async fn next(&mut self, msg: &mut dyn RecvMessage) -> ClientResponseStreamItem {
+    async fn recv(&mut self, msg: &mut dyn RecvMessage) -> ResponseStreamItem {
         match self.rx.recv().await {
-            Some(InMemoryResponseStreamItem::Headers(h)) => ClientResponseStreamItem::Headers(h),
+            Some(InMemoryResponseStreamItem::Headers(h)) => ResponseStreamItem::Headers(h),
             Some(InMemoryResponseStreamItem::Message(mut buf)) => {
                 msg.decode(&mut buf).unwrap();
-                ClientResponseStreamItem::Message
+                ResponseStreamItem::Message
             }
             _ => {
                 if let Some(trailer_rx) = self.trailer_rx.take() {
                     match trailer_rx.await {
-                        Ok(trailers) => return ClientResponseStreamItem::Trailers(trailers),
+                        Ok(trailers) => return ResponseStreamItem::Trailers(trailers),
                         Err(_) => {
-                            return ClientResponseStreamItem::Trailers(Trailers::new(Err(
+                            return ResponseStreamItem::Trailers(Trailers::new(Err(
                                 StatusError::new(
                                     StatusCodeError::Internal,
                                     "stream ended without trailers in in-memory transport",
@@ -330,7 +330,7 @@ impl ClientRecvStream for InMemoryClientRecvStream {
                         }
                     }
                 }
-                ClientResponseStreamItem::StreamClosed
+                ResponseStreamItem::StreamClosed
             }
         }
     }
@@ -474,10 +474,10 @@ mod tests {
         };
 
         let mut msg = NopRecvMessage;
-        let item = stream.next(&mut msg).await;
+        let item = stream.recv(&mut msg).await;
 
         match item {
-            ClientResponseStreamItem::Trailers(t) => {
+            ResponseStreamItem::Trailers(t) => {
                 assert_eq!(
                     t.status().as_ref().unwrap_err().code(),
                     crate::StatusCodeError::Internal

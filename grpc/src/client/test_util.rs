@@ -34,9 +34,9 @@ use crate::client::CallOptions;
 use crate::client::Invoke;
 use crate::client::InvokeOnce;
 use crate::client::RecvStream;
+use crate::client::ResponseStreamItem;
 use crate::client::SendOptions;
 use crate::client::SendStream;
-use crate::core::ClientResponseStreamItem;
 use crate::core::RecvMessage;
 use crate::core::RequestHeaders;
 use crate::core::SendMessage;
@@ -49,8 +49,8 @@ impl SendStream for NopStream {
     }
 }
 impl RecvStream for NopStream {
-    async fn next(&mut self, _msg: &mut dyn RecvMessage) -> ClientResponseStreamItem {
-        ClientResponseStreamItem::StreamClosed
+    async fn recv(&mut self, _msg: &mut dyn RecvMessage) -> ResponseStreamItem {
+        ResponseStreamItem::StreamClosed
     }
 }
 
@@ -126,11 +126,11 @@ impl<'a> SendMessage for ByteSendMsg<'a> {
 #[derive(Clone)]
 pub(crate) struct MockInvoker {
     pub req_headers: Arc<Mutex<Option<RequestHeaders>>>,
-    pub resp_tx: broadcast::Sender<ClientResponseStreamItem>,
+    pub resp_tx: broadcast::Sender<ResponseStreamItem>,
     pub req_tx: mpsc::Sender<(Bytes, SendOptions)>,
 }
 pub(crate) struct MockInvokerController {
-    pub resp_tx: broadcast::Sender<ClientResponseStreamItem>,
+    pub resp_tx: broadcast::Sender<ResponseStreamItem>,
     pub req_rx: mpsc::Receiver<(Bytes, SendOptions)>,
 }
 impl MockInvoker {
@@ -155,7 +155,7 @@ impl MockInvokerController {
         self.req_rx.recv().await.unwrap()
     }
     /// Causes the next `RecvStream::next` call to return `item`.
-    pub async fn send_resp(&mut self, item: ClientResponseStreamItem) {
+    pub async fn send_resp(&mut self, item: ResponseStreamItem) {
         self.resp_tx.send(item).unwrap();
     }
 }
@@ -190,12 +190,12 @@ impl SendStream for MockSendStream {
 }
 
 /// Implements the RecvStream for MockInvoker.
-pub(crate) struct MockRecvStream(pub broadcast::Receiver<ClientResponseStreamItem>);
+pub(crate) struct MockRecvStream(pub broadcast::Receiver<ResponseStreamItem>);
 impl RecvStream for MockRecvStream {
-    async fn next(&mut self, _msg: &mut dyn RecvMessage) -> ClientResponseStreamItem {
+    async fn recv(&mut self, _msg: &mut dyn RecvMessage) -> ResponseStreamItem {
         match self.0.recv().await {
             Ok(item) => item,
-            Err(_) => ClientResponseStreamItem::StreamClosed,
+            Err(_) => ResponseStreamItem::StreamClosed,
         }
     }
 }

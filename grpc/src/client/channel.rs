@@ -22,6 +22,8 @@
  *
  */
 
+//! The client-side gRPC Channel implementation.
+
 use core::panic;
 use std::error::Error;
 use std::mem;
@@ -87,17 +89,18 @@ use crate::rt::GrpcEndpoint;
 use crate::rt::GrpcRuntime;
 use crate::rt::default_runtime;
 
+/// Configuration options for [`Channel`]s.
 #[non_exhaustive]
 pub struct ChannelOptions {
-    pub transport_options: Attributes, // ?
-    pub channel_authority: Option<String>,
-    pub connection_backoff: Option<TODO>,
-    pub default_service_config: Option<String>,
-    pub disable_proxy: bool,
-    pub disable_service_config_lookup: bool,
-    pub disable_health_checks: bool,
-    pub max_retry_memory: u32, // ?
-    pub idle_timeout: Duration,
+    pub(crate) transport_options: Attributes, // ?
+    pub(crate) channel_authority: Option<String>,
+    pub(crate) connection_backoff: Option<Todo>,
+    pub(crate) default_service_config: Option<String>,
+    pub(crate) disable_proxy: bool,
+    pub(crate) disable_service_config_lookup: bool,
+    pub(crate) disable_health_checks: bool,
+    pub(crate) max_retry_memory: u32, // ?
+    pub(crate) idle_timeout: Duration,
     // TODO: pub transport_registry: Option<TransportRegistry>,
     // TODO: pub name_resolver_registry: Option<ResolverRegistry>,
     // TODO: pub lb_policy_registry: Option<LbPolicyRegistry>,
@@ -118,7 +121,7 @@ pub struct ChannelOptions {
     // expressed through a trait that applies a mutation to a request.  We'd
     // apply all those mutations before the user's options so the user's options
     // would override the defaults, or so the defaults would occur first.
-    pub default_request_extensions: Vec<Box<TODO>>, // ??
+    pub(crate) default_request_extensions: Vec<Todo>, // ??
 }
 
 impl Default for ChannelOptions {
@@ -139,31 +142,31 @@ impl Default for ChannelOptions {
 }
 
 impl ChannelOptions {
-    pub fn transport_options(self, transport_options: TODO) -> Self {
-        todo!(); // add to existing options.
-    }
+    /// Overrides the channel authority, which is used for credentials
+    /// handshaking and HTTP virtual hosting.
     pub fn override_authority(self, authority: impl Into<String>) -> Self {
         Self {
             channel_authority: Some(authority.into()),
             ..self
         }
     }
-    // etc
 }
 
-// All of Channel needs to be thread-safe.  Arc<inner>?  Or give out
-// Arc<Channel> from constructor?
+/// A virtual, persistent connection to a gRPC service.
+///
+/// A `Channel` begins in an "idle" state and connects when the first RPC is
+/// made or its [`get_state`](Channel::get_state) method is called.
+///
+/// To perform RPCs, use the [`Invoke`] trait implemented by `Channel`.
 #[derive(Clone)]
 pub struct Channel {
     inner: Arc<PersistentChannel>,
 }
 
 impl Channel {
-    /// Constructs a new gRPC channel.  A gRPC channel is a virtual, persistent
-    /// connection to a service.  Channel creation cannot fail, but if the
+    /// Constructs a new gRPC channel.  Channel creation cannot fail, but if the
     /// target string is invalid, the returned channel will never connect, and
     /// will fail all RPCs.
-    // TODO: should this return a Result instead?
     pub fn new<C>(target: impl Into<String>, credentials: Arc<C>, options: ChannelOptions) -> Self
     where
         C: ChannelCredentials,
@@ -190,10 +193,11 @@ impl Channel {
 
     // TODO: enter_idle(&self) and graceful_stop()?
 
-    /// Returns the current state of the channel. If there is no underlying active channel,
-    /// returns Idle. If `connect` is true, will create a new active channel.
-    pub fn state(&mut self, connect: bool) -> ConnectivityState {
-        self.inner.state(connect)
+    /// Returns the current state of the channel. If `connect` is true and the
+    /// state was [`Idle`](ConnectivityState::Idle), the channel will attempt to
+    /// create connections.
+    pub fn get_state(&mut self, connect: bool) -> ConnectivityState {
+        self.inner.get_state(connect)
     }
 
     /// Waits for the state of the channel to change from source.  Times out and
@@ -271,7 +275,7 @@ impl PersistentChannel {
 
     /// Returns the current state of the channel. If there is no underlying active channel,
     /// returns Idle. If `connect` is true, will create a new active channel iff none exists.
-    fn state(&self, connect: bool) -> ConnectivityState {
+    fn get_state(&self, connect: bool) -> ConnectivityState {
         // Done this away to avoid potentially locking twice.
         let active_channel = if connect {
             self.get_active_channel()
@@ -562,7 +566,7 @@ pub(super) enum WorkQueueItem {
     ResolveNow,
 }
 
-pub struct TODO;
+pub(crate) struct Todo;
 
 // Enables multiple receivers to view data output from a single producer.
 // Producer calls update.  Consumers call iter() and call next() until they find

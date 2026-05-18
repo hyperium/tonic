@@ -22,6 +22,8 @@
  *
  */
 
+//! Definitions and implementations for call credentials (e.g. OAuth2).
+
 use std::fmt::Debug;
 use std::sync::Arc;
 
@@ -32,7 +34,7 @@ use crate::attributes::Attributes;
 use crate::credentials::SecurityLevel;
 use crate::metadata::MetadataMap;
 
-/// Details regarding the call.
+/// Details regarding the call, e.g. URL and method.
 ///
 /// The fully qualified method name is constructed as:
 /// `service_url` + "/" + `method_name`
@@ -42,6 +44,8 @@ pub struct CallDetails {
 }
 
 impl CallDetails {
+    /// Creates a new instance containing the base URL and method name suffix
+    /// (e.g., `Method` in `package.Service/Method`).
     pub fn new(service_url: impl Into<String>, method_name: impl Into<String>) -> Self {
         Self {
             service_url: service_url.into(),
@@ -60,6 +64,7 @@ impl CallDetails {
     }
 }
 
+/// Details about a connection available to the client.
 pub struct ClientConnectionSecurityInfo {
     security_protocol: &'static str,
     security_level: SecurityLevel,
@@ -68,6 +73,8 @@ pub struct ClientConnectionSecurityInfo {
 }
 
 impl ClientConnectionSecurityInfo {
+    /// Constructs a new instance containing the provided security info.
+    // TODO: make attributes optional by removing from the constructor?
     pub fn new(
         security_protocol: &'static str,
         security_level: SecurityLevel,
@@ -80,21 +87,27 @@ impl ClientConnectionSecurityInfo {
         }
     }
 
+    /// Returns the security protocol for the connection set by the
+    /// [`ChannelCredentials`](super::ChannelCredentials).
     pub fn security_protocol(&self) -> &'static str {
         self.security_protocol
     }
 
+    /// Returns the security level of the connection set by the
+    /// [`ChannelCredentials`](super::ChannelCredentials).
     pub fn security_level(&self) -> SecurityLevel {
         self.security_level
     }
 
+    /// Returns arbitrary data set by the
+    /// [`ChannelCredentials`](super::ChannelCredentials).
     pub fn attributes(&self) -> &Attributes {
         &self.attributes
     }
 }
 
-/// Defines the interface for credentials that need to attach security
-/// information to every individual RPC (e.g., OAuth2 tokens, JWTs).
+/// A trait for credentials that need to attach security information to every
+/// individual RPC (e.g., OAuth2 tokens, JWTs).
 #[async_trait]
 pub trait CallCredentials: Send + Sync + Debug {
     /// Generates the authentication metadata for a specific call.
@@ -120,6 +133,7 @@ pub trait CallCredentials: Send + Sync + Debug {
 
     /// Indicates the minimum transport security level required to send
     /// these credentials.
+    ///
     /// **Default:** Returns [`SecurityLevel::PrivacyAndIntegrity`].
     fn minimum_channel_security_level(&self) -> SecurityLevel {
         SecurityLevel::PrivacyAndIntegrity

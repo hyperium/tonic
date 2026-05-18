@@ -23,14 +23,16 @@
  */
 
 use std::sync::Arc;
+
+use tokio::sync::oneshot;
 use tonic::async_trait;
 
 use crate::client::CallOptions;
 use crate::core::RecvMessage;
 use crate::core::RequestHeaders;
-use crate::core::ServerResponseStreamItem;
+use crate::core::ResponseHeaders;
+use crate::core::SendMessage;
 use crate::core::Trailers;
-use tokio::sync::oneshot;
 
 pub(crate) mod interceptor;
 
@@ -147,6 +149,17 @@ impl RecvStream for BoxedRecvStream {
     }
 }
 
+/// An item in a response stream from the server's view.
+///
+/// These items are sent to the client via a [`SendStream`], using references to
+/// avoid allocations.
+pub enum ResponseStreamItem<'a> {
+    /// Indicates the headers for the stream.
+    Headers(ResponseHeaders),
+    /// Indicates a message on the stream.
+    Message(&'a dyn SendMessage),
+}
+
 /// Represents the sending side of a server stream.  See `ResponseStream`
 /// documentation for information about the different types of items and the
 /// order in which they must be sent.
@@ -163,7 +176,7 @@ pub trait SendStream {
     /// to the SendStream are undefined and data may be lost.
     async fn send<'a>(
         &mut self,
-        item: ServerResponseStreamItem<'a>,
+        item: ResponseStreamItem<'a>,
         options: SendOptions,
     ) -> Result<(), ()>;
 }
@@ -172,7 +185,7 @@ pub trait SendStream {
 trait DynSendStream: Send {
     async fn dyn_send<'a>(
         &mut self,
-        item: ServerResponseStreamItem<'a>,
+        item: ResponseStreamItem<'a>,
         options: SendOptions,
     ) -> Result<(), ()>;
 }
@@ -181,7 +194,7 @@ trait DynSendStream: Send {
 impl<T: SendStream> DynSendStream for T {
     async fn dyn_send<'a>(
         &mut self,
-        item: ServerResponseStreamItem<'a>,
+        item: ResponseStreamItem<'a>,
         options: SendOptions,
     ) -> Result<(), ()> {
         self.send(item, options).await
@@ -191,7 +204,7 @@ impl<T: SendStream> DynSendStream for T {
 impl<'b> SendStream for &mut (dyn DynSendStream + 'b) {
     async fn send<'a>(
         &mut self,
-        item: ServerResponseStreamItem<'a>,
+        item: ResponseStreamItem<'a>,
         options: SendOptions,
     ) -> Result<(), ()> {
         (**self).dyn_send(item, options).await
@@ -201,7 +214,7 @@ impl<'b> SendStream for &mut (dyn DynSendStream + 'b) {
 impl<'b> SendStream for Box<dyn DynSendStream + 'b> {
     async fn send<'a>(
         &mut self,
-        item: ServerResponseStreamItem<'a>,
+        item: ResponseStreamItem<'a>,
         options: SendOptions,
     ) -> Result<(), ()> {
         (**self).dyn_send(item, options).await

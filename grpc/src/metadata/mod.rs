@@ -22,7 +22,17 @@
  *
  */
 
-//! Contains data structures and utilities for handling gRPC custom metadata.
+//! gRPC metadata handling.
+//!
+//! gRPC metadata is a map of keys to values, similar to HTTP headers.  This
+//! module provides types for working with metadata, including ASCII and binary
+//! values.
+//!
+//! # Key Concepts
+//!
+//! - **[`MetadataMap`]:** The main struct for holding metadata.
+//! - **[`MetadataKey`]:** Represents a key in the metadata map.
+//! - **[`MetadataValue`]:** Represents a value in the metadata map.
 
 mod encoding;
 mod key;

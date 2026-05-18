@@ -23,26 +23,44 @@
  */
 
 //! The official Rust implementation of [gRPC], a high performance, open source,
-//! universal RPC framework
+//! universal RPC framework.
 //!
-//! This version is in progress and not recommended for any production use.  All
-//! APIs are unstable.  Proceed at your own risk.
+//! > NOTE: This version is a preview and not recommended for any production
+//! > use.  All APIs are unstable.  Proceed at your own risk.
+//!
+//! # Documentation, Examples, and Getting Started
+//!
+//! Please see [our website] for everything you should need to get started using
+//! gRPC.
+//!
+//! # Feature Flags
+//!
+//! The only currently-supported feature flags are the defaults.
+//!
+//! # Modules
+//!
+//! * [`client`] - Creating and working with gRPC client-side channels
+//! * [`credentials`] - Securing connections and providing access tokens
+//! * [`metadata`] - Data sent with all RPCs typically used by interceptors
+//! * [`core`] - Common types shared between clients and servers
+//! * [`attributes`] - Generic key/value storage used by gRPC plugins
 //!
 //! [gRPC]: https://grpc.io
+//! [our website]: https://grpc.io/docs/languages/rust
 #![allow(dead_code, unused_variables)]
 
 pub mod attributes;
 pub mod client;
 pub mod core;
 pub mod credentials;
-pub mod inmemory;
 pub mod metadata;
-pub mod server;
+
+pub(crate) mod inmemory;
+pub(crate) mod server;
 
 mod macros;
 mod status;
 
-pub use status::ServerStatusErr;
 pub use status::Status;
 pub use status::StatusCodeError;
 pub use status::StatusError;
