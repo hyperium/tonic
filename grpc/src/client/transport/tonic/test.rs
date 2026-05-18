@@ -88,6 +88,7 @@ use crate::metadata::AsciiMetadataKey;
 use crate::metadata::MetadataMap;
 use crate::rt::GrpcRuntime;
 use crate::rt::tokio::TokioRuntime;
+use crate::rt::tracker::TrackedRuntime;
 
 #[derive(Debug)]
 struct MockCallCredentials {
@@ -156,10 +157,11 @@ pub(crate) async fn tonic_transport_rpc() {
         authority: Authority::new("localhost".to_string(), None),
         handshake_info: ClientHandshakeInfo::default(),
     };
+    let (rt, waiter) = TrackedRuntime::new(TokioRuntime::default());
     let (conn, _sec_info, mut disconnection_listener) = builder
         .dyn_connect(
             addr.to_string(),
-            GrpcRuntime::new(TokioRuntime::default()),
+            GrpcRuntime::new(rt),
             &securty_opts,
             &config,
         )
@@ -224,6 +226,8 @@ pub(crate) async fn tonic_transport_rpc() {
         .unwrap();
     assert_eq!(res, Ok(()));
     server_handle.await.unwrap();
+    drop(conn);
+    waiter.wait_for_tasks().await;
 }
 
 #[tokio::test]
@@ -673,10 +677,11 @@ async fn tonic_transport_invalid_base64_headers() {
         authority: Authority::new("localhost".to_string(), None),
         handshake_info: ClientHandshakeInfo::default(),
     };
+    let (rt, waiter) = TrackedRuntime::new(TokioRuntime::default());
     let (conn, _sec_info, _disconnection_listener) = builder
         .dyn_connect(
             addr.to_string(),
-            GrpcRuntime::new(TokioRuntime::default()),
+            GrpcRuntime::new(rt),
             &securty_opts,
             &config,
         )
@@ -715,6 +720,8 @@ async fn tonic_transport_invalid_base64_headers() {
 
     shutdown_notify.notify_one();
     server_handle.await.unwrap();
+    drop(conn);
+    waiter.wait_for_tasks().await;
 }
 
 #[tokio::test]
@@ -748,10 +755,11 @@ async fn tonic_transport_recv_drop_cancels_send() {
         authority: Authority::new("localhost".to_string(), None),
         handshake_info: ClientHandshakeInfo::default(),
     };
+    let (rt, waiter) = TrackedRuntime::new(TokioRuntime::default());
     let (conn, _sec_info, _disconnection_listener) = builder
         .dyn_connect(
             addr.to_string(),
-            GrpcRuntime::new(TokioRuntime::default()),
+            GrpcRuntime::new(rt),
             &securty_opts,
             &config,
         )
@@ -781,6 +789,8 @@ async fn tonic_transport_recv_drop_cancels_send() {
 
     shutdown_notify.notify_one();
     server_handle.await.unwrap();
+    drop(conn);
+    waiter.wait_for_tasks().await;
 }
 
 struct WrappedEchoRequest(EchoRequest);

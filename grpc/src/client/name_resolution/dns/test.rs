@@ -51,8 +51,8 @@ use crate::rt::Runtime;
 use crate::rt::Sleep;
 use crate::rt::TaskHandle;
 use crate::rt::TcpOptions;
-use crate::rt::default_runtime;
 use crate::rt::tokio::TokioRuntime;
+use crate::rt::tracker::TrackedRuntime;
 
 const DEFAULT_TEST_SHORT_TIMEOUT: Duration = Duration::from_millis(10);
 
@@ -178,9 +178,10 @@ pub(crate) async fn dns_basic() {
     let builder = global_registry().get("dns").unwrap();
     let target = &"dns:///localhost:1234".parse().unwrap();
     let (work_scheduler, mut work_rx) = TestWorkScheduler::new_pair();
+    let (rt, waiter) = TrackedRuntime::new(TokioRuntime::default());
     let opts = ResolverOptions {
         authority: "ignored".to_string(),
-        runtime: default_runtime(),
+        runtime: GrpcRuntime::new(rt),
         work_scheduler: work_scheduler.clone(),
     };
     let mut resolver = builder.build(target, opts);
@@ -192,6 +193,9 @@ pub(crate) async fn dns_basic() {
     // A successful endpoint update should be received.
     let update = update_rx.recv().await.unwrap();
     assert!(update.endpoints.unwrap().len() > 1);
+
+    drop(resolver);
+    waiter.wait_for_tasks().await;
 }
 
 #[tokio::test]
@@ -200,9 +204,10 @@ pub(crate) async fn invalid_target() {
     let builder = global_registry().get("dns").unwrap();
     let target = &"dns:///:1234".parse().unwrap();
     let (work_scheduler, mut work_rx) = TestWorkScheduler::new_pair();
+    let (rt, waiter) = TrackedRuntime::new(TokioRuntime::default());
     let opts = ResolverOptions {
         authority: "ignored".to_string(),
-        runtime: default_runtime(),
+        runtime: GrpcRuntime::new(rt),
         work_scheduler: work_scheduler.clone(),
     };
     let mut resolver = builder.build(target, opts);
@@ -220,6 +225,9 @@ pub(crate) async fn invalid_target() {
             .unwrap()
             .contains(&target.to_string())
     );
+
+    drop(resolver);
+    waiter.wait_for_tasks().await;
 }
 
 #[derive(Clone, Debug)]
@@ -277,16 +285,17 @@ pub(crate) async fn dns_lookup_error() {
     let builder = global_registry().get("dns").unwrap();
     let target = &"dns:///grpc.io:1234".parse().unwrap();
     let (work_scheduler, mut work_rx) = TestWorkScheduler::new_pair();
-    let runtime = FakeRuntime {
+    let fake_rt = FakeRuntime {
         inner: TokioRuntime::default(),
         dns: FakeDns {
             latency: Duration::from_secs(0),
             lookup_result: Err("test_error".to_string()),
         },
     };
+    let (rt, waiter) = TrackedRuntime::new(fake_rt);
     let opts = ResolverOptions {
         authority: "ignored".to_string(),
-        runtime: GrpcRuntime::new(runtime),
+        runtime: GrpcRuntime::new(rt),
         work_scheduler: work_scheduler.clone(),
     };
     let mut resolver = builder.build(target, opts);
@@ -298,22 +307,26 @@ pub(crate) async fn dns_lookup_error() {
     // An error endpoint update should be received.
     let update = update_rx.recv().await.unwrap();
     assert!(update.endpoints.unwrap_err().contains("test_error"));
+
+    drop(resolver);
+    waiter.wait_for_tasks().await;
 }
 
 #[tokio::test]
 pub(crate) async fn dns_lookup_timeout() {
     let (work_scheduler, mut work_rx) = TestWorkScheduler::new_pair();
-    let runtime = FakeRuntime {
-        inner: TokioRuntime::default(),
-        dns: FakeDns {
-            latency: Duration::from_secs(20),
-            lookup_result: Ok(Vec::new()),
-        },
+    let fake_dns = FakeDns {
+        latency: Duration::from_secs(20),
+        lookup_result: Ok(Vec::new()),
     };
-    let dns_client = runtime.dns.clone();
+    let fake_rt = FakeRuntime {
+        inner: TokioRuntime::default(),
+        dns: fake_dns.clone(),
+    };
+    let (rt, waiter) = TrackedRuntime::new(fake_rt);
     let opts = ResolverOptions {
         authority: "ignored".to_string(),
-        runtime: GrpcRuntime::new(runtime),
+        runtime: GrpcRuntime::new(rt),
         work_scheduler: work_scheduler.clone(),
     };
     let dns_opts = DnsOptions {
@@ -323,7 +336,7 @@ pub(crate) async fn dns_lookup_timeout() {
         host: "grpc.io".to_string(),
         port: 1234,
     };
-    let mut resolver = DnsResolver::new(Box::new(dns_client), opts, dns_opts);
+    let mut resolver = DnsResolver::new(Box::new(fake_dns), opts, dns_opts);
 
     // Wait for schedule work to be called.
     work_rx.recv().await.unwrap();
@@ -333,14 +346,18 @@ pub(crate) async fn dns_lookup_timeout() {
     // An error endpoint update should be received.
     let update = update_rx.recv().await.unwrap();
     assert!(update.endpoints.unwrap_err().contains("Timed out"));
+
+    drop(resolver);
+    waiter.wait_for_tasks().await;
 }
 
 #[tokio::test]
 pub(crate) async fn rate_limit() {
     let (work_scheduler, mut work_rx) = TestWorkScheduler::new_pair();
+    let (rt, waiter) = TrackedRuntime::new(TokioRuntime::default());
     let opts = ResolverOptions {
         authority: "ignored".to_string(),
-        runtime: default_runtime(),
+        runtime: GrpcRuntime::new(rt),
         work_scheduler: work_scheduler.clone(),
     };
     let dns_client = opts
@@ -376,14 +393,18 @@ pub(crate) async fn rate_limit() {
             }
         };
     }
+
+    drop(resolver);
+    waiter.wait_for_tasks().await;
 }
 
 #[tokio::test]
 pub(crate) async fn re_resolution_after_success() {
     let (work_scheduler, mut work_rx) = TestWorkScheduler::new_pair();
+    let (rt, waiter) = TrackedRuntime::new(TokioRuntime::default());
     let opts = ResolverOptions {
         authority: "ignored".to_string(),
-        runtime: default_runtime(),
+        runtime: GrpcRuntime::new(rt),
         work_scheduler: work_scheduler.clone(),
     };
     let dns_opts = DnsOptions {
@@ -413,14 +434,18 @@ pub(crate) async fn re_resolution_after_success() {
     resolver.work(&mut channel_controller);
     let update = update_rx.recv().await.unwrap();
     assert!(update.endpoints.unwrap().len() > 1);
+
+    drop(resolver);
+    waiter.wait_for_tasks().await;
 }
 
 #[tokio::test]
 pub(crate) async fn backoff_on_error() {
     let (work_scheduler, mut work_rx) = TestWorkScheduler::new_pair();
+    let (rt, waiter) = TrackedRuntime::new(TokioRuntime::default());
     let opts = ResolverOptions {
         authority: "ignored".to_string(),
-        runtime: default_runtime(),
+        runtime: GrpcRuntime::new(rt),
         work_scheduler: work_scheduler.clone(),
     };
     let dns_opts = DnsOptions {
@@ -472,4 +497,6 @@ pub(crate) async fn backoff_on_error() {
             println!("No event received from resolver.");
         }
     };
+    drop(resolver);
+    waiter.wait_for_tasks().await;
 }
