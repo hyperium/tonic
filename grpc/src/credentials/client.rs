@@ -154,7 +154,7 @@ pub struct CompositeChannelCredentials<T> {
 impl<T: ChannelCredentials> CompositeChannelCredentials<T> {
     /// Constructs a new instance that combines `channel_creds` and `call_creds`
     /// so that both can be provided to a [`Channel`](crate::client::Channel).
-    pub fn new(channel_creds: T, call_creds: Arc<dyn CallCredentials>) -> Result<Self, String> {
+    pub fn new(channel_creds: T, call_creds: Arc<dyn CallCredentials>) -> Self {
         let combined_call_creds =
             if let Some(existing) = channel_creds.get_call_credentials(private::Internal) {
                 let composite_creds = CompositeCallCredentials::new(existing.clone(), call_creds);
@@ -163,10 +163,10 @@ impl<T: ChannelCredentials> CompositeChannelCredentials<T> {
                 call_creds
             };
 
-        Ok(Self {
+        Self {
             channel_creds,
             call_creds: combined_call_creds,
-        })
+        }
     }
 }
 
@@ -255,10 +255,10 @@ mod tests {
         });
 
         // First composition.
-        let composite1 = CompositeChannelCredentials::new(channel_creds, call_creds1).unwrap();
+        let composite1 = CompositeChannelCredentials::new(channel_creds, call_creds1);
 
         // Second composition (using the first composite as base).
-        let composite2 = CompositeChannelCredentials::new(composite1, call_creds2).unwrap();
+        let composite2 = CompositeChannelCredentials::new(composite1, call_creds2);
 
         // Verify call credentials
         let combined_call_creds = composite2.get_call_credentials(private::Internal).unwrap();

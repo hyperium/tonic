@@ -454,7 +454,7 @@ async fn grpc_invoke_tonic_unary_tls() {
         min_security_level: SecurityLevel::PrivacyAndIntegrity,
         should_fail: None,
     });
-    let composite_creds = CompositeChannelCredentials::new(creds, call_creds).unwrap();
+    let composite_creds = CompositeChannelCredentials::new(creds, call_creds);
 
     let target = format!("dns:///{}", addr);
     let channel = Channel::new(&target, Arc::new(composite_creds), Default::default());
@@ -508,7 +508,7 @@ async fn grpc_invoke_failure_cases() {
             min_security_level: SecurityLevel::PrivacyAndIntegrity,
             should_fail: None,
         });
-        let composite_creds = CompositeChannelCredentials::new(creds, call_creds).unwrap();
+        let composite_creds = CompositeChannelCredentials::new(creds, call_creds);
         let channel = Channel::new(&target, Arc::new(composite_creds), Default::default());
 
         let trailers = perform_unary_echo_failure(&channel).await;
@@ -529,7 +529,7 @@ async fn grpc_invoke_failure_cases() {
                 "test message",
             )),
         });
-        let composite_creds = CompositeChannelCredentials::new(creds, call_creds).unwrap();
+        let composite_creds = CompositeChannelCredentials::new(creds, call_creds);
         let channel = Channel::new(&target, Arc::new(composite_creds), Default::default());
 
         let trailers = perform_unary_echo_failure(&channel).await;
@@ -558,7 +558,7 @@ async fn grpc_invoke_failure_cases() {
                 "test message",
             )),
         });
-        let composite_creds = CompositeChannelCredentials::new(creds, call_creds).unwrap();
+        let composite_creds = CompositeChannelCredentials::new(creds, call_creds);
         let channel = Channel::new(&target, Arc::new(composite_creds), Default::default());
 
         let trailers = perform_unary_echo_failure(&channel).await;
