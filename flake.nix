@@ -1,14 +1,12 @@
 {
-  description = "Description for the project";
+  description = "Tonic - A native gRPC client & server implementation with async/await support.";
 
   inputs = {
     flake-parts.url = "github:hercules-ci/flake-parts";
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     git-hooks = {
       url = "github:cachix/git-hooks.nix";
-      inputs = {
-        nixpkgs.follows = "nixpkgs";
-      };
+      inputs.nixpkgs.follows = "nixpkgs";
     };
   };
 
