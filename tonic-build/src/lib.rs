@@ -230,6 +230,10 @@ fn generate_doc_comments<T: AsRef<str>>(comments: &[T]) -> TokenStream {
     let mut stream = TokenStream::new();
 
     for comment in comments {
+        let comment = comment.as_ref();
+        if comment.trim().is_empty() {
+            continue;
+        }
         stream.extend(generate_doc_comment(comment));
     }
 
@@ -313,5 +317,54 @@ mod tests {
         ] {
             assert_eq!(naive_snake_case(case.0), case.1)
         }
+    }
+
+    #[test]
+    fn test_generate_doc_comments_skips_empty_and_whitespace() {
+        assert!(generate_doc_comments(&[] as &[&str]).is_empty());
+        assert!(generate_doc_comments(&[""]).is_empty());
+        assert!(generate_doc_comments(&[" "]).is_empty());
+        assert!(generate_doc_comments(&["   ", "\t", "\n"]).is_empty());
+
+        let stream = generate_doc_comments(&["", "hello", " ", "world", ""]);
+        let s = stream.to_string();
+        assert!(s.contains("doc = \" hello\""));
+        assert!(s.contains("doc = \" world\""));
+        assert!(!s.contains("doc = \"\""));
+        assert!(!s.contains("doc = \" \""));
+    }
+
+    #[test]
+    fn test_service_method_with_no_comment_does_not_emit_blank_doc() {
+        let service = manual::Service::builder()
+            .name("Greeter")
+            .package("helloworld")
+            .method(
+                manual::Method::builder()
+                    .name("say_hello")
+                    .route_name("SayHello")
+                    .input_type("crate::HelloRequest")
+                    .output_type("crate::HelloResponse")
+                    .codec_path("crate::JsonCodec")
+                    .build(),
+            )
+            .build();
+
+        let client = CodeGenBuilder::new()
+            .emit_package(true)
+            .compile_well_known_types(false)
+            .build_transport(false)
+            .generate_client(&service, "");
+
+        let server = CodeGenBuilder::new()
+            .emit_package(true)
+            .compile_well_known_types(false)
+            .generate_server(&service, "");
+
+        let client_str = client.to_string();
+        let server_str = server.to_string();
+
+        assert!(!client_str.contains("doc = \"\""));
+        assert!(!server_str.contains("doc = \"\""));
     }
 }
