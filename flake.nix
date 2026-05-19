@@ -83,6 +83,7 @@
               cargo-nextest
               pre-commit
               cmake
+              protobuf
 
               (rustToolchain.withComponents [
                 "cargo"
