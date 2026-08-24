@@ -29,9 +29,7 @@
 //! because they are connection-pool or retry specific and do not apply to gRPC's
 //! A32 request limiter.
 //!
-//! Client-side limiter primitives can consume this config; production CDS wiring
-//! is added separately so validation only advertises support once enforcement is
-//! in the request path.
+//! `ClusterResource` carries this config to the client-side limiter.
 //!
 //! [gRFC A32]: https://github.com/grpc/proposal/blob/master/A32-xds-circuit-breaking.md
 

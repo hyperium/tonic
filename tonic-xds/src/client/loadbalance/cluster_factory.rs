@@ -108,14 +108,15 @@ where
         &self,
         cluster_name: &str,
     ) -> ClusterChannel<Req, <MC::Service as Service<Req>>::Response> {
-        let connector = Arc::new(ClusterConnector::spawn(
+        let connector = ClusterConnector::spawn(
             self.cache.clone(),
             cluster_name.to_string(),
             self.make_connector.clone(),
             #[cfg(feature = "_tls-any")]
             self.cert_registry.clone(),
-        ));
-        let discovery = discover_addresses(self.cache.watch_endpoints(cluster_name));
+        );
+        let discovery =
+            discover_addresses(self.cache.watch_endpoints(cluster_name), connector.clone());
 
         // TODO: apply CDS updates in place rather than rebuilding this channel.
         // The balancer owns the live connections, and the ejection counters are
@@ -139,7 +140,7 @@ where
 
         let lb = LoadBalancer::new(
             discovery,
-            connector,
+            Arc::new(connector),
             picker,
             config,
             self.outcome_classifier.clone(),
@@ -171,6 +172,7 @@ mod tests {
             eds_service_name: None,
             lb_policy: LbPolicy::RoundRobin,
             security: None,
+            circuit_breaking: Default::default(),
         })
     }
 

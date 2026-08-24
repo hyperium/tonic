@@ -75,6 +75,29 @@ use crate::client::loadbalance::outlier_detection::{OutlierDetector, OutlierStat
 use crate::client::loadbalance::pickers::ChannelPicker;
 use crate::xds::resource::outlier_detection::OutlierDetectionConfig;
 
+/// Maps a completed call to an outlier-detection sample: `Some(true)` records
+/// endpoint success, `Some(false)` records endpoint failure, and `None` records
+/// nothing. A response produced locally before the endpoint was called (an A32
+/// circuit-breaker drop) never reaches the classifier, because it says nothing
+/// about the endpoint's health on any transport.
+fn outlier_outcome<Resp: OutcomeSource, Error>(
+    result: &Result<Resp, Error>,
+    classifier: &dyn OutcomeClassifier,
+) -> Option<bool> {
+    let outcome = match result {
+        Ok(response) if response.is_local_pre_endpoint_response() => return None,
+        Ok(response) => response.call_outcome(),
+        Err(_) => CallOutcome::Error,
+    };
+    // The transport-specific classifier decides what this outcome means
+    // for outlier detection; `Ignore` records nothing (e.g. HTTP 4xx).
+    match classifier.classify(outcome) {
+        HealthOutcome::Success => Some(true),
+        HealthOutcome::Failure => Some(false),
+        HealthOutcome::Ignore => None,
+    }
+}
+
 /// Future returned by [`LoadBalancer::call`]. Either resolves
 /// immediately with an [`LbError`] or drives the selected channel.
 pub(crate) enum LbFuture<Resp> {
@@ -404,16 +427,8 @@ where
                 .await
                 .map_err(|e| LbError::LbChannelPollReadyError(e.into()))?;
             let result = svc.call(req).await;
-            // The transport-specific classifier decides what this outcome means
-            // for outlier detection; `Ignore` records nothing (e.g. HTTP 4xx).
-            let outcome = match &result {
-                Ok(response) => response.call_outcome(),
-                Err(_) => CallOutcome::Error,
-            };
-            match classifier.classify(outcome) {
-                HealthOutcome::Success => svc.record_outcome(true),
-                HealthOutcome::Failure => svc.record_outcome(false),
-                HealthOutcome::Ignore => {}
+            if let Some(success) = outlier_outcome(&result, classifier.as_ref()) {
+                svc.record_outcome(success);
             }
             result.map_err(|e| LbError::LbChannelCallError(e.into()))
         }))
@@ -423,6 +438,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::client::circuit_breaking::LocalCircuitBreakerDrop;
     use crate::client::endpoint::Connector;
     use crate::client::loadbalance::pickers::p2c::P2cPicker;
     use crate::common::async_util::BoxFuture;
@@ -677,6 +693,27 @@ mod tests {
 
     fn remove(port: u16) -> DiscoverItem {
         Ok(Change::Remove(addr(port)))
+    }
+
+    #[test]
+    fn circuit_breaker_drops_are_not_endpoint_outlier_outcomes() {
+        let grpc = GrpcOutcomeClassifier;
+        let normal: Result<http::Response<()>, tower::BoxError> = Ok(http::Response::new(()));
+        assert_eq!(outlier_outcome(&normal, &grpc), Some(true));
+
+        let mut dropped_response = http::Response::new(());
+        dropped_response
+            .extensions_mut()
+            .insert(LocalCircuitBreakerDrop);
+        let dropped: Result<http::Response<()>, tower::BoxError> = Ok(dropped_response);
+        assert_eq!(outlier_outcome(&dropped, &grpc), None);
+        // The drop is skipped before classification, so even a classifier that
+        // would count every call as a failure records nothing for it.
+        let always_failure = FixedClassifier(HealthOutcome::Failure);
+        assert_eq!(outlier_outcome(&dropped, &always_failure), None);
+
+        let error: Result<http::Response<()>, tower::BoxError> = Err("endpoint error".into());
+        assert_eq!(outlier_outcome(&error, &grpc), Some(false));
     }
 
     /// A burst of inserts drained in one poll rebuilds the ring exactly once,

@@ -32,22 +32,27 @@
 //!
 //! Two flavours share one diff loop, differing only in what an added endpoint
 //! is turned into: [`EndpointManager::discover_endpoints`] connects it through
-//! a [`Connector`], while [`discover_addresses`] emits a bare [`IdleChannel`]
-//! for balancers that own the connection lifecycle themselves.
+//! the cluster's [`ClusterConnector`], while [`discover_addresses`] emits a
+//! bare [`IdleChannel`] for balancers that own the connection lifecycle
+//! themselves.
+//!
+//! Either way, a snapshot is applied only once the cluster's connector for the
+//! same cache generation is published, and removing the endpoints resource
+//! removes every endpoint, so a re-added cluster starts from scratch.
 
 use std::collections::HashSet;
-use std::sync::Arc;
 
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tower::BoxError;
 use tower::discover::Change;
 
-use crate::client::endpoint::{Connector, EndpointAddress};
+use crate::client::endpoint::EndpointAddress;
 use crate::client::lb::BoxDiscover;
 use crate::client::loadbalance::channel_state::IdleChannel;
 use crate::common::async_util::BoxFuture;
-use crate::xds::cache::CacheWatch;
+use crate::xds::cache::{CacheEvent, CacheWatch};
+use crate::xds::connector::{ClusterConnector, SharedConnector};
 use crate::xds::resource::EndpointsResource;
 
 /// Buffer capacity for the endpoint change channel between the diff loop
@@ -59,15 +64,14 @@ const ENDPOINT_CHANNEL_CAPACITY: usize = 64;
 /// `EndpointManager` is a pure diff-and-connect component: the caller
 /// (typically `XdsClusterDiscovery`) obtains a [`CacheWatch`] from the
 /// [`XdsCache`](crate::xds::cache::XdsCache) and passes it here, plus the
-/// [`Connector`] used to establish each newly-discovered endpoint. Keeping the
-/// connector current across CDS updates is the connector's own concern (see
-/// [`ClusterConnector`](crate::xds::connector::ClusterConnector)).
+/// cluster's [`ClusterConnector`], which supplies the connector for each
+/// snapshot's generation.
 pub(crate) struct EndpointManager<S: Send + 'static> {
-    connector: Arc<dyn Connector<Service = S> + Send + Sync>,
+    connector: ClusterConnector<S>,
 }
 
 impl<S: Send + 'static> EndpointManager<S> {
-    pub(crate) fn new(connector: Arc<dyn Connector<Service = S> + Send + Sync>) -> Self {
+    pub(crate) fn new(connector: ClusterConnector<S>) -> Self {
         Self { connector }
     }
 
@@ -77,7 +81,7 @@ impl<S: Send + 'static> EndpointManager<S> {
     /// emitting `Change::Insert` for new endpoints and `Change::Remove`
     /// for removed ones.
     ///
-    /// Each inserted endpoint is connected through the [`Connector`], so it
+    /// Each inserted endpoint is connected through the cluster's connector, so it
     /// reaches the balancer already established. A CDS update therefore only
     /// reaches endpoints discovered after it: channels already handed out keep
     /// the connection (and any TLS session) they were created with.
@@ -85,8 +89,9 @@ impl<S: Send + 'static> EndpointManager<S> {
         &self,
         watch: CacheWatch<EndpointsResource>,
     ) -> BoxDiscover<EndpointAddress, S> {
-        let connector = self.connector.clone();
-        spawn_diff_loop(watch, move |addr| connector.connect(addr))
+        spawn_diff_loop(watch, self.connector.clone(), |connector, addr| {
+            connector.connect(addr)
+        })
     }
 }
 
@@ -95,11 +100,14 @@ impl<S: Send + 'static> EndpointManager<S> {
 /// Each added endpoint is emitted as an [`IdleChannel`] — the initial state of
 /// the load balancer's channel state machine — without connecting. For
 /// balancers that drive connect / eject / reconnect themselves and so need the
-/// address rather than a live channel.
-pub(crate) fn discover_addresses(
+/// address rather than a live channel. `connector` only gates each snapshot on
+/// its generation's connector being published; connecting is left to the
+/// balancer.
+pub(crate) fn discover_addresses<C: Send + 'static>(
     watch: CacheWatch<EndpointsResource>,
+    connector: ClusterConnector<C>,
 ) -> BoxDiscover<EndpointAddress, IdleChannel> {
-    spawn_diff_loop(watch, |addr| {
+    spawn_diff_loop(watch, connector, |_, addr| {
         let channel = IdleChannel::new(addr.clone());
         Box::pin(async move { channel })
     })
@@ -107,45 +115,91 @@ pub(crate) fn discover_addresses(
 
 /// Spawns the shared diff loop and returns the change stream it feeds.
 ///
-/// The spawned task exits naturally when either:
-/// - The `CacheWatch` closes (`cache.remove_endpoints()` drops the watch sender)
-/// - The receiver is dropped (consumer no longer reading `Change` events)
-fn spawn_diff_loop<S, F>(
+/// The spawned task exits when the cache or the consumer is dropped.
+fn spawn_diff_loop<C, S, F>(
     watch: CacheWatch<EndpointsResource>,
+    connector: ClusterConnector<C>,
     make_service: F,
 ) -> BoxDiscover<EndpointAddress, S>
 where
+    C: Send + 'static,
     S: Send + 'static,
-    F: Fn(&EndpointAddress) -> BoxFuture<S> + Send + 'static,
+    F: Fn(&SharedConnector<C>, &EndpointAddress) -> BoxFuture<S> + Send + 'static,
 {
     let (tx, rx) = mpsc::channel(ENDPOINT_CHANNEL_CAPACITY);
-    tokio::spawn(diff_loop(watch, make_service, tx));
+    tokio::spawn(diff_loop(watch, connector, make_service, tx));
     Box::pin(ReceiverStream::new(rx))
 }
 
 /// Background task: watches endpoint snapshots and emits incremental changes.
 ///
 /// Each time a new [`EndpointsResource`] arrives from the cache, we diff
-/// `healthy_endpoints()` against the previous set and emit `Insert` for
-/// new endpoints followed by `Remove` for gone ones.
-async fn diff_loop<S, F>(
+/// `healthy_endpoints()` against the endpoints already emitted and emit
+/// `Insert` for new endpoints followed by `Remove` for gone ones. A snapshot
+/// superseded while it is being applied is abandoned part-way; the next one is
+/// diffed against what was actually emitted.
+async fn diff_loop<C, S, F>(
     mut watch: CacheWatch<EndpointsResource>,
+    connector: ClusterConnector<C>,
     make_service: F,
     tx: mpsc::Sender<Result<Change<EndpointAddress, S>, BoxError>>,
 ) where
+    C: Send + 'static,
     S: Send + 'static,
-    F: Fn(&EndpointAddress) -> BoxFuture<S>,
+    F: Fn(&SharedConnector<C>, &EndpointAddress) -> BoxFuture<S>,
 {
     let mut active: HashSet<EndpointAddress> = HashSet::new();
 
-    while let Some(endpoints) = watch.next().await {
+    'events: loop {
+        let event = tokio::select! {
+            _ = tx.closed() => return,
+            event = watch.next_event() => event,
+        };
+        let (generation, revision, endpoints) = match event {
+            None => return,
+            Some(CacheEvent::Removed { .. }) => {
+                for removed in active.drain() {
+                    if tx.send(Ok(Change::Remove(removed))).await.is_err() {
+                        return;
+                    }
+                }
+                continue;
+            }
+            Some(CacheEvent::Resource {
+                generation,
+                revision,
+                resource,
+            }) => (generation, revision, resource),
+        };
+
+        let cluster_connector = tokio::select! {
+            _ = tx.closed() => return,
+            connector = connector.connector_for_generation(generation) => connector,
+        };
+        // `None`: the cluster was removed after this snapshot was written, and
+        // the endpoints removal that follows supersedes it.
+        let Some(cluster_connector) = cluster_connector else {
+            continue;
+        };
+        if watch.current_revision() != revision {
+            continue;
+        }
+
         let new_set: HashSet<EndpointAddress> = endpoints
             .healthy_endpoints()
             .map(|ep| ep.address.clone())
             .collect();
+        let added: Vec<_> = new_set.difference(&active).cloned().collect();
+        let removed: Vec<_> = active.difference(&new_set).cloned().collect();
 
-        for added in new_set.difference(&active) {
-            let svc = make_service(added).await;
+        for added in added {
+            if watch.current_revision() != revision {
+                continue 'events;
+            }
+            let svc = make_service(&cluster_connector, &added).await;
+            if watch.current_revision() != revision {
+                continue 'events;
+            }
             if tx
                 .send(Ok(Change::Insert(added.clone(), svc)))
                 .await
@@ -153,24 +207,32 @@ async fn diff_loop<S, F>(
             {
                 return;
             }
+            active.insert(added);
         }
 
-        for removed in active.difference(&new_set) {
+        for removed in removed {
+            if watch.current_revision() != revision {
+                continue 'events;
+            }
             if tx.send(Ok(Change::Remove(removed.clone()))).await.is_err() {
                 return;
             }
+            active.remove(&removed);
         }
-
-        active = new_set;
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::client::endpoint::Connector;
     use crate::common::async_util::BoxFuture;
     use crate::xds::cache::XdsCache;
+    use crate::xds::connector::ConnectorState;
     use crate::xds::resource::endpoints::{HealthStatus, LocalityEndpoints, ResolvedEndpoint};
+    use std::sync::Arc;
+    use std::time::Duration;
+    use tokio::sync::watch;
     use tokio_stream::StreamExt;
 
     /// Test [`Connector`] that returns the address as its `Service` (just a
@@ -185,8 +247,49 @@ mod tests {
         }
     }
 
-    fn test_connector() -> Arc<dyn Connector<Service = String> + Send + Sync> {
+    fn string_connector() -> SharedConnector<String> {
         Arc::new(StringConnector)
+    }
+
+    /// A cluster connector holding a connector for `generation`, plus the
+    /// sender that publishes later generations in place of a CDS watch.
+    fn test_connector_channel(
+        generation: u64,
+    ) -> (
+        watch::Sender<ConnectorState<String>>,
+        ClusterConnector<String>,
+    ) {
+        let (tx, rx) = watch::channel(ConnectorState::new(generation, Some(string_connector())));
+        (tx, ClusterConnector::from_receiver("c1", rx))
+    }
+
+    fn test_connector() -> ClusterConnector<String> {
+        test_connector_channel(0).1
+    }
+
+    async fn expect_insert<S>(stream: &mut BoxDiscover<EndpointAddress, S>, expected: &str) {
+        match stream.next().await.unwrap().unwrap() {
+            Change::Insert(addr, _) => assert_eq!(addr.to_string(), expected),
+            Change::Remove(addr) => panic!("expected Insert of {expected}, got Remove of {addr}"),
+        }
+    }
+
+    async fn expect_remove<S>(stream: &mut BoxDiscover<EndpointAddress, S>, expected: &str) {
+        match stream.next().await.unwrap().unwrap() {
+            Change::Remove(addr) => assert_eq!(addr.to_string(), expected),
+            Change::Insert(addr, _) => {
+                panic!("expected Remove of {expected}, got Insert of {addr}")
+            }
+        }
+    }
+
+    async fn expect_idle<S>(stream: &mut BoxDiscover<EndpointAddress, S>) {
+        assert!(
+            tokio::time::timeout(Duration::from_millis(20), stream.next())
+                .await
+                .is_err(),
+            "expected no endpoint change",
+        );
     }
 
     fn make_endpoints(cluster: &str, addrs: &[(&str, u16)]) -> Arc<EndpointsResource> {
@@ -308,18 +411,81 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn cache_removal_closes_stream() {
+    async fn cache_removal_clears_endpoints_and_readd_recovers() {
         let cache = XdsCache::new();
-        let manager = EndpointManager::new(test_connector());
+        let (connector_tx, connector) = test_connector_channel(0);
+        let manager = EndpointManager::new(connector);
 
         cache.update_endpoints("c1", make_endpoints("c1", &[("10.0.0.1", 8080)]));
 
         let mut stream = manager.discover_endpoints(cache.watch_endpoints("c1"));
-        let _ = stream.next().await; // consume initial
+        expect_insert(&mut stream, "10.0.0.1:8080").await;
 
         cache.remove_endpoints("c1");
+        expect_remove(&mut stream, "10.0.0.1:8080").await;
 
-        assert!(stream.next().await.is_none());
+        connector_tx.send_replace(ConnectorState::new(1, Some(string_connector())));
+        cache.update_endpoints("c1", make_endpoints("c1", &[("10.0.0.1", 8080)]));
+        expect_insert(&mut stream, "10.0.0.1:8080").await;
+    }
+
+    #[tokio::test]
+    async fn readded_endpoints_wait_for_matching_connector_generation() {
+        let cache = XdsCache::new();
+        let (connector_tx, connector) = test_connector_channel(0);
+        let manager = EndpointManager::new(connector);
+        cache.update_endpoints("c1", make_endpoints("c1", &[("10.0.0.1", 8080)]));
+        let mut stream = manager.discover_endpoints(cache.watch_endpoints("c1"));
+        expect_insert(&mut stream, "10.0.0.1:8080").await;
+
+        cache.remove_endpoints("c1");
+        cache.update_endpoints("c1", make_endpoints("c1", &[("10.0.0.2", 8080)]));
+        expect_remove(&mut stream, "10.0.0.1:8080").await;
+        // The connector still belongs to the removed generation.
+        expect_idle(&mut stream).await;
+
+        cache.update_endpoints("c1", make_endpoints("c1", &[("10.0.0.3", 8080)]));
+        connector_tx.send_replace(ConnectorState::new(1, Some(string_connector())));
+        expect_insert(&mut stream, "10.0.0.3:8080").await;
+    }
+
+    #[tokio::test]
+    async fn snapshot_superseded_by_cluster_removal_is_skipped() {
+        let cache = XdsCache::new();
+        let (connector_tx, connector) = test_connector_channel(0);
+        connector_tx.send_replace(ConnectorState::new(0, None));
+        let manager = EndpointManager::new(connector);
+        cache.update_endpoints("c1", make_endpoints("c1", &[("10.0.0.1", 8080)]));
+        let mut stream = manager.discover_endpoints(cache.watch_endpoints("c1"));
+        expect_idle(&mut stream).await;
+
+        // CDS removal advances the connector past the pending snapshot, which
+        // is dropped rather than connected once the cluster is re-added.
+        connector_tx.send_replace(ConnectorState::new(1, None));
+        cache.remove_endpoints("c1");
+        connector_tx.send_replace(ConnectorState::new(1, Some(string_connector())));
+        expect_idle(&mut stream).await;
+
+        cache.update_endpoints("c1", make_endpoints("c1", &[("10.0.0.2", 8080)]));
+        expect_insert(&mut stream, "10.0.0.2:8080").await;
+    }
+
+    /// The address-only flavour shares the diff loop, so it gets the same
+    /// generation gating and removal handling.
+    #[tokio::test]
+    async fn address_discovery_waits_for_connector_and_clears_on_removal() {
+        let cache = XdsCache::new();
+        let (connector_tx, connector) = test_connector_channel(0);
+        connector_tx.send_replace(ConnectorState::new(0, None));
+        cache.update_endpoints("c1", make_endpoints("c1", &[("10.0.0.1", 8080)]));
+        let mut stream = discover_addresses(cache.watch_endpoints("c1"), connector);
+        expect_idle(&mut stream).await;
+
+        connector_tx.send_replace(ConnectorState::new(0, Some(string_connector())));
+        expect_insert(&mut stream, "10.0.0.1:8080").await;
+
+        cache.remove_endpoints("c1");
+        expect_remove(&mut stream, "10.0.0.1:8080").await;
     }
 
     #[tokio::test]
