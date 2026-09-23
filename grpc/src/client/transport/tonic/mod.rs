@@ -32,7 +32,6 @@ use std::task::Context;
 use std::task::Poll;
 
 use bytes::Buf;
-use bytes::BufMut as _;
 use bytes::Bytes;
 use http::Request as HttpRequest;
 use http::Response as HttpResponse;
@@ -52,10 +51,6 @@ use tonic::Streaming;
 use tonic::body::Body;
 use tonic::client::Grpc;
 use tonic::client::GrpcService;
-use tonic::codec::Codec;
-use tonic::codec::Decoder;
-use tonic::codec::EncodeBuf;
-use tonic::codec::Encoder;
 use tonic::metadata::MetadataMap as TonicMeta;
 use tower::ServiceBuilder;
 use tower::buffer::Buffer;
@@ -84,6 +79,7 @@ use crate::client::transport::SecurityOpts;
 use crate::client::transport::Transport;
 use crate::client::transport::TransportOptions;
 use crate::client::transport::registry::GLOBAL_TRANSPORT_REGISTRY;
+use crate::codec::BufCodec;
 use crate::core::Address;
 use crate::core::ConnectionInfo;
 use crate::core::RecvMessage;
@@ -579,49 +575,5 @@ impl Future for ResponseFuture {
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         Pin::new(&mut self.inner).poll(cx)
-    }
-}
-
-pub(crate) struct BufCodec {}
-
-impl Codec for BufCodec {
-    type Encode = BoxBuf;
-    type Decode = Bytes;
-    type Encoder = BufEncoder;
-    type Decoder = BytesDecoder;
-
-    fn encoder(&mut self) -> Self::Encoder {
-        BufEncoder {}
-    }
-
-    fn decoder(&mut self) -> Self::Decoder {
-        BytesDecoder {}
-    }
-}
-
-pub struct BufEncoder {}
-
-impl Encoder for BufEncoder {
-    type Item = BoxBuf;
-    type Error = TonicStatus;
-
-    fn encode(&mut self, mut item: Self::Item, dst: &mut EncodeBuf<'_>) -> Result<(), Self::Error> {
-        dst.put(&mut *item);
-        Ok(())
-    }
-}
-
-#[derive(Debug)]
-pub struct BytesDecoder {}
-
-impl Decoder for BytesDecoder {
-    type Item = Bytes;
-    type Error = TonicStatus;
-
-    fn decode(
-        &mut self,
-        src: &mut tonic::codec::DecodeBuf<'_>,
-    ) -> Result<Option<Self::Item>, Self::Error> {
-        Ok(Some(src.copy_to_bytes(src.remaining())))
     }
 }
