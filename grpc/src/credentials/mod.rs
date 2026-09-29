@@ -248,6 +248,7 @@ pub(crate) mod common {
 
 /// Contains information about a [`ChannelCredentials`] or
 /// [`ServerCredentials`].
+#[derive(Debug)]
 pub struct ProtocolInfo {
     security_protocol: &'static str,
 }
@@ -255,6 +256,12 @@ pub struct ProtocolInfo {
 impl ProtocolInfo {
     pub(crate) const fn new(security_protocol: &'static str) -> Self {
         Self { security_protocol }
+    }
+
+    #[cfg(feature = "__unstable")]
+    #[doc(hidden)]
+    pub const fn unstable_new(security_protocol: &'static str) -> Self {
+        Self::new(security_protocol)
     }
 
     /// Returns the security protocol name currently in use, e.g. "tls".

@@ -393,11 +393,7 @@ mod tests {
 
     #[cfg(feature = "_tls-any")]
     fn security(ca: &str, identity: Option<&str>) -> ClusterSecurityConfig {
-        ClusterSecurityConfig {
-            ca_instance_name: ca.into(),
-            identity_instance_name: identity.map(Into::into),
-            san_matchers: vec![],
-        }
+        ClusterSecurityConfig::for_test(ca, identity)
     }
 
     #[cfg(feature = "_tls-any")]

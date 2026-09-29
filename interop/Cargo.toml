@@ -32,7 +32,6 @@ grpc = {path = "../grpc"}
 # the protobuf crate used in the generated message code, instead of defaulting
 # to `::protobuf`.
 protobuf = { version = "4.35.1-release" }
-tonic-protobuf = {path = "../tonic-protobuf"}
 grpc-protobuf = {path = "../grpc-protobuf"}
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
 

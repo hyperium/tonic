@@ -37,15 +37,12 @@
 //!   `max_ejection_time`); the LB then routes the resolved
 //!   [`UnejectedChannel`] back into the ready set.
 //! - **Housekeeping actor** ([`spawn_actor`]): on each
-//!   `config.interval` tick, runs the failure-percentage algorithm
-//!   over a snapshot of counters, ejects qualifying channels, resets
-//!   counters, and decrements multipliers for non-ejected channels.
-//!   When the ejected-set membership changes, broadcasts a fresh
-//!   snapshot on the `watch` channel; quiet ticks skip the broadcast
-//!   via an O(1) version compare.
-//!
-//! Only the failure-percentage algorithm is implemented; success-rate
-//! (cross-endpoint mean/stdev) is left to a follow-up.
+//!   `config.interval` tick, snapshots and resets every channel's
+//!   counters, runs the success-rate and failure-percentage algorithms
+//!   over that snapshot, ejects qualifying channels, and decrements
+//!   multipliers for non-ejected channels. When the ejected-set membership changes,
+//!   broadcasts a fresh snapshot on the `watch` channel; quiet ticks
+//!   skip the broadcast via an O(1) version compare.
 //!
 //! [gRFC A50]: https://github.com/grpc/proposal/blob/master/A50-xds-outlier-detection.md
 //! [`ReadyChannel`]: crate::client::loadbalance::channel_state::ReadyChannel
@@ -183,14 +180,23 @@ impl OutlierStatsRegistry {
 
     /// One interval-boundary sweep (gRFC A50 §6). Order matters:
     ///
-    /// 1. Snapshot every channel's counters for one consistent pass.
-    /// 2. Run the failure-percentage algorithm against the snapshot:
-    ///    apply `minimum_hosts` to the qualifying population, then
-    ///    `max_ejection_percent`, then per-channel threshold and the
-    ///    enforcement roll.
-    /// 3. Reset counters and decrement multipliers for non-ejected
-    ///    channels.
-    /// 4. If the ejected-set version changed (sweep ejected at least
+    /// 1. Snapshot and reset every channel's counters for one
+    ///    consistent pass (A50 §2 swaps the counter buckets before the
+    ///    algorithms run).
+    /// 2. Run the success-rate algorithm against the snapshot: compute
+    ///    mean and stdev of success rates across qualifying hosts (per
+    ///    `request_volume`), gated by `minimum_hosts`; eject any host
+    ///    whose success rate is below `mean - stdev * stdev_factor /
+    ///    1000`, subject to `max_ejection_percent` and the enforcement
+    ///    roll.
+    /// 3. Run the failure-percentage algorithm against the same
+    ///    snapshot: apply `minimum_hosts` to the qualifying population,
+    ///    then `max_ejection_percent`, then per-channel threshold and
+    ///    the enforcement roll. Hosts already ejected by step 2 are
+    ///    skipped, and the `max_ejection_percent` cap accounts for them.
+    /// 4. Decrement multipliers for non-ejected channels (counters were
+    ///    already reset in step 1).
+    /// 5. If the ejected-set version changed (sweep ejected at least
     ///    one channel, or the LB unejected between ticks), rebuild
     ///    the snapshot of ejected addresses and broadcast it on the
     ///    `watch` channel. Quiet ticks skip the rebuild via an O(1)
@@ -211,10 +217,44 @@ impl OutlierStatsRegistry {
             .iter()
             .map(|e| {
                 let state = e.value().clone();
-                let (s, f) = state.counters();
+                // A50 step 2 swaps (resets) the counter buckets *before* the
+                // algorithms run, so an outcome that lands mid-sweep accrues to
+                // the fresh bucket instead of being dropped by a later reset.
+                let (s, f) = state.snapshot_and_reset();
                 (state, s, f)
             })
             .collect();
+
+        if let Some(sr) = config.success_rate.as_ref() {
+            let request_volume = u64::from(sr.request_volume);
+            // Success rate in 0.0..=100.0 for each qualifying host with
+            // traffic; a zero-total host has no defined rate and is
+            // excluded so mean/stdev stay finite. The threshold is
+            // `mean - stdev * stdev_factor / 1000` (A50 §"success_rate
+            // ejection").
+            let rates: Vec<f64> = snapshots
+                .iter()
+                .filter_map(|(_, s, f)| {
+                    let total = s + f;
+                    (total >= request_volume && total > 0)
+                        .then(|| 100.0 * (*s as f64) / (total as f64))
+                })
+                .collect();
+            if rates.len() >= sr.minimum_hosts as usize && !rates.is_empty() {
+                let n = rates.len() as f64;
+                let mean = rates.iter().sum::<f64>() / n;
+                let variance = rates.iter().map(|r| (r - mean).powi(2)).sum::<f64>() / n;
+                let stdev = variance.sqrt();
+                let threshold = mean - stdev * f64::from(sr.stdev_factor) / 1000.0;
+                self.eject_outliers(
+                    &snapshots,
+                    request_volume,
+                    config.max_ejection_percent.get(),
+                    sr.enforcing_success_rate.get(),
+                    |s, _f, total| 100.0 * (s as f64) / (total as f64) < threshold,
+                );
+            }
+        }
 
         if let Some(fp) = config.failure_percentage.as_ref() {
             let request_volume = u64::from(fp.request_volume);
@@ -223,36 +263,22 @@ impl OutlierStatsRegistry {
                 .filter(|(_, s, f)| s + f >= request_volume)
                 .count() as u64;
             if qualifying >= u64::from(fp.minimum_hosts) {
-                let max_ejections = self.max_ejections(&config);
-                let now = Instant::now();
                 let threshold = u64::from(fp.threshold.get());
-                let enforcing = fp.enforcing_failure_percentage.get();
-                for (state, s, f) in &snapshots {
-                    let total = s + f;
-                    if total < request_volume || state.is_ejected() {
-                        continue;
-                    }
-                    if self.ejected_count.load(Ordering::Relaxed) >= max_ejections {
-                        break;
-                    }
+                self.eject_outliers(
+                    &snapshots,
+                    request_volume,
+                    config.max_ejection_percent.get(),
+                    fp.enforcing_failure_percentage.get(),
                     // failure_pct = 100 * failure / total. A50 uses strict ">".
-                    let failure_pct = 100 * f / total;
-                    if failure_pct <= threshold {
-                        continue;
-                    }
-                    if !roll(enforcing) {
-                        continue;
-                    }
-                    if state.try_eject(now) {
-                        self.ejected_count.fetch_add(1, Ordering::Relaxed);
-                        self.ejected_set_version.fetch_add(1, Ordering::Relaxed);
-                    }
-                }
+                    |_s, f, total| 100 * f / total > threshold,
+                );
             }
         }
 
+        // Counters were already reset when the snapshot was taken (A50 step 2),
+        // so this pass only decrements the ejection-time multiplier for hosts
+        // that are still healthy (A50 step 5).
         for (state, _, _) in &snapshots {
-            state.snapshot_and_reset();
             if !state.is_ejected() {
                 state.decrement_multiplier();
             }
@@ -282,15 +308,86 @@ impl OutlierStatsRegistry {
         }
     }
 
-    /// Resolve `max_ejection_percent` against the current channel
-    /// count. A50 mandates "at least one address regardless of the
-    /// value" — without this floor the default 10% × small clusters
-    /// (e.g. 5 endpoints) rounds to zero and silently disables
-    /// ejection. An empty pool genuinely has nothing to eject.
-    fn max_ejections(&self, config: &OutlierDetectionConfig) -> u64 {
-        let len = self.channels.len() as u64;
-        let cap = len * u64::from(config.max_ejection_percent.get()) / 100;
-        if len > 0 { cap.max(1) } else { 0 }
+    /// Shared ejection pass for one detection algorithm: walks
+    /// `snapshots`, skips idle or already-ejected hosts, respects the
+    /// concurrent-ejection cap, and ejects a host when `is_outlier`
+    /// flags it and the enforcement roll passes. Centralizing the loop
+    /// keeps the success-rate and failure-percentage paths from
+    /// drifting apart.
+    ///
+    /// `is_outlier` sees `(success, failure, total)` for a host with
+    /// `total > 0`, so the per-algorithm ratio never divides by zero.
+    fn eject_outliers(
+        &self,
+        snapshots: &[(Arc<OutlierChannelState>, u64, u64)],
+        request_volume: u64,
+        max_ejection_percent: u8,
+        enforcing: u8,
+        is_outlier: impl Fn(u64, u64, u64) -> bool,
+    ) {
+        let endpoint_count = snapshots.len() as u64;
+        let now = Instant::now();
+        for (state, s, f) in snapshots {
+            let (s, f) = (*s, *f);
+            let total = s + f;
+            if total == 0 || total < request_volume || state.is_ejected() {
+                continue;
+            }
+            if !self.can_eject_more(endpoint_count, max_ejection_percent) {
+                break;
+            }
+            if !is_outlier(s, f, total) {
+                continue;
+            }
+            if !roll(enforcing) {
+                continue;
+            }
+            self.try_eject_with_guard(state, now);
+        }
+    }
+
+    /// Eject `state` only while it is still the registered channel for its
+    /// address. Holding the map entry across `try_eject` closes a race: the
+    /// sweep snapshots a not-yet-ejected host, a concurrent EDS update calls
+    /// `remove_channel` (which decrements nothing, since the host wasn't
+    /// ejected), and the sweep then ejects the stale snapshot. Without the
+    /// guard that bumps `ejected_count` for a host that is already gone, and
+    /// nothing ever balances it — the count stays inflated and throttles future
+    /// ejections. A `ptr_eq` check also rejects an address that was removed and
+    /// re-added as a fresh state.
+    fn try_eject_with_guard(&self, state: &Arc<OutlierChannelState>, now: Instant) {
+        let Some(entry) = self.channels.get(state.addr()) else {
+            return;
+        };
+        if !Arc::ptr_eq(entry.value(), state) {
+            return;
+        }
+        if state.try_eject(now) {
+            self.ejected_count.fetch_add(1, Ordering::Relaxed);
+            self.ejected_set_version.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    /// gRFC A50 checks the ejection cap *before* each ejection: "If the
+    /// percentage of ejected addresses is greater than or equal to
+    /// `max_ejection_percent`, stop." Evaluating it per-ejection rather than
+    /// precomputing `count * pct / 100` matches the spec — a 4-endpoint cluster
+    /// at 30% ejects 2 (0% and 25% are both below 30%), whereas the truncated
+    /// precomputed cap `floor(1.2) = 1` under-ejects. The first ejection is
+    /// always allowed (A50 "at least one address regardless of the value"); an
+    /// empty pool has nothing to eject.
+    ///
+    /// Integer division is exact: `floor(100 * ejected / count) < pct` iff
+    /// `100 * ejected / count < pct`, because `pct` is a whole number.
+    fn can_eject_more(&self, endpoint_count: u64, max_ejection_percent: u8) -> bool {
+        if endpoint_count == 0 {
+            return false;
+        }
+        let ejected = self.ejected_count.load(Ordering::Relaxed);
+        if ejected == 0 {
+            return true;
+        }
+        100 * ejected / endpoint_count < u64::from(max_ejection_percent)
     }
 }
 
@@ -385,7 +482,7 @@ fn roll(pct: u8) -> bool {
 mod tests {
     use super::*;
     use crate::xds::resource::outlier_detection::{
-        FailurePercentageConfig, OutlierDetectionConfig, Percentage,
+        FailurePercentageConfig, OutlierDetectionConfig, Percentage, SuccessRateConfig,
     };
     use std::sync::atomic::Ordering;
     use std::time::Duration;
@@ -434,6 +531,21 @@ mod tests {
         c.failure_percentage = Some(FailurePercentageConfig {
             threshold: pct(threshold),
             enforcing_failure_percentage: pct(100),
+            minimum_hosts,
+            request_volume,
+        });
+        c
+    }
+
+    fn sr_config(
+        stdev_factor: u32,
+        request_volume: u32,
+        minimum_hosts: u32,
+    ) -> OutlierDetectionConfig {
+        let mut c = base_config();
+        c.success_rate = Some(SuccessRateConfig {
+            stdev_factor,
+            enforcing_success_rate: pct(100),
             minimum_hosts,
             request_volume,
         });
@@ -574,7 +686,7 @@ mod tests {
 
     /// A50 §"max_ejection_percent": at least one address may be
     /// ejected regardless of the percentage. 5 hosts × 10% = 0
-    /// arithmetically; the floor still allows 1.
+    /// arithmetically; the first ejection is always allowed.
     #[test]
     fn max_ejection_percent_permits_at_least_one_ejection() {
         let mut config = fp_config(50, 10, 3);
@@ -595,6 +707,27 @@ mod tests {
         assert_eq!(ejected, 1);
     }
 
+    /// A50 re-checks the ejected percentage before each ejection, so a
+    /// 4-endpoint cluster at 30% ejects 2 (0% and 25% are below 30%; 50%
+    /// stops). The old precomputed cap `floor(4 * 30 / 100) = 1` under-ejected.
+    #[test]
+    fn max_ejection_percent_ejects_up_to_a50_boundary() {
+        let mut config = fp_config(50, 10, 3);
+        config.max_ejection_percent = pct(30);
+        let registry = make_registry_only(config);
+
+        let mut all = vec![];
+        for port in 8080..=8083 {
+            let s = registry.add_channel(addr(port));
+            drive(&s, 0, 100);
+            all.push(s);
+        }
+        registry.run_housekeeping();
+
+        let ejected = all.iter().filter(|s| s.is_ejected()).count();
+        assert_eq!(ejected, 2);
+    }
+
     #[test]
     fn remove_channel_decrements_ejected_count() {
         let registry = make_registry_only(fp_config(50, 10, 3));
@@ -612,6 +745,33 @@ mod tests {
 
         registry.remove_channel(&addr(8084));
         assert_eq!(registry.ejected_count.load(Ordering::Relaxed), 0);
+    }
+
+    /// If a host is removed after the sweep snapshots it but before it is
+    /// ejected, the guard must not eject the stale snapshot and leak
+    /// `ejected_count` (nothing would ever balance it).
+    #[test]
+    fn eject_guard_skips_removed_channel() {
+        let registry = make_registry_only(fp_config(50, 10, 3));
+        let a = registry.add_channel(addr(8080));
+        registry.remove_channel(&addr(8080));
+
+        registry.try_eject_with_guard(&a, Instant::now());
+
+        assert!(!a.is_ejected());
+        assert_eq!(registry.ejected_count.load(Ordering::Relaxed), 0);
+    }
+
+    /// The guard still ejects a host that is present and unchanged.
+    #[test]
+    fn eject_guard_ejects_present_channel() {
+        let registry = make_registry_only(fp_config(50, 10, 3));
+        let a = registry.add_channel(addr(8080));
+
+        registry.try_eject_with_guard(&a, Instant::now());
+
+        assert!(a.is_ejected());
+        assert_eq!(registry.ejected_count.load(Ordering::Relaxed), 1);
     }
 
     #[test]
@@ -644,6 +804,163 @@ mod tests {
             !rx.has_changed().unwrap(),
             "expected no broadcast on a sweep with no ejection-set changes"
         );
+    }
+
+    // ----- run_housekeeping: success-rate detection -----
+
+    /// 4 hosts at 100%, 1 at 0%. mean=80, stdev=40, threshold with
+    /// factor 1900 = 80 - 40 * 1.9 = 4 ⇒ the 0% host (rate < 4) is
+    /// ejected; the others are clear.
+    #[test]
+    fn success_rate_ejects_outlier_below_threshold() {
+        let registry = make_registry_only(sr_config(1900, 10, 3));
+        let bad = registry.add_channel(addr(8084));
+        for port in 8080..=8083 {
+            let s = registry.add_channel(addr(port));
+            drive(&s, 100, 0);
+        }
+        drive(&bad, 0, 100);
+        registry.run_housekeeping();
+        assert!(bad.is_ejected());
+        assert_eq!(registry.ejected_count.load(Ordering::Relaxed), 1);
+    }
+
+    /// Uniform population: stdev = 0, threshold = mean, no host is
+    /// strictly below the mean ⇒ nothing ejects.
+    #[test]
+    fn success_rate_uniform_population_does_not_eject() {
+        let registry = make_registry_only(sr_config(1900, 10, 3));
+        let mut all = vec![];
+        for port in 8080..=8084 {
+            let s = registry.add_channel(addr(port));
+            drive(&s, 80, 20);
+            all.push(s);
+        }
+        registry.run_housekeeping();
+        for s in &all {
+            assert!(!s.is_ejected());
+        }
+    }
+
+    /// minimum_hosts boundary: with exactly `minimum_hosts` qualifying hosts the
+    /// gate opens (`>=`) and the lone outlier is ejected. A `>` would skip the
+    /// algorithm and leave it un-ejected, so this pins the comparison — a case
+    /// far below the minimum can't, since `>=` and `>` behave identically there.
+    #[test]
+    fn success_rate_minimum_hosts_boundary_ejects_outlier() {
+        let registry = make_registry_only(sr_config(1000, 10, 3));
+        let bad = registry.add_channel(addr(8082));
+        for port in 8080..=8081 {
+            let s = registry.add_channel(addr(port));
+            drive(&s, 100, 0);
+        }
+        drive(&bad, 0, 100);
+        registry.run_housekeeping();
+        assert!(bad.is_ejected());
+    }
+
+    /// request_volume filter: the low-traffic outlier is excluded from
+    /// both the qualifying population and the candidate list, so even
+    /// though its rate is 0%, it doesn't get ejected.
+    #[test]
+    fn success_rate_request_volume_filters_low_traffic() {
+        let registry = make_registry_only(sr_config(1900, 100, 3));
+        let bad = registry.add_channel(addr(8080));
+        drive(&bad, 0, 5);
+        for port in 8081..=8084 {
+            let s = registry.add_channel(addr(port));
+            drive(&s, 200, 0);
+        }
+        registry.run_housekeeping();
+        assert!(!bad.is_ejected());
+    }
+
+    /// `enforcing_success_rate = 0` skips actual ejection regardless
+    /// of how far below threshold a host falls.
+    #[test]
+    fn success_rate_enforcement_zero_never_ejects() {
+        let mut config = sr_config(1900, 10, 3);
+        config.success_rate.as_mut().unwrap().enforcing_success_rate = pct(0);
+        let registry = make_registry_only(config);
+        let bad = registry.add_channel(addr(8084));
+        for port in 8080..=8083 {
+            let s = registry.add_channel(addr(port));
+            drive(&s, 100, 0);
+        }
+        drive(&bad, 0, 100);
+        registry.run_housekeeping();
+        assert!(!bad.is_ejected());
+    }
+
+    /// stdev_factor 0 collapses the threshold to the mean. 4 hosts at
+    /// 100% + 1 at 0% gives mean=80, so the 0% host (< 80) ejects but
+    /// the 100% hosts (not < 80) don't.
+    #[test]
+    fn success_rate_stdev_factor_zero_ejects_below_mean() {
+        let registry = make_registry_only(sr_config(0, 10, 3));
+        let bad = registry.add_channel(addr(8084));
+        let mut healthy = vec![];
+        for port in 8080..=8083 {
+            let s = registry.add_channel(addr(port));
+            drive(&s, 100, 0);
+            healthy.push(s);
+        }
+        drive(&bad, 0, 100);
+        registry.run_housekeeping();
+        assert!(bad.is_ejected());
+        for s in &healthy {
+            assert!(!s.is_ejected());
+        }
+    }
+
+    /// The cap bounds concurrent ejections below the number of eligible
+    /// outliers: two hosts fall below threshold but `5 × 20% = 1` admits
+    /// only one, so exactly one is ejected.
+    #[test]
+    fn success_rate_max_ejection_percent_caps_concurrent_ejections() {
+        let mut config = sr_config(1000, 10, 3);
+        config.max_ejection_percent = pct(20);
+        let registry = make_registry_only(config);
+        // 3 hosts at 100%, 2 at 0%. Both zero-rate hosts fall below the
+        // threshold, so without the cap both would eject; the cap holds
+        // the second one back.
+        let bad1 = registry.add_channel(addr(8083));
+        let bad2 = registry.add_channel(addr(8084));
+        for port in 8080..=8082 {
+            let s = registry.add_channel(addr(port));
+            drive(&s, 100, 0);
+        }
+        drive(&bad1, 0, 100);
+        drive(&bad2, 0, 100);
+        registry.run_housekeeping();
+        assert_eq!(registry.ejected_count.load(Ordering::Relaxed), 1);
+        assert!(bad1.is_ejected() ^ bad2.is_ejected());
+    }
+
+    /// Both algorithms configured: success-rate runs first and
+    /// catches the cross-host outlier; failure-percentage gets a
+    /// second look but skips already-ejected hosts.
+    #[test]
+    fn success_rate_and_failure_percentage_compose() {
+        let mut config = sr_config(1900, 10, 3);
+        config.failure_percentage = Some(FailurePercentageConfig {
+            threshold: pct(50),
+            enforcing_failure_percentage: pct(100),
+            minimum_hosts: 3,
+            request_volume: 10,
+        });
+        let registry = make_registry_only(config);
+        let bad = registry.add_channel(addr(8084));
+        for port in 8080..=8083 {
+            let s = registry.add_channel(addr(port));
+            drive(&s, 100, 0);
+        }
+        drive(&bad, 0, 100);
+        registry.run_housekeeping();
+        // Success-rate ejected it; failure-percentage saw it as
+        // already-ejected on its pass and didn't double-count.
+        assert!(bad.is_ejected());
+        assert_eq!(registry.ejected_count.load(Ordering::Relaxed), 1);
     }
 
     // ----- Housekeeping -----

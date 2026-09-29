@@ -133,7 +133,39 @@
 //! // let client = MyServiceClient::new(channel);
 //! ```
 //!
-//! ## TLS Security (gRFC A29)
+//! ## ADS TLS Security (gRFC A65)
+//!
+//! The `tls` channel credential secures the control-plane ADS connection. Its
+//! optional config accepts CA roots, an mTLS identity, and a refresh interval:
+//!
+//! ```json
+//! {
+//!   "xds_servers": [{
+//!     "server_uri": "xds.example.com:443",
+//!     "channel_creds": [{
+//!       "type": "tls",
+//!       "config": {
+//!         "ca_certificate_file": "/etc/certs/ca.pem",
+//!         "certificate_file": "/etc/certs/client.pem",
+//!         "private_key_file": "/etc/certs/client.key",
+//!         "refresh_interval": "60s"
+//!       }
+//!     }]
+//!   }]
+//! }
+//! ```
+//!
+//! If `ca_certificate_file` is omitted, system roots are used. The certificate
+//! and private-key fields must be set together; omitting both configures normal
+//! server-authenticated TLS. Files are refreshed in the background (every 600s
+//! by default), and each ADS reconnect uses the latest successfully read
+//! snapshot.
+//!
+//! `google_default` is parsed for bootstrap forward compatibility but is not
+//! currently implemented. Place `tls` or `insecure` after it as a supported
+//! fallback.
+//!
+//! ## Data-plane TLS Security (gRFC A29)
 //!
 //! Upstream data-plane TLS is enabled when:
 //!
@@ -186,6 +218,7 @@
 //! | Weighted cluster traffic splitting | [A28] | Supported |
 //! | Case-insensitive header matching | [A63] | Supported |
 //! | Client-side P2C load balancing | | Supported |
+//! | ADS TLS and mTLS credentials | [A65] | Supported |
 //! | TLS endpoint connections | [A29] | Supported |
 //! | Least-request load balancing | [A48] | Planned |
 //!
@@ -194,6 +227,7 @@
 //! [A29]: https://github.com/grpc/proposal/blob/master/A29-xds-tls-security.md
 //! [A48]: https://github.com/grpc/proposal/blob/master/A48-xds-least-request-lb-policy.md
 //! [A63]: https://github.com/grpc/proposal/blob/master/A63-xds-string-matcher-ignore-case.md
+//! [A65]: https://github.com/grpc/proposal/blob/master/A65-xds-mtls-creds-in-bootstrap.md
 
 pub(crate) mod client;
 pub(crate) mod common;
@@ -216,8 +250,13 @@ pub use shared_http_body::SharedBody;
 pub use xds::bootstrap::{
     BootstrapConfig, BootstrapConfigBuilder, BootstrapError, ChannelCredentialType,
 };
+pub use xds::cert_provider_config::TlsChannelCredentials;
 pub use xds::resource::route_config::{RouteConfigMetadata, TypedMetadata};
 pub use xds::uri::{XdsUri, XdsUriError};
+/// Re-export of the error type returned by
+/// [`ClusterSecurityConfig::from_cluster_bytes`], so callers can name it
+/// without a direct `xds-client` dependency.
+pub use xds_client::Error as XdsError;
 pub use xds_client::TonicCallCredentials;
 
 #[cfg(feature = "_tls-any")]
@@ -228,6 +267,7 @@ pub use client::endpoint::{ClusterTlsConfig, ClusterTlsError};
 pub use rustls::client::danger::ServerCertVerifier;
 #[cfg(feature = "_tls-any")]
 pub use xds::cert_provider::{CertProviderError, CertificateData, CertificateProvider, Identity};
+pub use xds::resource::security::ClusterSecurityConfig;
 
 pub use xds_client::{Instrument, InstrumentKind, KeyValue, MetricsRecorder, StringValue, Value};
 

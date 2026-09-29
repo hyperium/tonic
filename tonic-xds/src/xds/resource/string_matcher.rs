@@ -108,12 +108,12 @@ impl StringMatcher {
     }
 }
 
-fn starts_with_ignore_ascii_case(s: &str, pat: &str) -> bool {
+pub(crate) fn starts_with_ignore_ascii_case(s: &str, pat: &str) -> bool {
     let (s, pat) = (s.as_bytes(), pat.as_bytes());
     s.len() >= pat.len() && s[..pat.len()].eq_ignore_ascii_case(pat)
 }
 
-fn ends_with_ignore_ascii_case(s: &str, pat: &str) -> bool {
+pub(crate) fn ends_with_ignore_ascii_case(s: &str, pat: &str) -> bool {
     let (s, pat) = (s.as_bytes(), pat.as_bytes());
     s.len()
         .checked_sub(pat.len())

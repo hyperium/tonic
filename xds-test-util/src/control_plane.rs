@@ -419,6 +419,26 @@ impl XdsTestControlPlaneService {
             .collect()
     }
 
+    /// Returns true if any active stream is subscribed to `name` under
+    /// `type_url`.
+    ///
+    /// Unlike [`Self::get_subscriber_counts`], this identifies *which* client
+    /// is subscribed, so tests with more than one client connected to the same
+    /// control plane can assert about them individually.
+    #[must_use]
+    pub fn has_subscriber_for(&self, type_url: &AdsTypeUrl, name: &str) -> bool {
+        let state = self
+            .inner
+            .state
+            .lock()
+            .expect("control plane state should not be poisoned");
+        state.subscribers.get(type_url).is_some_and(|streams| {
+            streams
+                .values()
+                .any(|sub| sub.resource_names.contains(name))
+        })
+    }
+
     /// Serves the ADS control plane on an ephemeral `127.0.0.1` port in a
     /// background task.
     ///
@@ -431,11 +451,36 @@ impl XdsTestControlPlaneService {
     ///
     /// Returns an error if binding the ephemeral port fails.
     pub async fn start(&self) -> std::io::Result<RunningControlPlane> {
+        self.serve(Server::builder()).await
+    }
+
+    /// Serves the ADS control plane over TLS on an ephemeral `127.0.0.1` port.
+    ///
+    /// Set `client_ca_root` on `tls` to require client certificates, which
+    /// makes the handshake itself assert that the client presented the
+    /// identity it was configured with (gRFC A65).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the TLS config is rejected or binding the ephemeral
+    /// port fails.
+    #[cfg(any(feature = "tls-ring", feature = "tls-aws-lc"))]
+    pub async fn start_with_tls(
+        &self,
+        tls: tonic::transport::ServerTlsConfig,
+    ) -> std::io::Result<RunningControlPlane> {
+        let builder = Server::builder()
+            .tls_config(tls)
+            .map_err(std::io::Error::other)?;
+        self.serve(builder).await
+    }
+
+    async fn serve(&self, mut builder: Server) -> std::io::Result<RunningControlPlane> {
         let listener = TcpListener::bind("127.0.0.1:0").await?;
         let addr = listener.local_addr()?;
         let service = self.clone();
         let handle = tokio::spawn(
-            Server::builder()
+            builder
                 .add_service(AggregatedDiscoveryServiceServer::new(service.clone()))
                 .serve_with_incoming(TcpListenerStream::new(listener)),
         );

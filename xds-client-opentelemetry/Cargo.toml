@@ -1,7 +1,7 @@
 [package]
 name = "xds-client-opentelemetry"
 description = "OpenTelemetry metrics recorder for xds-client (gRFC A78 XdsClient metrics)"
-version = "0.1.0-alpha.3"
+version = "0.1.0-alpha.4"
 edition = "2024"
 homepage = "https://github.com/grpc/grpc-rust"
 repository = "https://github.com/grpc/grpc-rust"
@@ -13,7 +13,7 @@ publish = true
 workspace = true
 
 [dependencies]
-xds-client = { version = "0.1.0-alpha.3", path = "../xds-client" }
+xds-client = { version = "0.1.0-alpha.4", path = "../xds-client" }
 opentelemetry = { version = "0.32", default-features = false, features = ["metrics"] }
 
 [dev-dependencies]

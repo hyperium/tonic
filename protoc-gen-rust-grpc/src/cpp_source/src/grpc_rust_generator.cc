@@ -179,9 +179,14 @@ public:
 
   explicit Method(const MethodDescriptor *method) : method_(method) {}
 
-  // The name of the method in Rust style.
-  std::string Name() const {
+  // The name of the method in Rust snake-case style.
+  std::string NameSnakeCase() const {
     return rust::RsSafeName(rust::CamelToSnakeCase(method_->name()));
+  };
+
+  // The name of the method in Rust camel-case style.
+  std::string NameCamelCase() const {
+    return rust::RsSafeName(rust::SnakeToUpperCamelCase(method_->name()));
   };
 
   // The fully-qualified name of the method, scope delimited by periods.
@@ -350,14 +355,12 @@ static void GenerateMethods(Printer &printer, const Service &service,
     const std::string request_type = method.RequestName(opts, 1);
     const std::string response_type = method.ResponseName(opts, 1);
     {
-      auto vars =
-          printer.WithVars({{"codec_name", "tonic_protobuf::ProtoCodec"},
-                            {"ident", method.Name()},
-                            {"request", request_type},
-                            {"response", response_type},
-                            {"service_name", service.FullName()},
-                            {"path", FormatMethodPath(service, method)},
-                            {"method_name", method.ProtoFieldName()}});
+      auto vars = printer.WithVars({{"ident", method.NameSnakeCase()},
+                                    {"request", request_type},
+                                    {"response", response_type},
+                                    {"service_name", service.FullName()},
+                                    {"path", FormatMethodPath(service, method)},
+                                    {"method_name", method.ProtoFieldName()}});
 
       if (!method.IsClientStreaming() && !method.IsServerStreaming()) {
         printer.Emit(unary_format);
@@ -427,33 +430,45 @@ static void GenerateTraitMethods(Printer &printer, const Service &service,
                                  const GrpcOpts &opts) {
   static const std::string unary_format = R"rs(
     $method_doc$
-    async fn $name$(&self, request: tonic::Request<$request$>)
-        -> std::result::Result<tonic::Response<$response$>, tonic::Status> {
-        Err(tonic::Status::unimplemented("Not yet implemented"))
+    async fn $name$(
+        &self, 
+        request: $request$View<'_>,
+        response: $response$Mut<'_>,
+    ) -> grpc_protobuf::ServerStatus {
+        Err(grpc_protobuf::ServerStatusError::new(grpc_protobuf::StatusCodeError::Unimplemented, "Not yet implemented"))
     }
   )rs";
 
   static const std::string client_streaming_format = R"rs(
     $method_doc$
-    async fn $name$(&self, request: tonic::Request<tonic::Streaming<$request$>>)
-        -> std::result::Result<tonic::Response<$response$>, tonic::Status> {
-        Err(tonic::Status::unimplemented("Not yet implemented"))
+    async fn $name$(
+        &self, 
+        request: grpc_protobuf::server::GrpcStreamingRequest<$request$>,
+        response: $response$Mut<'_>,
+    ) -> grpc_protobuf::ServerStatus {
+        Err(grpc_protobuf::ServerStatusError::new(grpc_protobuf::StatusCodeError::Unimplemented, "Not yet implemented"))
     }
     )rs";
 
   static const std::string server_streaming_format = R"rs(
     $method_doc$
-    async fn $name$(&self, request: tonic::Request<$request$>)
-        -> std::result::Result<tonic::Response<BoxStream<$response$>>, tonic::Status> {
-        Err(tonic::Status::unimplemented("Not yet implemented"))
+    async fn $name$(
+        &self, 
+        request: $request$View<'_>,
+        responses: grpc_protobuf::server::GrpcStreamingResponse<'_, $response$>,
+    ) -> grpc_protobuf::ServerStatus {
+        Err(grpc_protobuf::ServerStatusError::new(grpc_protobuf::StatusCodeError::Unimplemented, "Not yet implemented"))
     }
     )rs";
 
   static const std::string streaming_format = R"rs(
     $method_doc$
-    async fn $name$(&self, request: tonic::Request<tonic::Streaming<$request$>>)
-        -> std::result::Result<tonic::Response<BoxStream<$response$>>, tonic::Status> {
-        Err(tonic::Status::unimplemented("Not yet implemented"))
+    async fn $name$(
+        &self, 
+        request: grpc_protobuf::server::GrpcStreamingRequest<$request$>,
+        responses: grpc_protobuf::server::GrpcStreamingResponse<'_, $response$>,
+    ) -> grpc_protobuf::ServerStatus {
+        Err(grpc_protobuf::ServerStatusError::new(grpc_protobuf::StatusCodeError::Unimplemented, "Not yet implemented"))
     }
     )rs";
 
@@ -462,7 +477,7 @@ static void GenerateTraitMethods(Printer &printer, const Service &service,
     const std::string request_type = method.RequestName(opts, 1);
     const std::string response_type = method.ResponseName(opts, 1);
     auto vars = printer.WithVars({
-        {"name", method.Name()},
+        {"name", method.NameSnakeCase()},
         {"request", request_type},
         {"response", response_type},
         {"method_doc", ProtoCommentToRustDoc(method.Comment())},
@@ -495,166 +510,108 @@ static void GenerateTrait(Printer &printer, const Service &service,
       },
       R"rs(
     $trait_doc$
-    #[async_trait]
+    #[grpc::async_trait]
     pub trait $server_trait$ : std::marker::Send + std::marker::Sync + 'static {
         $methods$
     }
     )rs");
 }
 
-static void GenerateMethods(Printer &printer, const Service &service,
-                            const GrpcOpts &opts) {
+static void GenerateMethodWrappers(Printer &printer, const Service &service,
+                                   const GrpcOpts &opts) {
   static const std::string unary_format = R"rs(
-    #[allow(non_camel_case_types)]
-    struct $service_ident$<T: $server_trait$ >(pub Arc<T>);
-
-    impl<T: $server_trait$> tonic::server::UnaryService<$request$> for $service_ident$<T> {
+    impl<T: super::$server_trait$> grpc_protobuf::server::UnaryMethod for $struct_ident$<T> {
+        type Request = $request$;
         type Response = $response$;
-        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
 
-        fn call(&mut self, request: tonic::Request<$request$>) -> Self::Future {
-            let inner = Arc::clone(&self.0);
-            let fut = async move {
-                <T as $server_trait$>::$method_ident$(&inner, request).await
-            };
-            Box::pin(fut)
+        async fn call(
+            &self,
+            request: <Self::Request as protobuf::Proxied>::View<'_>,
+            response: <Self::Response as protobuf::MutProxied>::Mut<'_>,
+        ) -> grpc_protobuf::ServerStatus {
+            self.service.$method_ident$(request, response).await
         }
-    }
-
-    let accept_compression_encodings = self.accept_compression_encodings;
-    let send_compression_encodings = self.send_compression_encodings;
-    let max_decoding_message_size = self.max_decoding_message_size;
-    let max_encoding_message_size = self.max_encoding_message_size;
-    let inner = self.inner.clone();
-    let fut = async move {
-        let method = $service_ident$(inner);
-        let codec = $codec_name$::default();
-
-        let mut grpc = tonic::server::Grpc::new(codec)
-            .apply_compression_config(accept_compression_encodings, send_compression_encodings)
-            .apply_max_message_size_config(max_decoding_message_size, max_encoding_message_size);
-
-        let res = grpc.unary(method, req).await;
-        Ok(res)
-    };
-
-    Box::pin(fut)
-    )rs";
-
-  static const std::string server_streaming_format = R"rs(
-    #[allow(non_camel_case_types)]
-    struct $service_ident$<T: $server_trait$ >(pub Arc<T>);
-
-    impl<T: $server_trait$> tonic::server::ServerStreamingService<$request$> for $service_ident$<T> {
-        type Response = $response$;
-        type ResponseStream = BoxStream<$response$>;
-        type Future = BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;
-
-        fn call(&mut self, request: tonic::Request<$request$>) -> Self::Future {
-            let inner = Arc::clone(&self.0);
-            let fut = async move {
-                <T as $server_trait$>::$method_ident$(&inner, request).await
-            };
-            Box::pin(fut)
-        }
-    }
-
-    let accept_compression_encodings = self.accept_compression_encodings;
-    let send_compression_encodings = self.send_compression_encodings;
-    let max_decoding_message_size = self.max_decoding_message_size;
-    let max_encoding_message_size = self.max_encoding_message_size;
-    let inner = self.inner.clone();
-    let fut = async move {
-        let method = $service_ident$(inner);
-        let codec = $codec_name$::default();
-
-        let mut grpc = tonic::server::Grpc::new(codec)
-            .apply_compression_config(accept_compression_encodings, send_compression_encodings)
-            .apply_max_message_size_config(max_decoding_message_size, max_encoding_message_size);
-
-        let res = grpc.server_streaming(method, req).await;
-        Ok(res)
-    };
-
-    Box::pin(fut)
-    )rs";
+    })rs";
 
   static const std::string client_streaming_format = R"rs(
-    #[allow(non_camel_case_types)]
-    struct $service_ident$<T: $server_trait$ >(pub Arc<T>);
-
-    impl<T: $server_trait$> tonic::server::ClientStreamingService<$request$> for $service_ident$<T>
-    {
+    impl<T: super::$server_trait$> grpc_protobuf::server::ClientStreamingMethod for $struct_ident$<T> {
+        type Request = $request$;
         type Response = $response$;
-        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
 
-        fn call(&mut self, request: tonic::Request<tonic::Streaming<$request$>>) -> Self::Future {
-            let inner = Arc::clone(&self.0);
-            let fut = async move {
-                <T as $server_trait$>::$method_ident$(&inner, request).await
-            };
-            Box::pin(fut)
+        async fn call(
+            &self,
+            requests: grpc_protobuf::server::GrpcStreamingRequest<$request$>,
+            response: <Self::Response as protobuf::MutProxied>::Mut<'_>,
+        ) -> grpc_protobuf::ServerStatus {
+            self.service.$method_ident$(requests, response).await
         }
-    }
+    })rs";
 
-    let accept_compression_encodings = self.accept_compression_encodings;
-    let send_compression_encodings = self.send_compression_encodings;
-    let max_decoding_message_size = self.max_decoding_message_size;
-    let max_encoding_message_size = self.max_encoding_message_size;
-    let inner = self.inner.clone();
-    let fut = async move {
-        let method = $service_ident$(inner);
-        let codec = $codec_name$::default();
+  static const std::string server_streaming_format = R"rs(
+    impl<T: super::$server_trait$> grpc_protobuf::server::ServerStreamingMethod for $struct_ident$<T> {
+        type Request = $request$;
+        type Response = $response$;
 
-        let mut grpc = tonic::server::Grpc::new(codec)
-            .apply_compression_config(accept_compression_encodings, send_compression_encodings)
-            .apply_max_message_size_config(max_decoding_message_size, max_encoding_message_size);
-
-        let res = grpc.client_streaming(method, req).await;
-        Ok(res)
-    };
-
-    Box::pin(fut)
-  )rs";
+        async fn call(
+            &self,
+            request: <Self::Request as protobuf::Proxied>::View<'_>,
+            responses: grpc_protobuf::server::GrpcStreamingResponse<'_, $response$>,
+        ) -> grpc_protobuf::ServerStatus {
+            self.service.$method_ident$(request, responses).await
+        }
+    })rs";
 
   static const std::string streaming_format = R"rs(
-    #[allow(non_camel_case_types)]
-    struct $service_ident$<T: $server_trait$>(pub Arc<T>);
-
-    impl<T: $server_trait$> tonic::server::StreamingService<$request$> for $service_ident$<T>
-    {
+    impl<T: super::$server_trait$> grpc_protobuf::server::BidiStreamingMethod for $struct_ident$<T> {
+        type Request = $request$;
         type Response = $response$;
-        type ResponseStream = BoxStream<$response$>;
-        type Future = BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;
 
-        fn call(&mut self, request: tonic::Request<tonic::Streaming<$request$>>) -> Self::Future {
-            let inner = Arc::clone(&self.0);
-            let fut = async move {
-                <T as $server_trait$>::$method_ident$(&inner, request).await
-            };
-            Box::pin(fut)
+        async fn call(
+            &self,
+            requests: grpc_protobuf::server::GrpcStreamingRequest<$request$>,
+            responses: grpc_protobuf::server::GrpcStreamingResponse<'_, $response$>,
+        ) -> grpc_protobuf::ServerStatus {
+            self.service.$method_ident$(requests, responses).await
         }
+    })rs";
+
+  const std::vector<Method> methods = service.Methods();
+  for (const Method &method : methods) {
+    auto vars = printer.WithVars({
+        {"method_ident", method.NameSnakeCase()},
+        {"struct_ident", method.NameCamelCase()},
+        {"request", method.RequestName(opts, 2)},
+        {"response", method.ResponseName(opts, 2)},
+    });
+    printer.Emit(
+        R"rs(pub(super) struct $struct_ident$<T> { pub(super) service: std::sync::Arc<T> }
+        )rs");
+
+    if (!method.IsClientStreaming() && !method.IsServerStreaming()) {
+      printer.Emit(unary_format);
+    } else if (!method.IsClientStreaming() && method.IsServerStreaming()) {
+      printer.Emit(server_streaming_format);
+    } else if (method.IsClientStreaming() && !method.IsServerStreaming()) {
+      printer.Emit(client_streaming_format);
+    } else {
+      printer.Emit(streaming_format);
     }
 
-    let accept_compression_encodings = self.accept_compression_encodings;
-    let send_compression_encodings = self.send_compression_encodings;
-    let max_decoding_message_size = self.max_decoding_message_size;
-    let max_encoding_message_size = self.max_encoding_message_size;
-    let inner = self.inner.clone();
-    let fut = async move {
-        let method = $service_ident$(inner);
-        let codec = $codec_name$::default();
+    if (&method != &methods.back()) {
+      printer.Emit("\n");
+    }
+  }
+}
 
-        let mut grpc = tonic::server::Grpc::new(codec)
-            .apply_compression_config(accept_compression_encodings, send_compression_encodings)
-            .apply_max_message_size_config(max_decoding_message_size, max_encoding_message_size);
-
-        let res = grpc.streaming(method, req).await;
-        Ok(res)
-    };
-
-    Box::pin(fut)
-  )rs";
+static void GenerateServiceImpl(Printer &printer, const Service &service,
+                                const GrpcOpts &opts) {
+  printer.Emit({}, R"rs(
+    impl<T: $server_trait$> grpc::server::service::Service for $server_service$<T> {
+        fn descriptor(&self) -> grpc::server::descriptor::ServiceDescriptor {
+            grpc::server::descriptor::ServiceDescriptor::new(
+                "$service_name$",
+                vec![
+    )rs");
 
   const std::vector<Method> methods = service.Methods();
   for (const Method &method : methods) {
@@ -662,34 +619,58 @@ static void GenerateMethods(Printer &printer, const Service &service,
     const std::string response_type = method.ResponseName(opts, 1);
     printer.Emit(
         {
-            {"codec_name", "tonic_protobuf::ProtoCodec"},
-            {"service_ident", method.Name() + "Svc"},
-            {"method_ident", method.Name()},
-            {"request", request_type},
-            {"response", response_type},
-            {"server_trait", service.Name()},
             {"path", FormatMethodPath(service, method)},
-            {"method_body",
+        },
+        R"rs(
+    grpc::server::descriptor::MethodDescriptor::new("$path$"),
+    )rs");
+  }
+
+  printer.Emit({}, R"rs(
+               ]
+            )
+        }
+
+    fn register_methods(self) -> std::vec::Vec<(std::string::String, std::sync::Arc<dyn grpc::server::DynHandle>)> {
+        vec![
+    )rs");
+
+  for (const Method &method : methods) {
+    const std::string request_type = method.RequestName(opts, 1);
+    const std::string response_type = method.ResponseName(opts, 1);
+    printer.Emit(
+        {
+            {"path", FormatMethodPath(service, method)},
+            {"struct_ident", method.NameCamelCase()},
+            {"method_type",
              [&]() {
                if (!method.IsClientStreaming() && !method.IsServerStreaming()) {
-                 printer.Emit(unary_format);
+                 printer.Emit("Unary");
                } else if (!method.IsClientStreaming() &&
                           method.IsServerStreaming()) {
-                 printer.Emit(server_streaming_format);
+                 printer.Emit("ServerStreaming");
                } else if (method.IsClientStreaming() &&
                           !method.IsServerStreaming()) {
-                 printer.Emit(client_streaming_format);
+                 printer.Emit("ClientStreaming");
                } else {
-                 printer.Emit(streaming_format);
+                 printer.Emit("BidiStreaming");
                }
              }},
         },
         R"rs(
-    "$path$" => {
-        $method_body$
-    }
+        (
+            "$path$".to_string(),
+            std::sync::Arc::new(grpc_protobuf::server::$method_type$Adapter::new($methods_mod$::$struct_ident$ {
+                service: self.inner.clone(),
+            })),
+        ),
     )rs");
   }
+
+  printer.Emit({}, R"rs(
+            ]
+        }
+    })rs");
 }
 
 static void GenerateServer(const Service &service, Printer &printer,
@@ -705,7 +686,10 @@ static void GenerateServer(const Service &service, Printer &printer,
           {"service_name", service.FullName()},
           {"server_trait", service.Name()},
           {"generated_trait", [&] { GenerateTrait(printer, service, opts); }},
-          {"methods", [&] { GenerateMethods(printer, service, opts); }},
+          {"methods_mod", "method_wrappers"},
+          {"methods", [&] { GenerateMethodWrappers(printer, service, opts); }},
+          {"service_impl",
+           [&] { GenerateServiceImpl(printer, service, opts); }},
       },
       R"rs(
     /// Generated server implementations.
@@ -715,126 +699,33 @@ static void GenerateServer(const Service &service, Printer &printer,
             dead_code,
             missing_docs,
             clippy::wildcard_imports,
-            // will trigger if compression is disabled
-            clippy::let_unit_value,
         )]
-        use tonic::codegen::*;
+
+        mod $methods_mod$ {
+            $methods$
+        }
 
         $generated_trait$
 
         $service_doc$
         #[derive(Debug)]
         pub struct $server_service$<T> {
-            inner: Arc<T>,
-            accept_compression_encodings: EnabledCompressionEncodings,
-            send_compression_encodings: EnabledCompressionEncodings,
-            max_decoding_message_size: Option<usize>,
-            max_encoding_message_size: Option<usize>,
+            inner: std::sync::Arc<T>,
         }
 
         impl<T> $server_service$<T> {
             pub fn new(inner: T) -> Self {
-                Self::from_arc(Arc::new(inner))
+                Self::from_arc(std::sync::Arc::new(inner))
             }
 
-            pub fn from_arc(inner: Arc<T>) -> Self {
+            pub fn from_arc(inner: std::sync::Arc<T>) -> Self {
                 Self {
                     inner,
-                    accept_compression_encodings: Default::default(),
-                    send_compression_encodings: Default::default(),
-                    max_decoding_message_size: None,
-                    max_encoding_message_size: None,
-                }
-            }
-
-            pub fn with_interceptor<F>(inner: T, interceptor: F) -> InterceptedService<Self, F>
-            where
-                F: tonic::service::Interceptor,
-            {
-                InterceptedService::new(Self::new(inner), interceptor)
-            }
-
-            /// Enable decompressing requests with the given encoding.
-            #[must_use]
-            pub fn accept_compressed(mut self, encoding: CompressionEncoding) -> Self {
-                self.accept_compression_encodings.enable(encoding);
-                self
-            }
-
-            /// Compress responses with the given encoding, if the client supports it.
-            #[must_use]
-            pub fn send_compressed(mut self, encoding: CompressionEncoding) -> Self {
-                self.send_compression_encodings.enable(encoding);
-                self
-            }
-
-            /// Limits the maximum size of a decoded message.
-            ///
-            /// Default: `4MB`
-            #[must_use]
-            pub fn max_decoding_message_size(mut self, limit: usize) -> Self {
-                self.max_decoding_message_size = Some(limit);
-                self
-            }
-
-            /// Limits the maximum size of an encoded message.
-            ///
-            /// Default: `usize::MAX`
-            #[must_use]
-            pub fn max_encoding_message_size(mut self, limit: usize) -> Self {
-                self.max_encoding_message_size = Some(limit);
-                self
-            }
-        }
-
-        impl<T, B> tonic::codegen::Service<http::Request<B>> for $server_service$<T>
-            where
-                T: $server_trait$,
-                B: Body + std::marker::Send + 'static,
-                B::Error: Into<StdError> + std::marker::Send + 'static,
-        {
-            type Response = http::Response<tonic::body::Body>;
-            type Error = std::convert::Infallible;
-            type Future = BoxFuture<Self::Response, Self::Error>;
-
-            fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<std::result::Result<(), Self::Error>> {
-                Poll::Ready(Ok(()))
-            }
-
-            fn call(&mut self, req: http::Request<B>) -> Self::Future {
-                match req.uri().path() {
-                    $methods$
-
-                    _ => Box::pin(async move {
-                        let mut response = http::Response::new(tonic::body::Body::default());
-                        let headers = response.headers_mut();
-                        headers.insert(tonic::Status::GRPC_STATUS, (tonic::Code::Unimplemented as i32).into());
-                        headers.insert(http::header::CONTENT_TYPE, tonic::metadata::GRPC_CONTENT_TYPE);
-                        Ok(response)
-                    }),
                 }
             }
         }
 
-        impl<T> Clone for $server_service$<T> {
-            fn clone(&self) -> Self {
-                let inner = self.inner.clone();
-                Self {
-                    inner,
-                    accept_compression_encodings: self.accept_compression_encodings,
-                    send_compression_encodings: self.send_compression_encodings,
-                    max_decoding_message_size: self.max_decoding_message_size,
-                    max_encoding_message_size: self.max_encoding_message_size,
-                }
-            }
-        }
-
-        /// Generated gRPC service name
-        pub const SERVICE_NAME: &str = "$service_name$";
-
-        impl<T> tonic::server::NamedService for $server_service$<T> {
-            const NAME: &'static str = SERVICE_NAME;
-        }
+        $service_impl$
     }
   )rs");
 }

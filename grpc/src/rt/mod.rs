@@ -223,16 +223,16 @@ pub trait GrpcEndpoint: Send + Unpin + 'static {
 /// An adapter that exposes `AsyncRead` and `AsyncWrite` functionality for
 /// interfacing with `hyper` and `rustls`. This type is kept private to avoid
 /// exposing its read and write methods to external crates.
-pub(crate) struct EndpointIoStream<T> {
+pub struct EndpointIoStream<T> {
     inner: T,
 }
 
 impl<T: GrpcEndpoint> EndpointIoStream<T> {
-    pub(crate) fn new(inner: T) -> Self {
+    pub fn new(inner: T) -> Self {
         Self { inner }
     }
 
-    pub(crate) fn get_ref(&self) -> &T {
+    pub fn get_ref(&self) -> &T {
         &self.inner
     }
 }
@@ -278,7 +278,7 @@ impl<T: GrpcEndpoint> AsyncWrite for EndpointIoStream<T> {
 }
 
 /// A wrapper that implements [GrpcEndpoint] for an asynchronous I/O stream.
-pub(crate) struct StreamEndpoint<T> {
+pub struct StreamEndpoint<T> {
     inner: T,
     peer_addr: Box<str>,
     local_addr: Box<str>,
@@ -286,7 +286,7 @@ pub(crate) struct StreamEndpoint<T> {
 }
 
 impl<T> StreamEndpoint<T> {
-    pub(crate) fn new(
+    pub fn new(
         inner: T,
         local_addr: Box<str>,
         peer_addr: Box<str>,
@@ -455,7 +455,7 @@ impl Runtime for NoOpRuntime {
     }
 }
 
-pub(crate) fn default_runtime() -> GrpcRuntime {
+pub fn default_runtime() -> GrpcRuntime {
     #[cfg(feature = "_runtime-tokio")]
     {
         return GrpcRuntime::new(tokio::TokioRuntime::default());
@@ -467,6 +467,12 @@ pub(crate) fn default_runtime() -> GrpcRuntime {
 #[derive(Clone, Debug)]
 pub struct GrpcRuntime {
     inner: Arc<dyn Runtime>,
+}
+
+impl Default for GrpcRuntime {
+    fn default() -> Self {
+        default_runtime()
+    }
 }
 
 impl GrpcRuntime {

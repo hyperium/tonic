@@ -22,3 +22,8 @@ tokio = { version = "1", features = ["sync", "rt", "net"] }
 tokio-stream = { version = "0.1", features = ["net"] }
 strum = { version = "0.28.0", features = ["derive"] }
 tracing = "0.1.44"
+
+[features]
+# TLS crypto backend for `start_with_tls` — pick at most one.
+tls-ring = ["tonic/tls-ring"]
+tls-aws-lc = ["tonic/tls-aws-lc"]

@@ -113,6 +113,11 @@ where
         self.futures.len()
     }
 
+    /// True when no futures are currently running.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.futures.is_empty()
+    }
+
     /// True if a live (non-cancelled) future is tracked for `key`.
     pub(crate) fn contains_key(&self, key: &K) -> bool {
         self.cancellations.contains_key(key)

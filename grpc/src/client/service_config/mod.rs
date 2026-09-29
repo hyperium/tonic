@@ -26,12 +26,24 @@ pub(crate) mod duration;
 pub(crate) mod serde_bindings;
 
 use std::sync::Arc;
+use std::sync::LazyLock;
 
 use crate::client::load_balancing::DynLbConfig;
 use crate::client::load_balancing::DynLbPolicyBuilder;
 use crate::client::load_balancing::GLOBAL_LB_REGISTRY;
-use crate::client::load_balancing::ParsedJsonLbConfig;
+use crate::client::load_balancing::LbConfigJson;
 use crate::client::load_balancing::pick_first;
+
+static DEFAULT_PICK_FIRST: LazyLock<(Arc<DynLbPolicyBuilder>, DynLbConfig)> = LazyLock::new(|| {
+    let builder = GLOBAL_LB_REGISTRY
+        .get_policy(pick_first::POLICY_NAME)
+        .expect("pick_first policy must be registered");
+    let default_json = LbConfigJson::empty();
+    let parsed_config = builder
+        .parse_config(&default_json)
+        .expect("pick first must parse an empty config");
+    (builder, parsed_config)
+});
 
 pub type ParseResult = Result<ServiceConfig, String>;
 
@@ -55,7 +67,7 @@ impl ServiceConfig {
     }
 
     // Chooses load balancing configuration per gRPC specification rules.
-    pub(crate) fn lb_config(&self) -> (Arc<DynLbPolicyBuilder>, Option<DynLbConfig>) {
+    pub(crate) fn lb_config(&self) -> (Arc<DynLbPolicyBuilder>, DynLbConfig) {
         // Choose LbConfig if present.
         if let Some(selected) = self.inner.load_balancing_config.as_ref() {
             return (selected.builder.clone(), selected.config.clone());
@@ -65,9 +77,10 @@ impl ServiceConfig {
         if let Some(ref policy) = self.inner.load_balancing_policy
             && let Some(builder) = GLOBAL_LB_REGISTRY.get_policy(policy)
         {
-            let empty_json = ParsedJsonLbConfig::from_value(serde_json::json!({}));
-            let parsed_config = builder.parse_config(&empty_json).ok().flatten();
-            return (builder, parsed_config);
+            let empty_json = LbConfigJson::empty();
+            if let Ok(parsed_config) = builder.parse_config(&empty_json) {
+                return (builder, parsed_config);
+            }
         }
 
         // Fall back to default policy.
@@ -75,18 +88,14 @@ impl ServiceConfig {
     }
 
     // Returns the default load balancing policy (`pick_first`).
-    pub(crate) fn default_lb_policy() -> (Arc<DynLbPolicyBuilder>, Option<DynLbConfig>) {
-        let builder = GLOBAL_LB_REGISTRY
-            .get_policy(pick_first::POLICY_NAME)
-            .expect("pick_first policy must be registered");
-        let default_json = ParsedJsonLbConfig::from_value(serde_json::json!({}));
-        let parsed_config = builder.parse_config(&default_json).ok().flatten();
-        (builder, parsed_config)
+    pub(crate) fn default_lb_policy() -> (Arc<DynLbPolicyBuilder>, DynLbConfig) {
+        DEFAULT_PICK_FIRST.clone()
     }
 }
 
 #[cfg(test)]
 mod test {
+    use std::any::TypeId;
     use std::time::Duration;
 
     use serde_json::json;
@@ -95,13 +104,73 @@ mod test {
     use super::serde_bindings::SerdeF32;
     use super::serde_bindings::SerdeU32;
     use super::*;
+    use crate::client::load_balancing::ChannelController;
+    use crate::client::load_balancing::LbPolicy;
+    use crate::client::load_balancing::LbPolicyBuilder;
+    use crate::client::load_balancing::LbPolicyOptions;
+    use crate::client::load_balancing::WorkData;
+    use crate::client::load_balancing::pick_first::PickFirstPolicy;
+    use crate::client::load_balancing::round_robin::RoundRobinPolicy;
+    use crate::client::name_resolution::ResolverUpdate;
+
+    #[derive(Debug)]
+    struct TestPolicyBuilder;
+    impl LbPolicyBuilder for TestPolicyBuilder {
+        type LbPolicy = TestPolicy;
+
+        fn build(&self, options: LbPolicyOptions) -> Self::LbPolicy {
+            TestPolicy
+        }
+
+        fn name(&self) -> &'static str {
+            "service_config_test_policy"
+        }
+
+        fn parse_config(
+            &self,
+            config: &LbConfigJson,
+        ) -> Result<<Self::LbPolicy as crate::client::load_balancing::LbPolicy>::LbConfig, String>
+        {
+            let config: TestPolicyConfig = config.convert_to().map_err(|e| e.to_string())?;
+            Ok(config)
+        }
+    }
+    #[derive(Debug)]
+    struct TestPolicy;
+    impl LbPolicy for TestPolicy {
+        type LbConfig = TestPolicyConfig;
+
+        fn resolver_update(
+            &mut self,
+            update: ResolverUpdate,
+            config: &Self::LbConfig,
+            channel_controller: &mut dyn ChannelController,
+        ) -> Result<(), String> {
+            unimplemented!()
+        }
+
+        fn work(&mut self, data: Option<WorkData>, channel_controller: &mut dyn ChannelController) {
+            unimplemented!()
+        }
+
+        fn exit_idle(&mut self, channel_controller: &mut dyn ChannelController) {
+            unimplemented!()
+        }
+    }
+    #[derive(Debug, serde::Deserialize, Clone, Default)]
+    struct TestPolicyConfig {
+        #[serde(default, rename = "testField")]
+        test_field: bool,
+    }
 
     #[test]
     #[allow(clippy::too_many_lines)]
     fn test_valid_service_config_parsing() {
+        GLOBAL_LB_REGISTRY.add_builder(TestPolicyBuilder);
+
         let json_data = json!({
             "loadBalancingConfig": [
-                { "pick_first": { "shuffleAddressList": true } },
+                { "service_config_test_policy": { "testField": true } },
                 { "round_robin": {} }
             ],
             "methodConfig": [
@@ -137,13 +206,9 @@ mod test {
 
         // Verify Load Balancing Config.
         let (builder, config) = sc.lb_config();
-        assert_eq!(builder.name(), "pick_first");
-        let pf_config = config
-            .unwrap()
-            .downcast_ref::<crate::client::load_balancing::pick_first::PickFirstConfig>()
-            .unwrap()
-            .clone();
-        assert!(pf_config.shuffle_address_list);
+        assert_eq!(builder.name(), "service_config_test_policy");
+        let pf_config = config.downcast_ref::<TestPolicyConfig>().unwrap().clone();
+        assert!(pf_config.test_field);
 
         // Verify Method Config.
         let method_configs = sc.inner.method_config.unwrap();
@@ -303,30 +368,26 @@ mod test {
         assert!(sc.inner.connection_scaling.is_none());
         let (builder, config) = sc.lb_config();
         assert_eq!(builder.name(), "round_robin");
-        assert!(config.is_none());
+        assert!(config.type_id() == TypeId::of::<<RoundRobinPolicy as LbPolicy>::LbConfig>());
     }
 
     #[test]
     fn test_lb_config_resolution() {
-        use crate::client::load_balancing::pick_first::PickFirstConfig;
+        GLOBAL_LB_REGISTRY.add_builder(TestPolicyBuilder);
 
         // Explicit loadBalancingConfig selects first supported candidate
         let json_data = json!({
             "loadBalancingConfig": [
                 { "unsupported_lb_policy": { "foo": "bar" } },
-                { "pick_first": { "shuffleAddressList": true } },
+                { "service_config_test_policy": { "testField": true } },
                 { "round_robin": {} }
             ]
         });
         let sc = ServiceConfig::parse(&json_data.to_string()).unwrap();
         let (builder, config) = sc.lb_config();
-        assert_eq!(builder.name(), "pick_first");
-        let pf_config = config
-            .unwrap()
-            .downcast_ref::<PickFirstConfig>()
-            .unwrap()
-            .clone();
-        assert!(pf_config.shuffle_address_list);
+        assert_eq!(builder.name(), "service_config_test_policy");
+        let pf_config = config.downcast_ref::<TestPolicyConfig>().unwrap().clone();
+        assert!(pf_config.test_field);
 
         // Non-empty loadBalancingConfig with no supported policy errors on parse
         let json_data = json!({
@@ -344,7 +405,7 @@ mod test {
         let sc = ServiceConfig::parse(&json_data.to_string()).unwrap();
         let (builder, config) = sc.lb_config();
         assert_eq!(builder.name(), "round_robin");
-        assert!(config.is_none());
+        assert!(config.type_id() == TypeId::of::<<RoundRobinPolicy as LbPolicy>::LbConfig>());
 
         // Empty loadBalancingConfig array with no loadBalancingPolicy falls back to default pick_first
         let json_data = json!({
@@ -353,7 +414,7 @@ mod test {
         let sc = ServiceConfig::parse(&json_data.to_string()).unwrap();
         let (builder, config) = sc.lb_config();
         assert_eq!(builder.name(), "pick_first");
-        assert!(config.is_none());
+        assert!(config.type_id() == TypeId::of::<<PickFirstPolicy as LbPolicy>::LbConfig>());
 
         // Legacy loadBalancingPolicy fallback when loadBalancingConfig is absent
         let json_data = json!({
@@ -362,13 +423,13 @@ mod test {
         let sc = ServiceConfig::parse(&json_data.to_string()).unwrap();
         let (builder, config) = sc.lb_config();
         assert_eq!(builder.name(), "round_robin");
-        assert!(config.is_none());
+        assert!(config.type_id() == TypeId::of::<<RoundRobinPolicy as LbPolicy>::LbConfig>());
 
         // Neither loadBalancingConfig nor loadBalancingPolicy present -> default pick_first
         let json_data = json!({});
         let sc = ServiceConfig::parse(&json_data.to_string()).unwrap();
         let (builder, config) = sc.lb_config();
         assert_eq!(builder.name(), "pick_first");
-        assert!(config.is_none());
+        assert!(config.type_id() == TypeId::of::<<PickFirstPolicy as LbPolicy>::LbConfig>());
     }
 }

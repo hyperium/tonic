@@ -334,13 +334,6 @@ impl ActiveChannel {
                             .lb_policy
                             .work(data, &mut resolver_channel_controller.lb_channel_controller);
                     }
-                    WorkQueueItem::SubchannelStateUpdate { subchannel, state } => {
-                        resolver_channel_controller.lb_policy.subchannel_update(
-                            subchannel,
-                            &state,
-                            &mut resolver_channel_controller.lb_channel_controller,
-                        );
-                    }
                 }
             }
         }));
@@ -373,7 +366,7 @@ impl Invoke for Arc<ActiveChannel> {
             match result {
                 PickResult::Pick(pr) => {
                     if let Some(sc) = pr.subchannel.downcast_ref::<InternalSubchannel>() {
-                        return sc.dyn_invoke(headers, options.clone()).await;
+                        return sc.dyn_invoke(headers, options).await;
                     } else {
                         panic!(
                             "picked subchannel is not an implementation provided by the channel"
@@ -431,16 +424,15 @@ impl ResolverChannelController {
         let lb_channel_controller = LbChannelController {
             lb_work_scheduler: lb_work_scheduler.clone(),
             transport_registry: GLOBAL_TRANSPORT_REGISTRY.clone(),
-            wqtx: wqtx.clone(),
             lb_watcher,
             runtime: runtime.clone(),
             security_opts,
         };
         Self {
-            lb_policy: SubchannelSharing::new(GracefulSwitchPolicy::new(
-                runtime.clone(),
+            lb_policy: SubchannelSharing::new(
+                GracefulSwitchPolicy::new(runtime.clone(), lb_work_scheduler.clone()),
                 lb_work_scheduler.clone(),
-            )),
+            ),
             lb_work_scheduler,
             lb_channel_controller,
             wqtx: wqtx.clone(),
@@ -459,7 +451,7 @@ impl name_resolution::ChannelController for ResolverChannelController {
         let gsb_config = GracefulSwitchLbConfig::new(builder, config);
 
         self.lb_policy
-            .resolver_update(update, Some(&gsb_config), &mut self.lb_channel_controller)
+            .resolver_update(update, &gsb_config, &mut self.lb_channel_controller)
     }
 
     fn parse_service_config(&self, config: &str) -> ParseResult {
@@ -468,16 +460,19 @@ impl name_resolution::ChannelController for ResolverChannelController {
 }
 
 struct LbChannelController {
-    lb_work_scheduler: Arc<LbWorkScheduler>, // Holds `pending` bool (??)
-    transport_registry: TransportRegistry,   // For creating subchannels
-    wqtx: WorkQueueTx,                       // To queue subchannel state updates
+    lb_work_scheduler: Arc<LbWorkScheduler>,
+    transport_registry: TransportRegistry, // For creating subchannels
     lb_watcher: Arc<Watcher<LbState>>,
-    runtime: GrpcRuntime, // For creating subchanenls
+    runtime: GrpcRuntime, // For creating subchannels
     security_opts: SecurityOpts,
 }
 
 impl load_balancing::ChannelController for LbChannelController {
-    fn new_subchannel(&mut self, address: &Address) -> (Arc<dyn Subchannel>, SubchannelState) {
+    fn new_subchannel(
+        &mut self,
+        address: &Address,
+        work_scheduler: Arc<dyn WorkScheduler>,
+    ) -> (Arc<dyn Subchannel>, SubchannelState) {
         let transport = self
             .transport_registry
             .get_transport(address.network_type)
@@ -489,7 +484,7 @@ impl load_balancing::ChannelController for LbChannelController {
                 Arc::new(NopBackoff {}),
                 self.runtime.clone(),
                 self.security_opts.clone(),
-                self.wqtx.clone(),
+                work_scheduler,
             ),
             SubchannelState::idle(),
         )
@@ -516,13 +511,9 @@ impl WorkScheduler for LbWorkScheduler {
 }
 
 pub(super) enum WorkQueueItem {
-    // Call the LB policy to do work.
+    // Call the LB policy to do work.  This includes subchannel state updates,
+    // which are delivered as WorkData by the subchannels themselves.
     ScheduleLbPolicy(Option<WorkData>),
-    // Provide the subchannel state update to the LB policy.
-    SubchannelStateUpdate {
-        subchannel: Arc<dyn Subchannel>,
-        state: SubchannelState,
-    },
     // Call the resolver to do work.
     ScheduleResolver,
     // Call the resolver to resolve now.

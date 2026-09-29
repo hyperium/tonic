@@ -426,7 +426,7 @@ Please do one of the following:
             // proto file.
             if path.exists() {
                 let src = fs::read_to_string(path).expect("Failed to read generated file");
-                let syntax = parse_file(&src).unwrap();
+                let syntax = parse_file(&src).expect("Failed to parse generated code");
                 let formatted = prettyplease::unparse(&syntax);
                 fs::write(path, formatted).unwrap();
             }

@@ -1,5 +1,6 @@
 /// Generated client implementations.
 pub mod greeter_client {
+    #![allow(unused_imports, dead_code, missing_docs, clippy::wildcard_imports)]
     use grpc::client::*;
     use grpc_protobuf::*;
     use grpc_protobuf::client::*;

@@ -41,16 +41,19 @@
 //! }
 //! ```
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
 use arc_swap::ArcSwap;
-use serde::Deserialize;
+use rustls::pki_types::CertificateDer;
 
 use crate::common::async_util::AbortOnDrop;
+use crate::xds::cert_provider_config::FileWatcherConfig;
 
-use super::{CertProviderError, CertificateData, CertificateProvider, Identity};
+use super::{
+    CertProviderError, CertificateData, CertificateProvider, Identity, default_crypto_provider,
+};
 
 /// Plugin name used in the bootstrap `certificate_providers` JSON.
 pub(crate) const PLUGIN_NAME: &str = "file_watcher";
@@ -59,54 +62,12 @@ pub(crate) const PLUGIN_NAME: &str = "file_watcher";
 /// Matches grpc-go's `defaultCertRefreshDuration`-equivalent for proxyless gRPC.
 const DEFAULT_REFRESH_INTERVAL: Duration = Duration::from_secs(600);
 
-/// Configuration for the `file_watcher` certificate provider.
-#[derive(Debug, Clone, Default, Deserialize)]
-pub(crate) struct FileWatcherConfig {
-    /// Path to PEM X.509 identity certificate or certificate chain.
-    #[serde(default)]
-    pub certificate_file: Option<PathBuf>,
-    /// Path to PEM PKCS private key.
-    #[serde(default)]
-    pub private_key_file: Option<PathBuf>,
-    /// Path to PEM X.509 CA trust bundle (root certificates).
-    #[serde(default)]
-    pub ca_certificate_file: Option<PathBuf>,
-    /// How often to re-read the files. Default: 600s.
-    /// Parsed from protobuf JSON duration format (e.g., `"60s"`, `"0.5s"`).
-    #[serde(default, deserialize_with = "deserialize_proto_duration")]
-    pub refresh_interval: Option<Duration>,
-}
-
-/// Deserialize a protobuf JSON duration string (e.g., `"60s"`, `"0.5s"`) into a `Duration`.
-fn deserialize_proto_duration<'de, D>(deserializer: D) -> Result<Option<Duration>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    let Some(s) = Option::<String>::deserialize(deserializer)? else {
-        return Ok(None);
-    };
-    let num = s.strip_suffix('s').ok_or_else(|| {
-        serde::de::Error::custom(format!("invalid duration '{s}': must end with 's'"))
-    })?;
-    let secs: f64 = num
-        .parse()
-        .map_err(|_| serde::de::Error::custom(format!("invalid duration number: '{num}'")))?;
-    let duration = Duration::try_from_secs_f64(secs)
-        .map_err(|e| serde::de::Error::custom(format!("invalid duration '{s}': {e}")))?;
-    if duration.is_zero() {
-        return Err(serde::de::Error::custom(format!(
-            "invalid duration '{s}': must be greater than 0"
-        )));
-    }
-    Ok(Some(duration))
-}
-
 /// A certificate provider that reads PEM files from disk.
 ///
 /// On construction, reads all configured files synchronously and spawns a
 /// background task that re-reads them on `config.refresh_interval`.
-/// Read or parse failures during refresh are logged;
-/// the previously cached data is kept.
+/// Read failures during refresh are logged, and the previously cached snapshot
+/// is kept.
 pub(crate) struct FileWatcherProvider {
     cached: Arc<ArcSwap<CertificateData>>,
     _refresh_task: AbortOnDrop,
@@ -146,7 +107,7 @@ fn refresh_once(config: &FileWatcherConfig, cached: &ArcSwap<CertificateData>) {
         Ok(data) => cached.store(Arc::new(data)),
         Err(e) => tracing::warn!(
             error = ?e,
-            "file_watcher cert refresh failed; keeping last good data",
+            "file_watcher cert refresh failed; keeping last successfully read data",
         ),
     }
 }
@@ -160,11 +121,10 @@ impl CertificateProvider for FileWatcherProvider {
 /// Read certificate data from the files specified in the config.
 ///
 /// CA roots and identity material are read as raw PEM bytes; parsing is left to
-/// the consumer. This function is the single validation boundary between the
-/// permissive JSON-parsed [`FileWatcherConfig`] and the invariant-enforcing
-/// [`CertificateData`]. It checks both A65 rules:
-/// - cert/key pairing (first match)
-/// - at least one of identity/roots is set (second match)
+/// the consumer. This function enforces cert/key pairing, which is shared by
+/// A29 and A65, and the A29 file-watcher requirement that at least one
+/// certificate file is configured. A65 empty configs bypass the file watcher
+/// and use system roots directly.
 fn read_certificate_data(config: &FileWatcherConfig) -> Result<CertificateData, CertProviderError> {
     let roots = config
         .ca_certificate_file
@@ -173,9 +133,7 @@ fn read_certificate_data(config: &FileWatcherConfig) -> Result<CertificateData, 
         .transpose()?;
 
     let identity = match (&config.certificate_file, &config.private_key_file) {
-        (Some(cert_path), Some(key_path)) => {
-            Some(Identity::new(read_file(cert_path)?, read_file(key_path)?))
-        }
+        (Some(cert_path), Some(key_path)) => Some(read_identity(cert_path, key_path)?),
         (None, None) => None,
         (Some(_), None) | (None, Some(_)) => return Err(CertProviderError::UnpairedCertKey),
     };
@@ -186,6 +144,60 @@ fn read_certificate_data(config: &FileWatcherConfig) -> Result<CertificateData, 
         (None, Some(identity)) => Ok(CertificateData::IdentityOnly { identity }),
         (None, None) => Err(CertProviderError::EmptyConfig),
     }
+}
+
+/// Read an identity, rejecting a certificate and private key that do not form
+/// a usable pair.
+///
+/// The cert and the key live in two files, so a rotation that rewrites them
+/// one at a time can be observed half-applied: a new cert read alongside a
+/// stale key, or the reverse. Caching that pairing would break every
+/// connection built from it until the next successful refresh, so it is
+/// caught here and the caller keeps the previous snapshot instead.
+///
+/// Mirrors grpc-go's `file_watcher` provider, which discards an update whose
+/// cert and key fail to form a valid pair.
+fn read_identity(cert_path: &Path, key_path: &Path) -> Result<Identity, CertProviderError> {
+    let cert_chain = read_file(cert_path)?;
+    let key = read_file(key_path)?;
+
+    validate_key_pair(&cert_chain, &key).map_err(|reason| {
+        CertProviderError::InvalidIdentityPair {
+            cert_path: cert_path.display().to_string(),
+            key_path: key_path.display().to_string(),
+            reason,
+        }
+    })?;
+
+    Ok(Identity::new(cert_chain, key))
+}
+
+/// Check that `key_pem` is the private key for the leaf certificate in
+/// `cert_pem`.
+///
+/// Delegates to rustls, which compares the `SubjectPublicKeyInfo` of the two
+/// halves. Keys whose public half cannot be derived report
+/// [`InconsistentKeys::Unknown`] and are accepted rather than rejected —
+/// unverifiable is not the same as mismatched, and this is the same call
+/// tonic makes when the material eventually reaches the TLS stack.
+///
+/// [`InconsistentKeys::Unknown`]: rustls::InconsistentKeys::Unknown
+fn validate_key_pair(cert_pem: &[u8], key_pem: &[u8]) -> Result<(), String> {
+    let cert_chain: Vec<CertificateDer<'static>> =
+        rustls_pemfile::certs(&mut std::io::Cursor::new(cert_pem))
+            .collect::<Result<_, _>>()
+            .map_err(|e| format!("failed to parse certificate PEM: {e}"))?;
+    if cert_chain.is_empty() {
+        return Err("no certificates found in certificate file".to_string());
+    }
+
+    let key = rustls_pemfile::private_key(&mut std::io::Cursor::new(key_pem))
+        .map_err(|e| format!("failed to parse private key PEM: {e}"))?
+        .ok_or_else(|| "no private key found in private key file".to_string())?;
+
+    rustls::sign::CertifiedKey::from_der(cert_chain, key, &default_crypto_provider())
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }
 
 fn read_file(path: &Path) -> Result<Vec<u8>, CertProviderError> {
@@ -209,6 +221,15 @@ mod tests {
         let key = rcgen::KeyPair::generate().unwrap();
         let cert = params.self_signed(&key).unwrap();
         cert.pem().into_bytes()
+    }
+
+    /// Generate a self-signed identity as `(cert_pem, key_pem)`. The two halves
+    /// are a matching key pair, so they pass [`validate_key_pair`].
+    fn gen_identity_pem() -> (Vec<u8>, Vec<u8>) {
+        let params = rcgen::CertificateParams::new(vec!["test-leaf".into()]).unwrap();
+        let key = rcgen::KeyPair::generate().unwrap();
+        let cert = params.self_signed(&key).unwrap();
+        (cert.pem().into_bytes(), key.serialize_pem().into_bytes())
     }
 
     fn write_temp_file(content: &[u8]) -> NamedTempFile {
@@ -242,8 +263,9 @@ mod tests {
 
     #[tokio::test]
     async fn reads_identity_cert_and_key() {
-        let cert_file = write_temp_file(b"cert-chain-pem");
-        let key_file = write_temp_file(b"private-key-pem");
+        let (cert_pem, key_pem) = gen_identity_pem();
+        let cert_file = write_temp_file(&cert_pem);
+        let key_file = write_temp_file(&key_pem);
 
         let provider = FileWatcherProvider::new(make_config(
             None,
@@ -255,8 +277,8 @@ mod tests {
 
         assert!(matches!(*data, CertificateData::IdentityOnly { .. }));
         let identity = data.identity().unwrap();
-        assert_eq!(identity.cert_chain(), b"cert-chain-pem");
-        assert_eq!(identity.key(), b"private-key-pem");
+        assert_eq!(identity.cert_chain(), cert_pem.as_slice());
+        assert_eq!(identity.key(), key_pem.as_slice());
         assert!(data.roots().is_none());
     }
 
@@ -264,8 +286,9 @@ mod tests {
     async fn reads_all_files() {
         let ca_pem = gen_ca_pem();
         let ca_file = write_temp_file(&ca_pem);
-        let cert_file = write_temp_file(b"cert-pem");
-        let key_file = write_temp_file(b"key-pem");
+        let (cert_pem, key_pem) = gen_identity_pem();
+        let cert_file = write_temp_file(&cert_pem);
+        let key_file = write_temp_file(&key_pem);
 
         let provider = FileWatcherProvider::new(make_config(
             ca_file.path().to_str(),
@@ -278,8 +301,8 @@ mod tests {
         assert!(matches!(*data, CertificateData::Both { .. }));
         assert_eq!(data.roots().unwrap(), ca_pem.as_slice());
         let identity = data.identity().unwrap();
-        assert_eq!(identity.cert_chain(), b"cert-pem");
-        assert_eq!(identity.key(), b"key-pem");
+        assert_eq!(identity.cert_chain(), cert_pem.as_slice());
+        assert_eq!(identity.key(), key_pem.as_slice());
     }
 
     #[test]
@@ -352,76 +375,149 @@ mod tests {
         let after = cached.load_full();
         assert!(
             Arc::ptr_eq(&initial, &after),
-            "expected cache to keep last good data on failure",
+            "expected cache to keep last successfully read data on failure",
         );
     }
 
     #[test]
-    fn parse_refresh_interval_seconds() {
-        let config: FileWatcherConfig =
-            serde_json::from_value(serde_json::json!({"refresh_interval": "60s"})).unwrap();
-        assert_eq!(config.refresh_interval, Some(Duration::from_secs(60)));
+    fn mismatched_cert_and_key_are_rejected() {
+        // Simulates a rotation observed half-applied: the cert has been
+        // replaced but the key file still holds the previous key.
+        let (cert_pem, _) = gen_identity_pem();
+        let (_, other_key_pem) = gen_identity_pem();
+        let cert_file = write_temp_file(&cert_pem);
+        let key_file = write_temp_file(&other_key_pem);
+
+        let err = read_certificate_data(&make_config(
+            None,
+            cert_file.path().to_str(),
+            key_file.path().to_str(),
+        ))
+        .unwrap_err();
+
+        let CertProviderError::InvalidIdentityPair {
+            cert_path,
+            key_path,
+            ..
+        } = &err
+        else {
+            panic!("expected InvalidIdentityPair, got {err:?}");
+        };
+        assert_eq!(cert_path.as_str(), cert_file.path().to_str().unwrap());
+        assert_eq!(key_path.as_str(), key_file.path().to_str().unwrap());
     }
 
     #[test]
-    fn parse_refresh_interval_fractional() {
-        let config: FileWatcherConfig =
-            serde_json::from_value(serde_json::json!({"refresh_interval": "0.5s"})).unwrap();
-        assert_eq!(config.refresh_interval, Some(Duration::from_millis(500)));
-    }
+    fn unparseable_identity_is_rejected() {
+        let cert_file = write_temp_file(b"not a certificate");
+        let key_file = write_temp_file(b"not a private key");
 
-    #[test]
-    fn parse_refresh_interval_absent() {
-        let config: FileWatcherConfig = serde_json::from_value(serde_json::json!({})).unwrap();
-        assert_eq!(config.refresh_interval, None);
-    }
+        let err = read_certificate_data(&make_config(
+            None,
+            cert_file.path().to_str(),
+            key_file.path().to_str(),
+        ))
+        .unwrap_err();
 
-    #[test]
-    fn parse_refresh_interval_missing_suffix() {
-        let err = serde_json::from_value::<FileWatcherConfig>(
-            serde_json::json!({"refresh_interval": "60"}),
-        );
-        assert!(err.is_err());
-        assert!(err.unwrap_err().to_string().contains("must end with 's'"));
-    }
-
-    #[test]
-    fn parse_refresh_interval_not_a_number() {
-        let err = serde_json::from_value::<FileWatcherConfig>(
-            serde_json::json!({"refresh_interval": "60ms"}),
-        );
-        assert!(err.is_err());
         assert!(
-            err.unwrap_err()
-                .to_string()
-                .contains("invalid duration number")
+            matches!(err, CertProviderError::InvalidIdentityPair { .. }),
+            "expected InvalidIdentityPair, got {err:?}",
         );
     }
 
+    /// A rotation that replaces the cert but not yet the key must not evict
+    /// the last good snapshot — the torn pair would fail every handshake
+    /// built from it until the following refresh.
     #[test]
-    fn parse_refresh_interval_must_be_greater_than_zero() {
-        let err = serde_json::from_value::<FileWatcherConfig>(
-            serde_json::json!({"refresh_interval":"0s"}),
-        );
-        assert!(err.is_err());
+    fn refresh_once_keeps_old_data_on_torn_rotation() {
+        let (cert_pem, key_pem) = gen_identity_pem();
+        let cert_file = write_temp_file(&cert_pem);
+        let key_file = write_temp_file(&key_pem);
+        let config = make_config(None, cert_file.path().to_str(), key_file.path().to_str());
+        let cached = ArcSwap::from_pointee(read_certificate_data(&config).unwrap());
+        let initial = cached.load_full();
+
+        // Write only the new cert; the key file still holds the old key.
+        let (rotated_cert_pem, rotated_key_pem) = gen_identity_pem();
+        std::fs::write(cert_file.path(), &rotated_cert_pem).unwrap();
+        refresh_once(&config, &cached);
         assert!(
-            err.unwrap_err()
-                .to_string()
-                .contains("must be greater than 0")
+            Arc::ptr_eq(&initial, &cached.load_full()),
+            "expected the half-rotated pair to be discarded",
+        );
+
+        // Once the key catches up the pair is consistent again.
+        std::fs::write(key_file.path(), &rotated_key_pem).unwrap();
+        refresh_once(&config, &cached);
+        let after = cached.load_full();
+        assert_eq!(after.identity().unwrap().cert_chain(), rotated_cert_pem);
+        assert_eq!(after.identity().unwrap().key(), rotated_key_pem);
+    }
+
+    /// A failed refresh keeps the cached data and waits out the full interval
+    /// rather than retrying early.
+    #[tokio::test(start_paused = true)]
+    async fn failed_refresh_keeps_cached_data_until_the_next_interval() {
+        let ca_file = write_temp_file(&gen_ca_pem());
+        let ca_path = ca_file.path().to_path_buf();
+        let mut config = make_config(ca_path.to_str(), None, None);
+        config.refresh_interval = Some(Duration::from_secs(600));
+
+        let cached = Arc::new(ArcSwap::from_pointee(
+            read_certificate_data(&config).unwrap(),
+        ));
+        let initial = cached.load_full();
+        let _task = AbortOnDrop(tokio::spawn(refresh_loop(config, Arc::clone(&cached))));
+
+        // Break the file, then let the first scheduled refresh fail.
+        std::fs::remove_file(&ca_path).unwrap();
+        tokio::time::sleep(Duration::from_secs(601)).await;
+        assert!(
+            Arc::ptr_eq(&initial, &cached.load_full()),
+            "failed refresh must not evict the cached data",
+        );
+
+        // Restore it. Without retry, the loop must still be waiting out the
+        // rest of the interval.
+        std::fs::write(&ca_path, gen_ca_pem()).unwrap();
+        tokio::time::sleep(Duration::from_secs(60)).await;
+        assert!(
+            Arc::ptr_eq(&initial, &cached.load_full()),
+            "no retry is implemented, so a restored file must not be picked up early",
+        );
+
+        // It is picked up at the next scheduled refresh.
+        tokio::time::sleep(Duration::from_secs(541)).await;
+        assert!(
+            !Arc::ptr_eq(&initial, &cached.load_full()),
+            "expected the next scheduled refresh to reload the restored file",
         );
     }
 
-    #[test]
-    fn parse_refresh_interval_rejects_invalid_floats() {
-        // Negative, NaN, and infinite all fail `Duration::try_from_secs_f64`
-        // rather than the "must be greater than 0" zero check.
-        for v in [
-            serde_json::json!({"refresh_interval": "-1s"}),
-            serde_json::json!({"refresh_interval": "NaNs"}),
-            serde_json::json!({"refresh_interval": "infs"}),
-        ] {
-            assert!(serde_json::from_value::<FileWatcherConfig>(v).is_err());
-        }
+    #[tokio::test(start_paused = true)]
+    async fn successful_refresh_waits_for_the_full_interval() {
+        let ca_file = write_temp_file(&gen_ca_pem());
+        let mut config = make_config(ca_file.path().to_str(), None, None);
+        config.refresh_interval = Some(Duration::from_secs(600));
+
+        let cached = Arc::new(ArcSwap::from_pointee(
+            read_certificate_data(&config).unwrap(),
+        ));
+        let initial = cached.load_full();
+        let _task = AbortOnDrop(tokio::spawn(refresh_loop(config, Arc::clone(&cached))));
+
+        // Well short of the interval: the loop must still be waiting.
+        tokio::time::sleep(Duration::from_secs(300)).await;
+        assert!(
+            Arc::ptr_eq(&initial, &cached.load_full()),
+            "refresh must not run before the configured interval elapses",
+        );
+
+        tokio::time::sleep(Duration::from_secs(301)).await;
+        assert!(
+            !Arc::ptr_eq(&initial, &cached.load_full()),
+            "refresh must run once the configured interval elapses",
+        );
     }
 
     #[tokio::test]

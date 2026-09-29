@@ -22,13 +22,16 @@
  *
  */
 
-//! Call an xDS-fronted service through GCP Traffic Director (`google_default`).
+//! Call an xDS-fronted service through GCP Traffic Director with manually
+//! supplied Application Default Credentials.
 //!
 //! Supplies the Application Default Credentials (ADC) token as xDS call
 //! credentials by implementing `TonicCallCredentials` directly against
 //! `google-cloud-auth`.
 //!
-//! Needs a `google_default` bootstrap + ADC:
+//! tonic-xds does not implement the bootstrap `google_default` credential
+//! automatically. The bootstrap must select `tls`, while this example supplies
+//! the ADC bearer token as call credentials:
 //!
 //! ```sh
 //! GRPC_XDS_BOOTSTRAP=/path/to/bootstrap.json \

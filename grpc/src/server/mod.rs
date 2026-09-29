@@ -60,7 +60,7 @@ use crate::send_future::SendFuture;
 
 pub mod builder;
 pub mod descriptor;
-pub(crate) mod interceptor;
+pub mod interceptor;
 pub(crate) mod router;
 pub mod service;
 

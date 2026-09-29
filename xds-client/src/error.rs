@@ -43,6 +43,11 @@ pub enum Error {
     #[error("call credentials error: {0}")]
     CallCredentials(String),
 
+    /// TLS configuration could not be constructed for the xDS server.
+    #[cfg(feature = "transport-tonic")]
+    #[error("TLS configuration error: {0}")]
+    TlsConfig(#[source] Box<dyn std::error::Error + Send + Sync + 'static>),
+
     /// The stream was closed unexpectedly.
     #[error("stream closed unexpectedly")]
     StreamClosed,
