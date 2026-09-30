@@ -278,17 +278,23 @@ impl LbPolicy for PickFirstPolicy {
     }
 
     fn work(&mut self, data: Option<WorkData>, controller: &mut dyn ChannelController) {
-        if let Some(data) = data {
-            // If data is set, it should be a subchannel update.
-            match data.downcast::<SubchannelUpdate>() {
-                Ok(update) => {
-                    self.subchannel_update(update.subchannel, &update.state, controller);
-                }
-                Err(data) => debug_assert!(
-                    false,
-                    "work called with {data:?}; expected a SubchannelUpdate"
-                ),
+        // No data: an IdlePicker pick requested a connection.
+        let Some(data) = data else {
+            self.exit_idle(controller);
+            return;
+        };
+        let data = match data.downcast::<SubchannelUpdate>() {
+            Ok(update) => {
+                self.subchannel_update(update.subchannel, &update.state, controller);
+                return;
             }
+            Err(data) => data,
+        };
+        if data.downcast_ref::<TimerExpired>().is_none() {
+            debug_assert!(
+                false,
+                "work called with {data:?}; expected a SubchannelUpdate or TimerExpired"
+            );
             return;
         }
         let mut ctx = PickFirstContext {
@@ -298,7 +304,7 @@ impl LbPolicy for PickFirstPolicy {
             controller,
         };
         let current = std::mem::take(&mut self.state);
-        self.state = current.work(&mut ctx);
+        self.state = current.timer_expired(&mut ctx);
     }
 
     fn exit_idle(&mut self, controller: &mut dyn ChannelController) {
@@ -377,10 +383,6 @@ impl IdleState {
         _state: &SubchannelState,
     ) -> PickFirstState {
         PickFirstState::Idle(self)
-    }
-
-    fn work(self, ctx: &mut PickFirstContext<'_>) -> PickFirstState {
-        self.exit_idle(ctx)
     }
 
     fn exit_idle(self, ctx: &mut PickFirstContext<'_>) -> PickFirstState {
@@ -590,12 +592,13 @@ impl FirstPassState {
         PickFirstState::FirstPass(self)
     }
 
-    fn work(mut self, ctx: &mut PickFirstContext<'_>) -> PickFirstState {
-        if self.timer.as_ref().is_some_and(Timer::expired) {
-            self.timer = None;
-            if let Some(next_sc) = self.advance_frontier(false) {
-                self.trigger_connection(ctx, &next_sc);
-            }
+    // Handles a TimerExpired wakeup. The wakeup may come from the timer of an
+    // earlier first pass; only act if the current timer has expired.
+    fn timer_expired(mut self, ctx: &mut PickFirstContext<'_>) -> PickFirstState {
+        if self.timer.take_if(|t| t.expired()).is_some()
+            && let Some(next_sc) = self.advance_frontier(false)
+        {
+            self.trigger_connection(ctx, &next_sc);
         }
         PickFirstState::FirstPass(self)
     }
@@ -774,10 +777,9 @@ impl PickFirstState {
         }
     }
 
-    fn work(self, ctx: &mut PickFirstContext<'_>) -> PickFirstState {
+    fn timer_expired(self, ctx: &mut PickFirstContext<'_>) -> PickFirstState {
         match self {
-            Self::Idle(s) => s.work(ctx),
-            Self::FirstPass(s) => s.work(ctx),
+            Self::FirstPass(s) => s.timer_expired(ctx),
             _ => self,
         }
     }
@@ -811,6 +813,11 @@ impl Debug for PickFirstState {
     }
 }
 
+// Work data sent when the happy eyeballs timer fires. Distinguishes timer
+// wakeups from IdlePicker connection requests, which carry no data.
+#[derive(Debug)]
+struct TimerExpired;
+
 // Implements the happy eyeballs timer task. `expired` becomes set when it
 // fires. When dropped, the timer is cancelled.
 struct Timer {
@@ -826,7 +833,7 @@ impl Timer {
         let handle = runtime.clone().spawn(Box::pin(async move {
             runtime.sleep(std::time::Duration::from_millis(250)).await;
             expired_clone.store(true, Ordering::SeqCst);
-            work_scheduler.schedule_work(None);
+            work_scheduler.schedule_work(Some(Box::new(TimerExpired)));
         }));
         Self { expired, handle }
     }
@@ -1070,12 +1077,23 @@ mod test {
             tokio::time::sleep(Duration::from_millis(300)).await;
         }
 
+        // Lets the Happy Eyeballs timer fire and returns the resulting work
+        // without delivering it. Requires a paused tokio clock.
+        async fn expect_timer_work(&mut self) -> Option<WorkData> {
+            self.advance_past_timer().await;
+            let data = self.expect_schedule_work();
+            assert!(
+                data.as_ref()
+                    .is_some_and(|d| d.downcast_ref::<TimerExpired>().is_some()),
+                "expected TimerExpired work, got {data:?}"
+            );
+            data
+        }
+
         // Lets the Happy Eyeballs timer fire and delivers the resulting work
         // to the policy. Requires a paused tokio clock.
         async fn fire_timer(&mut self) {
-            self.advance_past_timer().await;
-            let data = self.expect_schedule_work();
-            assert!(data.is_none());
+            let data = self.expect_timer_work().await;
             self.policy.work(data, &mut self.tcc);
         }
     }
@@ -1315,6 +1333,25 @@ mod test {
         env.simulate_connection(vec!["addr1"], None);
 
         env.advance_past_timer().await;
+        env.expect_no_events();
+    }
+
+    // Timer work queued behind a READY and then IDLE update is delivered after
+    // the LB has returned to Idle. It must not be treated as a connection
+    // request.
+    #[tokio::test(start_paused = true)]
+    async fn test_pick_first_stale_timer_work_ignored_in_idle() {
+        let mut env = new_env();
+        let scs = env.simulate_connection(vec!["addr1", "addr2"], None);
+
+        // Hold the timer's work, as if READY and IDLE were queued before it.
+        let timer_work = env.expect_timer_work().await;
+        env.send_subchannel_update(&scs[0], &SubchannelState::ready());
+        env.expect_ready_picker("addr1");
+        env.send_subchannel_update(&scs[0], &SubchannelState::idle());
+        env.expect_picker_state(ConnectivityState::Idle);
+
+        env.policy.work(timer_work, &mut env.tcc);
         env.expect_no_events();
     }
 
