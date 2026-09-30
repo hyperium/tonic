@@ -223,8 +223,7 @@ impl LbPolicy for PickFirstPolicy {
                 let addresses = match self.compile_address(endpoints, config) {
                     Ok(addrs) => addrs,
                     Err(e) => {
-                        self.state =
-                            SteadyState::enter(&mut ctx, Vec::new(), Vec::new(), e.clone());
+                        self.state = SteadyState::enter(&mut ctx, Vec::new(), e.clone());
                         return Err(e);
                     }
                 };
@@ -238,8 +237,7 @@ impl LbPolicy for PickFirstPolicy {
                 let is_tf = matches!(self.state, PickFirstState::SteadyState(_));
 
                 if is_idle_without_addresses || is_tf {
-                    self.state =
-                        SteadyState::enter(&mut ctx, Vec::new(), Vec::new(), error.clone());
+                    self.state = SteadyState::enter(&mut ctx, Vec::new(), error.clone());
                     return Err(error);
                 }
                 Ok(())
@@ -339,28 +337,34 @@ impl IdleState {
     }
 }
 
-// An entry associating an address, its created subchannel handle, and its
-// cached connectivity state.
+// An entry associating a created subchannel handle with its cached
+// connectivity state.
 #[derive(Debug, Clone)]
 struct SubchannelEntry {
-    address: Address,
     subchannel: Arc<dyn Subchannel>,
     state: SubchannelState,
 }
 
-// Returns the entry for the subchannel if its address is present in the most
-// recently received address list, or `None` if the subchannel is outdated.
+// Returns the entry for the subchannel if it belongs to the current subchannel
+// list, or `None` if the subchannel is outdated. Matches by subchannel
+// identity, not address: a subchannel from a previous list is outdated even if
+// its address is still present.
 fn current_entry_mut<'a>(
     entries: &'a mut [SubchannelEntry],
     subchannel: &Arc<dyn Subchannel>,
 ) -> Option<&'a mut SubchannelEntry> {
-    let addr = subchannel.address();
-    entries.iter_mut().find(|e| e.address == addr)
+    entries
+        .iter_mut()
+        .find(|e| Arc::ptr_eq(&e.subchannel, subchannel))
+}
+
+// Returns the addresses of the subchannels in `entries`, in order.
+fn entry_addresses(entries: &[SubchannelEntry]) -> Vec<Address> {
+    entries.iter().map(|e| e.subchannel.address()).collect()
 }
 
 // State node: FirstPass (Happy Eyeballs).
 struct FirstPassState {
-    addresses: Vec<Address>,
     subchannels: Vec<SubchannelEntry>,
     frontier_index: usize,
     timer: Timer,
@@ -380,7 +384,10 @@ impl FirstPassState {
         let mut new_subchannels = Vec::with_capacity(addresses.len());
 
         for addr in &addresses {
-            let entry = if let Some(pos) = existing.iter().position(|e| &e.address == addr) {
+            let entry = if let Some(pos) = existing
+                .iter()
+                .position(|e| e.subchannel.address() == *addr)
+            {
                 existing.swap_remove(pos)
             } else {
                 // Updates for the new subchannel are delivered to our work
@@ -388,11 +395,7 @@ impl FirstPassState {
                 let (subchannel, state) = ctx
                     .controller
                     .new_subchannel(addr, ctx.work_scheduler.clone());
-                SubchannelEntry {
-                    address: addr.clone(),
-                    subchannel,
-                    state,
-                }
+                SubchannelEntry { subchannel, state }
             };
 
             if entry.state.connectivity_state == ConnectivityState::Ready {
@@ -403,7 +406,6 @@ impl FirstPassState {
         }
 
         let mut first_pass = FirstPassState {
-            addresses,
             subchannels: new_subchannels,
             frontier_index: 0,
             timer: Timer::start(ctx.runtime.clone(), ctx.work_scheduler.clone()),
@@ -429,7 +431,7 @@ impl FirstPassState {
         let err = self
             .last_connection_error
             .unwrap_or_else(|| "all addresses in transient failure".to_string());
-        SteadyState::enter(ctx, self.addresses, self.subchannels, err)
+        SteadyState::enter(ctx, self.subchannels, err)
     }
 
     fn trigger_connection(&mut self, ctx: &mut PickFirstContext<'_>, sc: &Arc<dyn Subchannel>) {
@@ -483,18 +485,17 @@ impl FirstPassState {
         subchannel: Arc<dyn Subchannel>,
         state: &SubchannelState,
     ) -> PickFirstState {
-        let addr = subchannel.address();
-
         let Some(entry) = current_entry_mut(&mut self.subchannels, &subchannel) else {
             // This update is from an outdated subchannel that is no longer in
-            // the address list. Ignore it.
+            // the subchannel list. Ignore it.
             return PickFirstState::FirstPass(self);
         };
 
         entry.state = state.clone();
 
         if state.connectivity_state == ConnectivityState::Ready {
-            return ReadyState::enter(ctx, self.addresses, subchannel);
+            let addresses = entry_addresses(&self.subchannels);
+            return ReadyState::enter(ctx, addresses, subchannel);
         }
 
         if state.connectivity_state == ConnectivityState::TransientFailure {
@@ -503,7 +504,7 @@ impl FirstPassState {
             }
 
             if let Some(attempting) = self.subchannels.get(self.frontier_index)
-                && attempting.address == addr
+                && Arc::ptr_eq(&attempting.subchannel, &subchannel)
                 && let Some(next_sc) = self.advance_frontier(false)
             {
                 self.trigger_connection(ctx, &next_sc);
@@ -540,7 +541,6 @@ impl FirstPassState {
 // State node: SteadyState (Sticky TRANSIENT_FAILURE).
 #[derive(Debug)]
 struct SteadyState {
-    addresses: Vec<Address>,
     subchannels: Vec<SubchannelEntry>,
     failure_threshold: usize,
     failure_count: usize,
@@ -550,7 +550,6 @@ struct SteadyState {
 impl SteadyState {
     fn enter(
         ctx: &mut PickFirstContext<'_>,
-        addresses: Vec<Address>,
         subchannels: Vec<SubchannelEntry>,
         last_error: String,
     ) -> PickFirstState {
@@ -567,7 +566,6 @@ impl SteadyState {
             failure_threshold: subchannels.len(),
             failure_count: 0,
             last_connection_error: last_error,
-            addresses,
             subchannels,
         })
     }
@@ -588,13 +586,16 @@ impl SteadyState {
     ) -> PickFirstState {
         let Some(entry) = current_entry_mut(&mut self.subchannels, &subchannel) else {
             // This update is from an outdated subchannel that is no longer in
-            // the address list. Ignore it.
+            // the subchannel list. Ignore it.
             return PickFirstState::SteadyState(self);
         };
         entry.state = state.clone();
 
         match state.connectivity_state {
-            ConnectivityState::Ready => ReadyState::enter(ctx, self.addresses, subchannel),
+            ConnectivityState::Ready => {
+                let addresses = entry_addresses(&self.subchannels);
+                ReadyState::enter(ctx, addresses, subchannel)
+            }
             ConnectivityState::Idle => {
                 subchannel.connect();
                 PickFirstState::SteadyState(self)
@@ -660,8 +661,9 @@ impl ReadyState {
         subchannel: Arc<dyn Subchannel>,
         state: &SubchannelState,
     ) -> PickFirstState {
-        let addr = subchannel.address();
-        if self.selected.address() == addr && state.connectivity_state != ConnectivityState::Ready {
+        if Arc::ptr_eq(&self.selected, &subchannel)
+            && state.connectivity_state != ConnectivityState::Ready
+        {
             IdleState::enter(ctx, self.addresses)
         } else {
             PickFirstState::Ready(self)
@@ -737,7 +739,7 @@ impl Debug for PickFirstState {
             Self::FirstPass(fp) => f
                 .debug_struct("FirstPass")
                 .field("frontier_index", &fp.frontier_index)
-                .field("addresses", &fp.addresses)
+                .field("subchannels", &fp.subchannels)
                 .finish(),
             Self::SteadyState(ss) => f.debug_tuple("SteadyState").field(ss).finish(),
             Self::Ready(r) => f
@@ -929,6 +931,36 @@ mod test {
                 &subchannels[0],
                 &SubchannelState::transient_failure("connection refused"),
             );
+            subchannels
+        }
+
+        // Disconnects the selected subchannel, then triggers a reconnect with
+        // an RPC, which replaces every subchannel. `addrs` is the address
+        // list, starting with the selected subchannel's address. Returns the
+        // new subchannels, in address order.
+        fn simulate_disconnect_and_reconnect(
+            &mut self,
+            selected: &Arc<dyn Subchannel>,
+            addrs: &[&str],
+        ) -> Vec<Arc<dyn Subchannel>> {
+            self.send_subchannel_update(selected, &SubchannelState::idle());
+            let picker = self.expect_picker_state(ConnectivityState::Idle);
+            assert!(matches!(
+                picker.pick(&RequestHeaders::default()),
+                PickResult::Queue
+            ));
+            let data = self.expect_schedule_work();
+            self.policy.work(data, &mut self.tcc);
+            let subchannels: Vec<_> = addrs
+                .iter()
+                .map(|addr| {
+                    let sc = self.expect_new_subchannel();
+                    assert_eq!(sc.address().address.to_string(), *addr);
+                    sc
+                })
+                .collect();
+            self.expect_connect_to(addrs[0]);
+            self.expect_picker_state(ConnectivityState::Connecting);
             subchannels
         }
 
@@ -1606,6 +1638,55 @@ mod test {
         // Updates from the current subchannel are still handled.
         env.send_subchannel_update(&sc2, &SubchannelState::idle());
         env.expect_connect_to("addr2");
+        env.expect_no_events();
+    }
+
+    // Tests that updates from a discarded subchannel are ignored during a
+    // connection pass and in READY, even though its address is still in the
+    // address list.
+    #[tokio::test]
+    async fn test_pick_first_ignores_stale_subchannel_with_current_address() {
+        let mut env = new_env();
+        let old = env.simulate_successful_connection(vec!["addr1", "addr2"], None);
+
+        let new = env.simulate_disconnect_and_reconnect(&old[0], &["addr1", "addr2"]);
+
+        // A late READY from the discarded addr1 subchannel is ignored.
+        env.send_subchannel_update(&old[0], &SubchannelState::ready());
+        env.expect_no_events();
+
+        // The new addr1 subchannel is selected.
+        env.send_subchannel_update(&new[0], &SubchannelState::ready());
+        let selected = env.expect_ready_picker("addr1");
+        assert!(Arc::ptr_eq(&selected, &new[0]));
+
+        // A late IDLE from the discarded addr1 subchannel does not disconnect
+        // the selected subchannel.
+        env.send_subchannel_update(&old[0], &SubchannelState::idle());
+        env.expect_no_events();
+    }
+
+    // Tests that in steady state, updates from a discarded subchannel are
+    // ignored, even though its address is still in the address list.
+    #[tokio::test]
+    async fn test_pick_first_ignores_stale_subchannel_with_current_address_in_steady_state() {
+        let mut env = new_env();
+        let old = env.simulate_successful_connection(vec!["addr1"], None);
+
+        let new = env.simulate_disconnect_and_reconnect(&old[0], &["addr1"]);
+
+        // The new addr1 subchannel fails, entering steady state.
+        env.send_subchannel_update(
+            &new[0],
+            &SubchannelState::transient_failure("connection refused"),
+        );
+        env.expect_failing_picker("connection refused");
+        env.expect_request_resolution();
+
+        // Updates from the discarded addr1 subchannel do not select it or
+        // trigger a connection attempt.
+        env.send_subchannel_update(&old[0], &SubchannelState::ready());
+        env.send_subchannel_update(&old[0], &SubchannelState::idle());
         env.expect_no_events();
     }
 }
