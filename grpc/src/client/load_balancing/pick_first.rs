@@ -728,6 +728,10 @@ impl ReadyState {
         if Arc::ptr_eq(&self.selected, &subchannel)
             && state.connectivity_state != ConnectivityState::Ready
         {
+            // TODO: Ascertain if the subchannel is responsible for requesting
+            // re-resolution when a subchannel leaves ready. If not, pick first
+            // needs to request re-resolution here.
+
             IdleState::enter(ctx, self.addresses)
         } else {
             PickFirstState::Ready(self)
