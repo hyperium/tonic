@@ -367,7 +367,9 @@ fn entry_addresses(entries: &[SubchannelEntry]) -> Vec<Address> {
 struct FirstPassState {
     subchannels: Vec<SubchannelEntry>,
     frontier_index: usize,
-    timer: Timer,
+    // The Happy Eyeballs timer for the current connection attempt. `None`
+    // when attempting the last subchannel in the list.
+    timer: Option<Timer>,
     last_connection_error: Option<String>,
 }
 
@@ -408,7 +410,7 @@ impl FirstPassState {
         let mut first_pass = FirstPassState {
             subchannels: new_subchannels,
             frontier_index: 0,
-            timer: Timer::start(ctx.runtime.clone(), ctx.work_scheduler.clone()),
+            timer: None,
             last_connection_error: None,
         };
 
@@ -434,6 +436,7 @@ impl FirstPassState {
         SteadyState::enter(ctx, self.subchannels, err)
     }
 
+    // Starts a connection attempt on `sc`, the subchannel at the frontier.
     fn trigger_connection(&mut self, ctx: &mut PickFirstContext<'_>, sc: &Arc<dyn Subchannel>) {
         // TODO: Track only subchannel-reported state (do not assume
         // Connecting here) and mark subchannels that have failed in the first
@@ -451,7 +454,11 @@ impl FirstPassState {
         if was_idle {
             sc.connect();
         }
-        self.timer = Timer::start(ctx.runtime.clone(), ctx.work_scheduler.clone());
+        // Start the Happy Eyeballs timer unless this is the last subchannel in
+        // the list (gRFC A61). Replacing the timer cancels any previous one.
+        let is_last = self.frontier_index + 1 >= self.subchannels.len();
+        self.timer =
+            (!is_last).then(|| Timer::start(ctx.runtime.clone(), ctx.work_scheduler.clone()));
     }
 
     fn advance_frontier(&mut self, reset: bool) -> Option<Arc<dyn Subchannel>> {
@@ -529,10 +536,11 @@ impl FirstPassState {
     }
 
     fn work(mut self, ctx: &mut PickFirstContext<'_>) -> PickFirstState {
-        if self.timer.expired()
-            && let Some(next_sc) = self.advance_frontier(false)
-        {
-            self.trigger_connection(ctx, &next_sc);
+        if self.timer.as_ref().is_some_and(Timer::expired) {
+            self.timer = None;
+            if let Some(next_sc) = self.advance_frontier(false) {
+                self.trigger_connection(ctx, &next_sc);
+            }
         }
         PickFirstState::FirstPass(self)
     }
@@ -1003,11 +1011,16 @@ mod test {
             }
         }
 
+        // Advances the paused tokio clock past the 250ms Happy Eyeballs delay,
+        // letting any pending timer fire.
+        async fn advance_past_timer(&mut self) {
+            tokio::time::sleep(Duration::from_millis(300)).await;
+        }
+
         // Lets the Happy Eyeballs timer fire and delivers the resulting work
         // to the policy. Requires a paused tokio clock.
         async fn fire_timer(&mut self) {
-            // Past the 250ms Happy Eyeballs delay.
-            tokio::time::sleep(Duration::from_millis(300)).await;
+            self.advance_past_timer().await;
             let data = self.expect_schedule_work();
             assert!(data.is_none());
             self.policy.work(data, &mut self.tcc);
@@ -1224,7 +1237,8 @@ mod test {
     }
 
     // If the timer expires during a connection pass, the LB should advance to
-    // the next subchannel and trigger a connection attempt.
+    // the next subchannel and trigger a connection attempt. No timer is
+    // started for the last subchannel.
     #[tokio::test(start_paused = true)]
     async fn test_pick_first_timer_advancement() {
         let mut env = new_env();
@@ -1232,8 +1246,22 @@ mod test {
         env.expect_no_events();
 
         env.fire_timer().await;
-
         env.expect_connect_to("addr2");
+        env.expect_no_events();
+
+        // addr2 is the last subchannel, so no further timer fires.
+        env.advance_past_timer().await;
+        env.expect_no_events();
+    }
+
+    // With a single address, the only connection attempt is on the last
+    // subchannel, so no timer is started.
+    #[tokio::test(start_paused = true)]
+    async fn test_pick_first_no_timer_for_single_address() {
+        let mut env = new_env();
+        env.simulate_connection(vec!["addr1"], None);
+
+        env.advance_past_timer().await;
         env.expect_no_events();
     }
 
