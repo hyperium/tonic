@@ -828,57 +828,12 @@ fn build_shuffler() -> Arc<ShufflerFn> {
 
 #[cfg(test)]
 mod test {
+    use std::time::Duration;
+
     use super::*;
+    use crate::StatusCodeError;
     use crate::client::load_balancing::test_utils::TestEnv;
-    use crate::client::load_balancing::test_utils::TestEvent;
     use crate::rt::default_runtime;
-
-    impl PickFirstPolicy {
-        fn selected(&self) -> Option<&Arc<dyn Subchannel>> {
-            match &self.state {
-                PickFirstState::Ready(r) => Some(&r.selected),
-                _ => None,
-            }
-        }
-
-        fn timer(&self) -> Option<&Timer> {
-            match &self.state {
-                PickFirstState::FirstPass(fp) => Some(&fp.timer),
-                _ => None,
-            }
-        }
-
-        fn steady_state(&self) -> Option<&SteadyState> {
-            match &self.state {
-                PickFirstState::SteadyState(ss) => Some(ss),
-                _ => None,
-            }
-        }
-
-        fn subchannels(&self) -> Vec<Arc<dyn Subchannel>> {
-            match &self.state {
-                PickFirstState::FirstPass(fp) => fp
-                    .subchannels
-                    .iter()
-                    .map(|e| e.subchannel.clone())
-                    .collect(),
-                PickFirstState::SteadyState(ss) => ss
-                    .subchannels
-                    .iter()
-                    .map(|e| e.subchannel.clone())
-                    .collect(),
-                _ => Vec::new(),
-            }
-        }
-
-        fn last_connection_error(&self) -> Option<&str> {
-            match &self.state {
-                PickFirstState::FirstPass(fp) => fp.last_connection_error.as_deref(),
-                PickFirstState::SteadyState(ss) => Some(&ss.last_connection_error),
-                _ => None,
-            }
-        }
-    }
 
     // Helper to create endpoints from a list of address strings.
     // If attrs are provided, they will be added to each endpoint; otherwise,
@@ -920,66 +875,110 @@ mod test {
 
     impl TestEnv<PickFirstPolicy> {
         // Helper to simulate a basic connection against a list of
-        // addresses. The resulting events can be inspected via the test
-        // environment. Does not imply that the connection succeeded or failed.
+        // addresses. Returns the subchannels created, in address order. Does
+        // not imply that the connection succeeded or failed.
         fn simulate_connection(
             &mut self,
             addrs: Vec<&str>,
             attrs: Option<crate::attributes::Attributes>,
-        ) {
-            let addrs_len = addrs.len();
-            let endpoints = create_endpoints(addrs, attrs);
+        ) -> Vec<Arc<dyn Subchannel>> {
+            let endpoints = create_endpoints(addrs.clone(), attrs);
             self.send_resolver_update(endpoints).unwrap();
-
-            let state = self.expect_picker_update();
-            assert_eq!(state.connectivity_state, ConnectivityState::Idle);
+            self.expect_picker_state(ConnectivityState::Idle);
 
             self.policy.exit_idle(&mut self.tcc);
 
-            for _ in 0..addrs_len {
-                self.expect_new_subchannel();
-            }
+            let subchannels: Vec<_> = addrs
+                .iter()
+                .map(|addr| {
+                    let sc = self.expect_new_subchannel();
+                    assert_eq!(sc.address().address.to_string(), *addr);
+                    sc
+                })
+                .collect();
 
-            self.expect_connect();
-
-            let state = self.expect_picker_update();
-            assert_eq!(state.connectivity_state, ConnectivityState::Connecting);
+            self.expect_connect_to(addrs[0]);
+            self.expect_picker_state(ConnectivityState::Connecting);
+            subchannels
         }
 
+        // Simulates a connection where the first address becomes READY, and
+        // consumes the resulting READY picker update.
         fn simulate_successful_connection(
             &mut self,
             addrs: Vec<&str>,
             attrs: Option<crate::attributes::Attributes>,
-        ) {
-            self.simulate_connection(addrs, attrs);
-
-            // Simulating READY for addr1.
-            let sc1 = self.policy.subchannels()[0].clone();
-            self.send_subchannel_update(
-                &sc1,
-                &SubchannelState {
-                    connectivity_state: ConnectivityState::Ready,
-                    last_connection_error: None,
-                },
-            );
+        ) -> Vec<Arc<dyn Subchannel>> {
+            let first = addrs[0];
+            let subchannels = self.simulate_connection(addrs, attrs);
+            self.send_subchannel_update(&subchannels[0], &SubchannelState::ready());
+            self.expect_ready_picker(first);
+            subchannels
         }
 
+        // Simulates a connection where the first address fails with
+        // "connection refused". Events resulting from the failure are left for
+        // the caller to verify.
         fn simulate_failed_connection(
             &mut self,
             addrs: Vec<&str>,
             attrs: Option<crate::attributes::Attributes>,
-        ) {
-            self.simulate_connection(addrs, attrs);
-
-            // Simulating TransientFailure for addr1.
-            let sc1 = self.policy.subchannels()[0].clone();
+        ) -> Vec<Arc<dyn Subchannel>> {
+            let subchannels = self.simulate_connection(addrs, attrs);
             self.send_subchannel_update(
-                &sc1,
-                &SubchannelState {
-                    connectivity_state: ConnectivityState::TransientFailure,
-                    last_connection_error: Some("connection refused".to_string()),
-                },
+                &subchannels[0],
+                &SubchannelState::transient_failure("connection refused"),
             );
+            subchannels
+        }
+
+        // Verifies that the policy asked the subchannel for `addr` to connect.
+        fn expect_connect_to(&mut self, addr: &str) {
+            assert_eq!(self.expect_connect().address.to_string(), addr);
+        }
+
+        // Verifies that the policy produced a picker in `want` state, and
+        // returns it.
+        fn expect_picker_state(&mut self, want: ConnectivityState) -> Arc<dyn Picker> {
+            let state = self.expect_picker_update();
+            assert_eq!(state.connectivity_state, want);
+            state.picker
+        }
+
+        // Verifies that the policy produced a READY picker that picks the
+        // subchannel for `addr`, and returns that subchannel.
+        fn expect_ready_picker(&mut self, addr: &str) -> Arc<dyn Subchannel> {
+            let picker = self.expect_picker_state(ConnectivityState::Ready);
+            match picker.pick(&RequestHeaders::default()) {
+                PickResult::Pick(pick) => {
+                    assert_eq!(pick.subchannel.address().address.to_string(), addr);
+                    pick.subchannel
+                }
+                other => panic!("unexpected pick result {other:?}"),
+            }
+        }
+
+        // Verifies that the policy produced a TRANSIENT_FAILURE picker that
+        // fails picks with UNAVAILABLE and `error`.
+        fn expect_failing_picker(&mut self, error: &str) {
+            let picker = self.expect_picker_state(ConnectivityState::TransientFailure);
+            match picker.pick(&RequestHeaders::default()) {
+                PickResult::Fail(status) => {
+                    assert_eq!(status.code(), StatusCodeError::Unavailable);
+                    assert_eq!(status.message(), error);
+                }
+                other => panic!("unexpected pick result {other:?}"),
+            }
+        }
+
+        // Lets the Happy Eyeballs timer fire and delivers the resulting work
+        // to the policy. Requires a paused tokio clock.
+        async fn fire_timer(&mut self) {
+            // Past the 250ms Happy Eyeballs delay.
+            tokio::time::sleep(Duration::from_millis(300)).await;
+            let data = self.expect_schedule_work();
+            assert!(data.is_none());
+            self.policy.work(data, &mut self.tcc);
         }
     }
 
@@ -988,42 +987,23 @@ mod test {
     #[tokio::test]
     async fn test_pick_first_basic_connection() {
         let mut env = new_env();
-        env.simulate_successful_connection(vec!["addr1", "addr2"], None);
+        let scs = env.simulate_connection(vec!["addr1", "addr2"], None);
 
-        // Should update picker to READY with sc1.
-        let state = env.expect_picker_update();
-        assert_eq!(state.connectivity_state, ConnectivityState::Ready);
-        let res = state.picker.pick(&RequestHeaders::default());
-        match res {
-            PickResult::Pick(pick) => {
-                assert_eq!(pick.subchannel.address().address.to_string(), "addr1");
-            }
-            other => panic!("unexpected pick result {other:?}"),
-        }
+        env.send_subchannel_update(&scs[0], &SubchannelState::ready());
+        env.expect_ready_picker("addr1");
+        env.expect_no_events();
     }
 
     // If the first address fails, the LB should failover to the second address.
     #[tokio::test]
     async fn test_pick_first_failover() {
         let mut env = new_env();
-        env.simulate_failed_connection(vec!["addr1", "addr2"], None);
+        let scs = env.simulate_failed_connection(vec!["addr1", "addr2"], None);
+        env.expect_connect_to("addr2");
 
-        // Should connect to addr2.
-        let addr = env.expect_connect();
-        assert_eq!(addr.address.to_string(), "addr2");
-
-        // Simulate addr2 succeeding.
-        let sc2 = env.policy.subchannels()[1].clone();
-        env.send_subchannel_update(
-            &sc2,
-            &SubchannelState {
-                connectivity_state: ConnectivityState::Ready,
-                last_connection_error: None,
-            },
-        );
-
-        let state = env.expect_picker_update();
-        assert_eq!(state.connectivity_state, ConnectivityState::Ready);
+        env.send_subchannel_update(&scs[1], &SubchannelState::ready());
+        env.expect_ready_picker("addr2");
+        env.expect_no_events();
     }
 
     // Ensures that if a subchannel is already selected, and is still present in
@@ -1034,28 +1014,12 @@ mod test {
         let mut env = new_env();
         env.simulate_successful_connection(vec!["addr1", "addr2"], None);
 
-        // Expect `UpdatePicker(Ready)`.
-        let state = env.expect_picker_update();
-        assert_eq!(state.connectivity_state, ConnectivityState::Ready);
-
-        // New resolver update including addr1.
         let endpoints_new = create_endpoints(vec!["addr2", "addr1", "addr3"], None);
         env.send_resolver_update(endpoints_new).unwrap();
 
-        // Should NOT have any new subchannels or connect events because it
-        // stuck to the original selected subchannel.
+        // No new subchannels, connects, or picker updates: the READY picker
+        // for addr1 remains in use.
         env.expect_no_events();
-
-        assert_eq!(
-            env.policy
-                .selected()
-                .as_ref()
-                .unwrap()
-                .address()
-                .address
-                .to_string(),
-            "addr1"
-        );
     }
 
     // If all addresses fail during a connection pass, the LB should update to
@@ -1065,15 +1029,9 @@ mod test {
         let mut env = new_env();
         env.simulate_failed_connection(vec!["addr1"], None);
 
-        // Should update picker to TransientFailure.
-        let state = env.expect_picker_update();
-        assert_eq!(
-            state.connectivity_state,
-            ConnectivityState::TransientFailure
-        );
-
-        // Should request re-resolution.
+        env.expect_failing_picker("connection refused");
         env.expect_request_resolution();
+        env.expect_no_events();
     }
 
     // Shuffling and interleaving of addresses is deterministic and correct
@@ -1136,9 +1094,7 @@ mod test {
                 &mut env.tcc,
             )
             .unwrap();
-
-        let state = env.expect_picker_update();
-        assert_eq!(state.connectivity_state, ConnectivityState::Idle);
+        env.expect_picker_state(ConnectivityState::Idle);
 
         env.policy.exit_idle(&mut env.tcc);
 
@@ -1163,6 +1119,10 @@ mod test {
             resulting_addrs, expected,
             "Interleaving or shuffling failed"
         );
+
+        env.expect_connect_to("::2");
+        env.expect_picker_state(ConnectivityState::Connecting);
+        env.expect_no_events();
     }
 
     // De-duplicate addresses that appear multiple times within the same
@@ -1202,9 +1162,7 @@ mod test {
         ];
 
         env.send_resolver_update(endpoints).unwrap();
-
-        let state = env.expect_picker_update();
-        assert_eq!(state.connectivity_state, ConnectivityState::Idle);
+        env.expect_picker_state(ConnectivityState::Idle);
 
         env.policy.exit_idle(&mut env.tcc);
 
@@ -1213,15 +1171,9 @@ mod test {
         assert_eq!(sc1.address().address.to_string(), "addr1");
         let sc2 = env.expect_new_subchannel();
         assert_eq!(sc2.address().address.to_string(), "addr2");
-
-        // Verify no 3rd subchannel was created.
-        while let Ok(event) = env.rx_events.try_recv() {
-            if let TestEvent::NewSubchannel(_) = event {
-                panic!("Duplicate subchannel created");
-            }
-        }
-
-        assert_eq!(env.policy.subchannels().len(), 2, "De-duplication failed");
+        env.expect_connect_to("addr1");
+        env.expect_picker_state(ConnectivityState::Connecting);
+        env.expect_no_events();
     }
 
     // If the resolver update contains no addresses, the LB should clear
@@ -1231,49 +1183,26 @@ mod test {
         let mut env = new_env();
         env.simulate_successful_connection(vec!["addr1", "addr2"], None);
 
-        // Verify that the policy produced a picker that was READY.
-        let state = env.expect_picker_update();
-        assert_eq!(state.connectivity_state, ConnectivityState::Ready);
-
-        while env.rx_events.try_recv().is_ok() {}
-
-        // Send empty update.
         let res = env.send_resolver_update(vec![]);
-
         assert!(res.is_err());
 
-        // Check picker is in TransientFailure.
-        let state = env.expect_picker_update();
-        assert_eq!(
-            state.connectivity_state,
-            ConnectivityState::TransientFailure
-        );
-
-        // Check that re-resolution was requested.
+        env.expect_failing_picker("empty address list");
         env.expect_request_resolution();
+        env.expect_no_events();
     }
 
     // If the timer expires during a connection pass, the LB should advance to
     // the next subchannel and trigger a connection attempt.
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn test_pick_first_timer_advancement() {
         let mut env = new_env();
         env.simulate_connection(vec!["addr1", "addr2"], None);
+        env.expect_no_events();
 
-        // Simulate timer expiration by setting the flag directly.
-        env.policy
-            .timer()
-            .as_ref()
-            .unwrap()
-            .expired
-            .store(true, std::sync::atomic::Ordering::SeqCst);
+        env.fire_timer().await;
 
-        // Manually call work() to process the timer expiration.
-        env.policy.work(None, &mut env.tcc);
-
-        // Expect Connect event for addr2 due to timer expiration.
-        let addr = env.expect_connect();
-        assert_eq!(addr.address.to_string(), "addr2");
+        env.expect_connect_to("addr2");
+        env.expect_no_events();
     }
 
     // If all addresses fail during a connection pass, the LB should enter
@@ -1281,32 +1210,16 @@ mod test {
     #[tokio::test]
     async fn test_pick_first_steady_state_retries() {
         let mut env = new_env();
-        env.simulate_failed_connection(vec!["addr1"], None);
-        let sc1 = env.policy.subchannels()[0].clone();
+        let scs = env.simulate_failed_connection(vec!["addr1"], None);
 
-        // Expect UpdatePicker(TransientFailure) and RequestResolution.
-        let state = env.expect_picker_update();
-        assert_eq!(
-            state.connectivity_state,
-            ConnectivityState::TransientFailure
-        );
+        env.expect_failing_picker("connection refused");
         env.expect_request_resolution();
 
-        // Ensure steady state was entered.
-        assert!(env.policy.steady_state().is_some());
-
-        // Simulate addr1 transitioning to IDLE (backoff over).
-        env.send_subchannel_update(
-            &sc1,
-            &SubchannelState {
-                connectivity_state: ConnectivityState::Idle,
-                last_connection_error: None,
-            },
-        );
-
-        // Should automatically call connect() again.
-        let addr = env.expect_connect();
-        assert_eq!(addr.address.to_string(), "addr1");
+        // Simulate addr1 transitioning to IDLE (backoff over). Should
+        // automatically call connect() again.
+        env.send_subchannel_update(&scs[0], &SubchannelState::idle());
+        env.expect_connect_to("addr1");
+        env.expect_no_events();
     }
 
     // If the LB is in steady state, and a new address becomes ready, it should
@@ -1316,81 +1229,34 @@ mod test {
     #[tokio::test]
     async fn test_pick_first_steady_state_multi_backend() {
         let mut env = new_env();
-        env.simulate_failed_connection(vec!["addr1", "addr2"], None);
-        let sc1 = env.policy.subchannels()[0].clone();
-
-        // Should failover to addr2: expect Connect(addr2).
-        let addr = env.expect_connect();
-        assert_eq!(addr.address.to_string(), "addr2");
+        let scs = env.simulate_failed_connection(vec!["addr1", "addr2"], None);
+        env.expect_connect_to("addr2");
 
         // While addr2 is connecting, simulate addr1 going IDLE (backoff over).
-        env.send_subchannel_update(
-            &sc1,
-            &SubchannelState {
-                connectivity_state: ConnectivityState::Idle,
-                last_connection_error: None,
-            },
-        );
-
         // We should NOT reconnect to addr1 during the first pass.
+        env.send_subchannel_update(&scs[0], &SubchannelState::idle());
         env.expect_no_events();
 
-        // Now fail addr2 to complete first pass.
-        let sc2 = env.policy.subchannels()[1].clone();
+        // Now fail addr2 to complete first pass. Expect TransientFailure,
+        // re-resolution, and Connect(addr1) from first pass exhaustion.
         env.send_subchannel_update(
-            &sc2,
-            &SubchannelState {
-                connectivity_state: ConnectivityState::TransientFailure,
-                last_connection_error: Some("connection refused".to_string()),
-            },
+            &scs[1],
+            &SubchannelState::transient_failure("connection refused"),
         );
-
-        // Expect UpdatePicker(TransientFailure), RequestResolution, and
-        // Connect(addr1) from first pass exhaustion.
-        let state = env.expect_picker_update();
-        assert_eq!(
-            state.connectivity_state,
-            ConnectivityState::TransientFailure
-        );
+        env.expect_failing_picker("connection refused");
         env.expect_request_resolution();
-        let addr = env.expect_connect();
-        assert_eq!(addr.address.to_string(), "addr1");
+        env.expect_connect_to("addr1");
 
-        // Confirm LB is in steady state.
-        assert!(env.policy.steady_state().is_some());
+        // Simulate addr1 going IDLE again. It should automatically call
+        // connect() again.
+        env.send_subchannel_update(&scs[0], &SubchannelState::idle());
+        env.expect_connect_to("addr1");
 
-        // Simulate addr1 going IDLE again.
-        env.send_subchannel_update(
-            &sc1,
-            &SubchannelState {
-                connectivity_state: ConnectivityState::Idle,
-                last_connection_error: None,
-            },
-        );
-
-        // Now it should automatically call connect() again.
-        let addr = env.expect_connect();
-        assert_eq!(addr.address.to_string(), "addr1");
-
-        // Simulate addr1 successfully connecting and becoming READY.
-        env.send_subchannel_update(
-            &sc1,
-            &SubchannelState {
-                connectivity_state: ConnectivityState::Ready,
-                last_connection_error: None,
-            },
-        );
-
-        // The policy should switch to it immediately (enter READY state).
-        let state = env.expect_picker_update();
-        assert_eq!(state.connectivity_state, ConnectivityState::Ready);
-        let res = state.picker.pick(&RequestHeaders::default());
-        match res {
-            PickResult::Pick(pick) => {
-                assert_eq!(pick.subchannel.address().address.to_string(), "addr1");
-            }
-            other => panic!("unexpected pick result {other:?}"),
-        }
+        // Simulate addr1 successfully connecting and becoming READY. The
+        // policy should switch to it immediately.
+        env.send_subchannel_update(&scs[0], &SubchannelState::ready());
+        env.expect_ready_picker("addr1");
+        env.expect_no_events();
     }
 
     // If the LB is in steady state, and all addresses fail, it should trigger a
@@ -1401,49 +1267,27 @@ mod test {
     #[tokio::test]
     async fn test_pick_first_steady_state_stuck_idle_prevention() {
         let mut env = new_env();
-        env.simulate_failed_connection(vec!["addr1", "addr2"], None);
-        let sc1 = env.policy.subchannels()[0].clone();
+        let scs = env.simulate_failed_connection(vec!["addr1", "addr2"], None);
+        env.expect_connect_to("addr2");
 
-        // Expect Connect(addr2).
-        let addr = env.expect_connect();
-        assert_eq!(addr.address.to_string(), "addr2");
-
-        // Simulate addr1 backing off and transitioning to IDLE early
-        // (while addr2 is still connecting).
-        env.send_subchannel_update(
-            &sc1,
-            &SubchannelState {
-                connectivity_state: ConnectivityState::Idle,
-                last_connection_error: None,
-            },
-        );
-
-        // Expect NO events yet because first pass is still active.
+        // Simulate addr1 backing off and transitioning to IDLE early (while
+        // addr2 is still connecting). Expect no events yet because first pass
+        // is still active.
+        env.send_subchannel_update(&scs[0], &SubchannelState::idle());
         env.expect_no_events();
 
         // Fail addr2 to exhaust the first pass.
-        let sc2 = env.policy.subchannels()[1].clone();
         env.send_subchannel_update(
-            &sc2,
-            &SubchannelState {
-                connectivity_state: ConnectivityState::TransientFailure,
-                last_connection_error: Some("connection refused".to_string()),
-            },
+            &scs[1],
+            &SubchannelState::transient_failure("connection refused"),
         );
-
-        // Expect UpdatePicker(TransientFailure) and RequestResolution from
-        // exhaustion.
-        let state = env.expect_picker_update();
-        assert_eq!(
-            state.connectivity_state,
-            ConnectivityState::TransientFailure
-        );
+        env.expect_failing_picker("connection refused");
         env.expect_request_resolution();
 
         // Expect an immediate Connect(addr1) event triggered by the exhaustion
         // loop sweeping up the early IDLE subchannel.
-        let addr = env.expect_connect();
-        assert_eq!(addr.address.to_string(), "addr1");
+        env.expect_connect_to("addr1");
+        env.expect_no_events();
     }
 
     // This test is meant to validate that if a new address with different
@@ -1454,27 +1298,20 @@ mod test {
     async fn test_pick_first_address_update_with_attributes() {
         let addr = "addr1";
         let mut env = new_env();
-        env.simulate_connection(vec![addr], None);
+        let scs = env.simulate_connection(vec![addr], None);
 
         // Push same address but with attributes.
         let attrs = crate::attributes::Attributes::new().add("metadata_value".to_string());
         let endpoints_updated = create_endpoints(vec![addr], Some(attrs));
-
         env.send_resolver_update(endpoints_updated).unwrap();
 
         // This should be a different subchannel due to different attributes.
-        let mut found_new_subchannel = false;
-        while let Ok(event) = env.rx_events.try_recv() {
-            if let TestEvent::NewSubchannel(_) = event {
-                found_new_subchannel = true;
-                break;
-            }
-        }
-
-        assert!(
-            found_new_subchannel,
-            "Policy failed to recreate subchannel when address attributes mutated."
-        );
+        let sc = env.expect_new_subchannel();
+        assert_eq!(sc.address().address.to_string(), addr);
+        assert_ne!(sc.address(), scs[0].address());
+        env.expect_connect_to(addr);
+        env.expect_picker_state(ConnectivityState::Connecting);
+        env.expect_no_events();
     }
 
     // If a resolver error is received while the LB is in the process of
@@ -1484,91 +1321,57 @@ mod test {
     #[tokio::test]
     async fn test_pick_first_resolver_error_during_connecting() {
         let mut env = new_env();
-        env.simulate_connection(vec!["addr1"], None);
+        let scs = env.simulate_connection(vec!["addr1"], None);
 
-        // Simulate resolver error arriving.
-        let resolver_error = "dns resolution failed".to_string();
-        env.send_resolver_error(resolver_error).unwrap();
-
+        env.send_resolver_error("dns resolution failed".to_string())
+            .unwrap();
         env.expect_no_events();
 
-        assert!(
-            !env.policy.subchannels().is_empty(),
-            "Subchannels erroneously cleared by resolver error."
-        );
+        // The in-progress connection attempt is still honored.
+        env.send_subchannel_update(&scs[0], &SubchannelState::ready());
+        env.expect_ready_picker("addr1");
+        env.expect_no_events();
     }
 
-    // Out-of-Order Failure Detection.
-    #[tokio::test]
+    // If an earlier address fails after a later address has already failed
+    // during the first pass, the LB should detect that all addresses have
+    // failed and report the most recent error.
+    #[tokio::test(start_paused = true)]
     async fn test_pick_first_happy_eyeballs_out_of_order_failure() {
         let mut env = new_env();
-        env.simulate_connection(vec!["addr1", "addr2"], None);
+        let scs = env.simulate_connection(vec!["addr1", "addr2"], None);
 
-        env.policy
-            .timer()
-            .as_ref()
-            .unwrap()
-            .expired
-            .store(true, Ordering::SeqCst);
-        env.policy.work(None, &mut env.tcc);
+        env.fire_timer().await;
+        env.expect_connect_to("addr2");
 
-        let addr = env.expect_connect();
-        assert_eq!(addr.address.to_string(), "addr2");
-
-        let sc2 = env.policy.subchannels()[1].clone();
-        env.send_subchannel_update(
-            &sc2,
-            &SubchannelState {
-                connectivity_state: ConnectivityState::TransientFailure,
-                last_connection_error: Some("addr2 failed".to_string()),
-            },
-        );
-
+        // addr2 fails while addr1 is still connecting.
+        env.send_subchannel_update(&scs[1], &SubchannelState::transient_failure("addr2 failed"));
         env.expect_no_events();
 
-        let sc1 = env.policy.subchannels()[0].clone();
-        env.send_subchannel_update(
-            &sc1,
-            &SubchannelState {
-                connectivity_state: ConnectivityState::TransientFailure,
-                last_connection_error: Some("addr1 failed".to_string()),
-            },
-        );
-
-        let state = env.expect_picker_update();
-        assert_eq!(
-            state.connectivity_state,
-            ConnectivityState::TransientFailure
-        );
+        env.send_subchannel_update(&scs[0], &SubchannelState::transient_failure("addr1 failed"));
+        env.expect_failing_picker("addr1 failed");
+        env.expect_request_resolution();
+        env.expect_no_events();
     }
 
-    // Freshest Error Caching (Steady State).
+    // In steady state, each new subchannel failure updates the failing picker
+    // with the most recent connection error.
     #[tokio::test]
     async fn test_pick_first_steady_state_freshest_error() {
         let mut env = new_env();
-        env.simulate_failed_connection(vec!["addr1"], None);
+        let scs = env.simulate_failed_connection(vec!["addr1"], None);
 
-        let state = env.expect_picker_update();
-        assert_eq!(
-            state.connectivity_state,
-            ConnectivityState::TransientFailure
-        );
+        env.expect_failing_picker("connection refused");
         env.expect_request_resolution();
-        assert!(env.policy.steady_state().is_some());
 
-        let sc1 = env.policy.subchannels()[0].clone();
         env.send_subchannel_update(
-            &sc1,
-            &SubchannelState {
-                connectivity_state: ConnectivityState::TransientFailure,
-                last_connection_error: Some("steady state network drop".to_string()),
-            },
+            &scs[0],
+            &SubchannelState::transient_failure("steady state network drop"),
         );
-
-        assert_eq!(
-            env.policy.last_connection_error(),
-            Some("steady state network drop")
-        );
+        env.expect_failing_picker("steady state network drop");
+        // Every subchannel has failed again, so re-resolution is requested.
+        env.expect_request_resolution();
+        env.expect_no_events();
     }
 
     // Tests that when a selected subchannel disconnects (transitions to Idle),
@@ -1576,31 +1379,10 @@ mod test {
     #[tokio::test]
     async fn test_pick_first_disconnect_to_idle_and_reconnect() {
         let mut env = new_env();
-        env.simulate_successful_connection(vec!["addr1"], None);
+        let scs = env.simulate_successful_connection(vec!["addr1"], None);
 
-        let state = env.expect_picker_update();
-        assert_eq!(state.connectivity_state, ConnectivityState::Ready);
-        let res = state.picker.pick(&RequestHeaders::default());
-        let sc1 = match res {
-            PickResult::Pick(pick) => {
-                assert_eq!(pick.subchannel.address().address.to_string(), "addr1");
-                pick.subchannel
-            }
-            other => panic!("unexpected pick result {other:?}"),
-        };
-
-        env.send_subchannel_update(
-            &sc1,
-            &SubchannelState {
-                connectivity_state: ConnectivityState::Idle,
-                last_connection_error: None,
-            },
-        );
-
-        let state = env.expect_picker_update();
-        assert_eq!(state.connectivity_state, ConnectivityState::Idle);
-        let idle_picker = state.picker;
-
+        env.send_subchannel_update(&scs[0], &SubchannelState::idle());
+        let idle_picker = env.expect_picker_state(ConnectivityState::Idle);
         env.expect_no_events();
 
         let pick_result = idle_picker.pick(&RequestHeaders::default());
@@ -1608,15 +1390,13 @@ mod test {
 
         let data = env.expect_schedule_work();
         assert!(data.is_none());
-
         env.policy.work(data, &mut env.tcc);
 
-        env.expect_new_subchannel();
-        let addr = env.expect_connect();
-        assert_eq!(addr.address.to_string(), "addr1");
-
-        let state = env.expect_picker_update();
-        assert_eq!(state.connectivity_state, ConnectivityState::Connecting);
+        let sc = env.expect_new_subchannel();
+        assert_eq!(sc.address().address.to_string(), "addr1");
+        env.expect_connect_to("addr1");
+        env.expect_picker_state(ConnectivityState::Connecting);
+        env.expect_no_events();
     }
 
     // Tests that when connected to multi-address endpoints, if the winner drops
@@ -1625,33 +1405,11 @@ mod test {
     #[tokio::test]
     async fn test_pick_first_disconnect_to_idle_multi_address_reconnect() {
         let mut env = new_env();
-        env.simulate_successful_connection(vec!["addr1", "addr2"], None);
-
-        let state = env.expect_picker_update();
-        assert_eq!(state.connectivity_state, ConnectivityState::Ready);
-        let res = state.picker.pick(&RequestHeaders::default());
-        let sc1 = match res {
-            PickResult::Pick(pick) => {
-                assert_eq!(pick.subchannel.address().address.to_string(), "addr1");
-                pick.subchannel
-            }
-            other => panic!("unexpected pick result {other:?}"),
-        };
+        let scs = env.simulate_successful_connection(vec!["addr1", "addr2"], None);
 
         // Simulate addr1 disconnecting (transitioning to Idle).
-        env.send_subchannel_update(
-            &sc1,
-            &SubchannelState {
-                connectivity_state: ConnectivityState::Idle,
-                last_connection_error: None,
-            },
-        );
-
-        // Verify the policy updates the picker to Idle state.
-        let state = env.expect_picker_update();
-        assert_eq!(state.connectivity_state, ConnectivityState::Idle);
-        let idle_picker = state.picker;
-
+        env.send_subchannel_update(&scs[0], &SubchannelState::idle());
+        let idle_picker = env.expect_picker_state(ConnectivityState::Idle);
         env.expect_no_events();
 
         // Simulate an RPC happening.
@@ -1663,30 +1421,22 @@ mod test {
         // Call work to execute the scheduled connection attempt.
         env.policy.work(data, &mut env.tcc);
 
-        // Reconnect creates subchannels for both addr1 and addr2.
-        env.expect_new_subchannel();
-        env.expect_new_subchannel();
+        // Reconnect creates subchannels for both addr1 and addr2, and
+        // initiates reconnection to addr1.
+        let sc1 = env.expect_new_subchannel();
+        assert_eq!(sc1.address().address.to_string(), "addr1");
+        let sc2 = env.expect_new_subchannel();
+        assert_eq!(sc2.address().address.to_string(), "addr2");
+        env.expect_connect_to("addr1");
+        env.expect_picker_state(ConnectivityState::Connecting);
 
-        // Verify that the policy initiates reconnection to addr1.
-        let addr = env.expect_connect();
-        assert_eq!(addr.address.to_string(), "addr1");
-
-        let state = env.expect_picker_update();
-        assert_eq!(state.connectivity_state, ConnectivityState::Connecting);
-
-        // Simulate addr1 failing on reconnect.
-        let sc1_reconnect = env.policy.subchannels()[0].clone();
+        // Simulate addr1 failing on reconnect. Policy should failover to addr2.
         env.send_subchannel_update(
-            &sc1_reconnect,
-            &SubchannelState {
-                connectivity_state: ConnectivityState::TransientFailure,
-                last_connection_error: Some("connection refused".to_string()),
-            },
+            &sc1,
+            &SubchannelState::transient_failure("connection refused"),
         );
-
-        // Policy should failover to addr2.
-        let addr = env.expect_connect();
-        assert_eq!(addr.address.to_string(), "addr2");
+        env.expect_connect_to("addr2");
+        env.expect_no_events();
     }
 
     // Tests that when a resolver update arrives while in FirstPass, any
@@ -1697,32 +1447,9 @@ mod test {
     async fn test_pick_first_resolver_update_preserves_subchannel_failure_state() {
         let mut env = new_env();
 
-        // Initial endpoints [addr1, addr2].
-        let endpoints = create_endpoints(vec!["addr1", "addr2"], None);
-        env.send_resolver_update(endpoints).unwrap();
-
-        let state = env.expect_picker_update();
-        assert_eq!(state.connectivity_state, ConnectivityState::Idle);
-
-        env.policy.exit_idle(&mut env.tcc);
-
-        let sc1 = env.expect_new_subchannel();
-        let _sc2 = env.expect_new_subchannel();
-        let addr = env.expect_connect();
-        assert_eq!(addr.address.to_string(), "addr1");
-        let state = env.expect_picker_update();
-        assert_eq!(state.connectivity_state, ConnectivityState::Connecting);
-
         // addr1 fails with TransientFailure. Frontier advances to addr2.
-        env.send_subchannel_update(
-            &sc1,
-            &SubchannelState {
-                connectivity_state: ConnectivityState::TransientFailure,
-                last_connection_error: Some("connection refused".to_string()),
-            },
-        );
-        let addr = env.expect_connect();
-        assert_eq!(addr.address.to_string(), "addr2");
+        env.simulate_failed_connection(vec!["addr1", "addr2"], None);
+        env.expect_connect_to("addr2");
 
         // New resolver update [addr1, addr3], retaining addr1, which already
         // failed.
@@ -1730,14 +1457,14 @@ mod test {
         env.send_resolver_update(endpoints_new).unwrap();
 
         // addr3 is created as a new subchannel.
-        let _sc3 = env.expect_new_subchannel();
+        let sc3 = env.expect_new_subchannel();
+        assert_eq!(sc3.address().address.to_string(), "addr3");
 
         // Because addr1 is already in TransientFailure, the policy should skip
         // addr1 and immediately connect addr3.
-        let addr = env.expect_connect();
-        assert_eq!(addr.address.to_string(), "addr3");
-        let state = env.expect_picker_update();
-        assert_eq!(state.connectivity_state, ConnectivityState::Connecting);
+        env.expect_connect_to("addr3");
+        env.expect_picker_state(ConnectivityState::Connecting);
+        env.expect_no_events();
     }
 
     // Tests that when in IDLE, receiving resolver updates leaves the policy in
@@ -1747,34 +1474,29 @@ mod test {
     async fn test_pick_first_idle_on_resolver_update_until_exit_idle() {
         let mut env = new_env();
 
-        // Send initial resolver update [addr1, addr2].
+        // Send initial resolver update [addr1, addr2]. Expect IDLE picker
+        // update and NO subchannels or connect attempts.
         let endpoints = create_endpoints(vec!["addr1", "addr2"], None);
         env.send_resolver_update(endpoints).unwrap();
-
-        // Expect IDLE picker update and NO subchannels or connect attempts.
-        let state = env.expect_picker_update();
-        assert_eq!(state.connectivity_state, ConnectivityState::Idle);
+        env.expect_picker_state(ConnectivityState::Idle);
         env.expect_no_events();
 
         // Send second resolver update [addr3, addr4] while still in IDLE.
         let endpoints2 = create_endpoints(vec!["addr3", "addr4"], None);
         env.send_resolver_update(endpoints2).unwrap();
-
-        let state = env.expect_picker_update();
-        assert_eq!(state.connectivity_state, ConnectivityState::Idle);
+        env.expect_picker_state(ConnectivityState::Idle);
         env.expect_no_events();
 
-        // Explicitly exit idle.
+        // Explicitly exit idle. Subchannels are now created for the latest
+        // address list [addr3, addr4] and connection begins.
         env.policy.exit_idle(&mut env.tcc);
-
-        // Verify that subchannels are now created for the latest address list
-        // [addr3, addr4] and connection begins.
-        env.expect_new_subchannel();
-        env.expect_new_subchannel();
-        let addr = env.expect_connect();
-        assert_eq!(addr.address.to_string(), "addr3");
-        let state = env.expect_picker_update();
-        assert_eq!(state.connectivity_state, ConnectivityState::Connecting);
+        let sc3 = env.expect_new_subchannel();
+        assert_eq!(sc3.address().address.to_string(), "addr3");
+        let sc4 = env.expect_new_subchannel();
+        assert_eq!(sc4.address().address.to_string(), "addr4");
+        env.expect_connect_to("addr3");
+        env.expect_picker_state(ConnectivityState::Connecting);
+        env.expect_no_events();
     }
 
     // Tests that when in Transient Failure, receiving a valid resolver update
@@ -1786,26 +1508,18 @@ mod test {
         // Initial resolution failure sets Transient Failure.
         let res = env.send_resolver_error("resolver unavailable".to_string());
         assert!(res.is_err());
-
-        let state = env.expect_picker_update();
-        assert_eq!(
-            state.connectivity_state,
-            ConnectivityState::TransientFailure
-        );
+        env.expect_failing_picker("resolver unavailable");
         env.expect_request_resolution();
 
-        // A valid resolver update arrives [addr1, addr2].
+        // A valid resolver update arrives [addr1, addr2]. Subchannels are
+        // created and connection initiates immediately without exit_idle.
         let endpoints = create_endpoints(vec!["addr1", "addr2"], None);
         env.send_resolver_update(endpoints).unwrap();
-
-        // Verify subchannels created and connection initiates immediately
-        // without exit_idle.
         env.expect_new_subchannel();
         env.expect_new_subchannel();
-        let addr = env.expect_connect();
-        assert_eq!(addr.address.to_string(), "addr1");
-        let state = env.expect_picker_update();
-        assert_eq!(state.connectivity_state, ConnectivityState::Connecting);
+        env.expect_connect_to("addr1");
+        env.expect_picker_state(ConnectivityState::Connecting);
+        env.expect_no_events();
     }
 
     // Tests that calling exit_idle on an empty IdleState transitions to
@@ -1818,26 +1532,80 @@ mod test {
 
         // Calling exit_idle before any resolver update.
         env.policy.exit_idle(&mut env.tcc);
-
-        // Expect TransientFailure and resolution request.
-        let state = env.expect_picker_update();
-        assert_eq!(
-            state.connectivity_state,
-            ConnectivityState::TransientFailure
-        );
+        env.expect_failing_picker("all addresses in transient failure");
         env.expect_request_resolution();
 
-        // Name resolution completes with [addr1, addr2].
+        // Name resolution completes with [addr1, addr2]. Subchannels are
+        // created and connection initiates immediately.
         let endpoints = create_endpoints(vec!["addr1", "addr2"], None);
         env.send_resolver_update(endpoints).unwrap();
+        env.expect_new_subchannel();
+        env.expect_new_subchannel();
+        env.expect_connect_to("addr1");
+        env.expect_picker_state(ConnectivityState::Connecting);
+        env.expect_no_events();
+    }
 
-        // Verify that subchannels are created and connection initiates
-        // immediately.
-        env.expect_new_subchannel();
-        env.expect_new_subchannel();
-        let addr = env.expect_connect();
-        assert_eq!(addr.address.to_string(), "addr1");
-        let state = env.expect_picker_update();
-        assert_eq!(state.connectivity_state, ConnectivityState::Connecting);
+    // Tests that during a connection pass, updates from subchannels whose
+    // addresses were removed by a resolver update are ignored.
+    #[tokio::test]
+    async fn test_pick_first_ignores_removed_subchannel_updates_in_first_pass() {
+        let mut env = new_env();
+        let scs = env.simulate_connection(vec!["addr1", "addr2"], None);
+
+        // Replace the address list with [addr3].
+        let endpoints = create_endpoints(vec!["addr3"], None);
+        env.send_resolver_update(endpoints).unwrap();
+        let sc3 = env.expect_new_subchannel();
+        assert_eq!(sc3.address().address.to_string(), "addr3");
+        env.expect_connect_to("addr3");
+        env.expect_picker_state(ConnectivityState::Connecting);
+
+        // Updates from the removed subchannels do not select them or advance
+        // the connection pass.
+        env.send_subchannel_update(&scs[0], &SubchannelState::ready());
+        env.send_subchannel_update(
+            &scs[1],
+            &SubchannelState::transient_failure("connection refused"),
+        );
+        env.expect_no_events();
+
+        // The connection pass continues with addr3.
+        env.send_subchannel_update(&sc3, &SubchannelState::ready());
+        env.expect_ready_picker("addr3");
+        env.expect_no_events();
+    }
+
+    // Tests that in steady state, updates from subchannels whose addresses
+    // were removed by a resolver update are ignored.
+    #[tokio::test]
+    async fn test_pick_first_ignores_removed_subchannel_updates_in_steady_state() {
+        let mut env = new_env();
+        let scs = env.simulate_failed_connection(vec!["addr1"], None);
+        env.expect_failing_picker("connection refused");
+        env.expect_request_resolution();
+
+        // Replace the address list with [addr2], and fail addr2 to re-enter
+        // steady state.
+        let endpoints = create_endpoints(vec!["addr2"], None);
+        env.send_resolver_update(endpoints).unwrap();
+        let sc2 = env.expect_new_subchannel();
+        assert_eq!(sc2.address().address.to_string(), "addr2");
+        env.expect_connect_to("addr2");
+        env.expect_picker_state(ConnectivityState::Connecting);
+        env.send_subchannel_update(&sc2, &SubchannelState::transient_failure("addr2 failed"));
+        env.expect_failing_picker("addr2 failed");
+        env.expect_request_resolution();
+
+        // Updates from the removed subchannel do not trigger a connection
+        // attempt, select it, or change the picker.
+        env.send_subchannel_update(&scs[0], &SubchannelState::idle());
+        env.send_subchannel_update(&scs[0], &SubchannelState::ready());
+        env.expect_no_events();
+
+        // Updates from the current subchannel are still handled.
+        env.send_subchannel_update(&sc2, &SubchannelState::idle());
+        env.expect_connect_to("addr2");
+        env.expect_no_events();
     }
 }
