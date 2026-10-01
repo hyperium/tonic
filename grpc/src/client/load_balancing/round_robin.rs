@@ -577,6 +577,9 @@ mod test {
         let subchannel_being_removed = subchannels[1].clone();
         let error = "endpoint down";
         env.move_subchannel_to_transient_failure(&subchannels[1], error);
+        // The endpoint's pick_first child lost its connection, so it requests
+        // re-resolution.
+        env.expect_request_resolution();
 
         let new_picker = env.verify_roundrobin_ready_picker();
 

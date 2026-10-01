@@ -750,10 +750,9 @@ impl ReadyState {
         if Arc::ptr_eq(&self.selected, &subchannel)
             && state.connectivity_state != ConnectivityState::Ready
         {
-            // TODO: Ascertain if the subchannel is responsible for requesting
-            // re-resolution when a subchannel leaves ready. If not, pick first
-            // needs to request re-resolution here.
-
+            // The connection was lost, so the addresses may be stale.
+            // Request re-resolution.
+            ctx.controller.request_resolution();
             IdleState::enter(ctx, self.addresses)
         } else {
             PickFirstState::Ready(self)
@@ -1025,8 +1024,9 @@ mod test {
             subchannels
         }
 
-        // Disconnects the selected subchannel, then triggers a reconnect with
-        // an RPC, which replaces every subchannel. `addrs` is the address
+        // Disconnects the selected subchannel; the policy requests
+        // re-resolution and goes IDLE. A pick then makes the policy reconnect
+        // with a new subchannel for every address. `addrs` is the address
         // list, starting with the selected subchannel's address. Returns the
         // new subchannels, in address order.
         fn simulate_disconnect_and_reconnect(
@@ -1035,6 +1035,7 @@ mod test {
             addrs: &[&str],
         ) -> Vec<Arc<dyn Subchannel>> {
             self.send_subchannel_update(selected, &SubchannelState::idle());
+            self.expect_request_resolution();
             let picker = self.expect_picker_state(ConnectivityState::Idle);
             assert!(matches!(
                 picker.pick(&RequestHeaders::default()),
@@ -1478,6 +1479,7 @@ mod test {
         env.send_subchannel_update(&scs[0], &SubchannelState::ready());
         env.expect_ready_picker("addr1");
         env.send_subchannel_update(&scs[0], &SubchannelState::idle());
+        env.expect_request_resolution();
         env.expect_picker_state(ConnectivityState::Idle);
 
         env.policy.work(timer_work, &mut env.tcc);
@@ -1694,13 +1696,15 @@ mod test {
     }
 
     // Tests that when a selected subchannel disconnects (transitions to Idle),
-    // the policy reports an Idle state and uses an IdlePicker.
+    // the policy requests re-resolution, reports an Idle state and uses an
+    // IdlePicker.
     #[tokio::test]
     async fn test_pick_first_disconnect_to_idle_and_reconnect() {
         let mut env = new_env();
         let scs = env.simulate_successful_connection(vec!["addr1"], None);
 
         env.send_subchannel_update(&scs[0], &SubchannelState::idle());
+        env.expect_request_resolution();
         let idle_picker = env.expect_picker_state(ConnectivityState::Idle);
         env.expect_no_events();
 
@@ -1728,6 +1732,7 @@ mod test {
 
         // Simulate addr1 disconnecting (transitioning to Idle).
         env.send_subchannel_update(&scs[0], &SubchannelState::idle());
+        env.expect_request_resolution();
         let idle_picker = env.expect_picker_state(ConnectivityState::Idle);
         env.expect_no_events();
 
@@ -1812,6 +1817,7 @@ mod test {
         let mut env = new_env();
         let scs = env.simulate_successful_connection(vec!["addr1", "addr2"], None);
         env.send_subchannel_update(&scs[0], &SubchannelState::idle());
+        env.expect_request_resolution();
         env.expect_picker_state(ConnectivityState::Idle);
 
         let endpoints = create_endpoints(vec!["addr3", "addr4"], None);
