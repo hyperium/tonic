@@ -224,13 +224,12 @@ impl PickFirstPolicy {
         }
 
         // Keep using the previous addresses. If already failing, surface the
-        // resolver error in the picker and request re-resolution.
+        // resolver error in the picker.
         if ctx.connectivity_state() == ConnectivityState::TransientFailure {
             ctx.set_failing_picker(&error);
-            ctx.controller.request_resolution();
-            return Err(error);
         }
-        Ok(())
+        // Returning the error tells the resolver to re-resolve with backoff.
+        Err(error)
     }
 }
 
@@ -1638,14 +1637,14 @@ mod test {
     // If a resolver error is received while the LB is in the process of
     // connecting to addresses, it should not abort the connection attempt or
     // clear the existing addresses, as long as there are still valid addresses
-    // in the LB.
+    // in the LB. The error is still returned, so the resolver retries.
     #[tokio::test]
     async fn test_pick_first_resolver_error_during_connecting() {
         let mut env = new_env();
         let scs = env.simulate_connection(vec!["addr1"], None);
 
-        env.send_resolver_error("dns resolution failed".to_string())
-            .unwrap();
+        let res = env.send_resolver_error("dns resolution failed".to_string());
+        assert_eq!(res.unwrap_err(), "dns resolution failed");
         env.expect_no_events();
 
         // The in-progress connection attempt is still honored.
@@ -2058,8 +2057,9 @@ mod test {
     }
 
     // Tests that a resolver error while reporting TRANSIENT_FAILURE updates the
-    // picker with the resolver error and requests re-resolution, but keeps
-    // using the current subchannels.
+    // picker with the resolver error, but keeps using the current subchannels.
+    // The returned error makes the resolver retry, so no re-resolution is
+    // requested.
     #[tokio::test]
     async fn test_pick_first_resolver_error_in_transient_failure_keeps_subchannels() {
         let mut env = new_env();
@@ -2070,7 +2070,6 @@ mod test {
         let res = env.send_resolver_error("dns failure".to_string());
         assert!(res.is_err());
         env.expect_failing_picker("dns failure");
-        env.expect_request_resolution();
         env.expect_no_events();
 
         // The existing subchannel is still retried and can become READY.

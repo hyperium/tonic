@@ -486,7 +486,6 @@ mod test {
         env.verify_transient_failure_picker(connection_error);
         let resolver_error = String::from("resolver error");
         assert!(env.send_resolver_error(resolver_error.clone()).is_err());
-        env.expect_request_resolution();
         env.verify_transient_failure_picker(resolver_error);
     }
 
