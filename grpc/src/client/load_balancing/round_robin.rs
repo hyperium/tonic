@@ -806,13 +806,13 @@ mod test {
         endpoints.reverse();
         env.send_resolver_update(endpoints).unwrap();
         // subchannel 0 (1.1.1.1:1) and subchannel 1 (2.2.2.2:1) are retained.
-        // Two new subchannels are created (3.3.3.3:1 and 4.4.4.4:1).
-        let _new_subchannels = env.verify_subchannel_creation(2);
         // Subchannel 1 (2.2.2.2:1) is retained but still idle, so it is asked
         // to connect again.  Subchannel 0 is already ready and is left alone.
-        // TODO: Restore once pick_first tracks only subchannel-reported state
-        // and marks failed subchannels, matching the Go/C++ implementations.
-        // assert_eq!(env.expect_connect(), subchannels[1].address());
+        // This happens while the retained child handles the resolver update,
+        // before the new children create subchannels in exit_idle.
+        assert_eq!(env.expect_connect(), subchannels[1].address());
+        // Two new subchannels are created (3.3.3.3:1 and 4.4.4.4:1).
+        let _new_subchannels = env.verify_subchannel_creation(2);
         // RoundRobin sends a new ready picker containing the currently ready
         // subchannel 0.
         env.verify_ready_picker(subchannels[0].clone());

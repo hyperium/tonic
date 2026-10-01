@@ -395,7 +395,11 @@ impl IdleState {
 #[derive(Debug, Clone)]
 struct SubchannelEntry {
     subchannel: Arc<dyn Subchannel>,
+    // The state most recently reported by the subchannel.
     state: SubchannelState,
+    // Whether a connection attempt failed during the current first pass.
+    // Reset when a first pass starts; only read by `FirstPassState`.
+    failed_in_first_pass: bool,
 }
 
 // Returns the entry for the subchannel if it belongs to the current subchannel
@@ -443,14 +447,21 @@ impl FirstPassState {
                 .iter()
                 .position(|e| e.subchannel.address() == *addr)
             {
-                existing.swap_remove(pos)
+                // A new first pass starts with no failures recorded.
+                let mut entry = existing.swap_remove(pos);
+                entry.failed_in_first_pass = false;
+                entry
             } else {
                 // Updates for the new subchannel are delivered to our work
                 // method via our work scheduler.
                 let (subchannel, state) = ctx
                     .controller
                     .new_subchannel(addr, ctx.work_scheduler.clone());
-                SubchannelEntry { subchannel, state }
+                SubchannelEntry {
+                    subchannel,
+                    state,
+                    failed_in_first_pass: false,
+                }
             };
 
             if entry.state.connectivity_state == ConnectivityState::Ready {
@@ -467,8 +478,8 @@ impl FirstPassState {
             last_connection_error: None,
         };
 
-        if let Some(sc) = first_pass.advance_frontier(true) {
-            first_pass.trigger_connection(ctx, &sc);
+        if first_pass.advance_frontier(true) {
+            first_pass.trigger_connection(ctx);
 
             // No subchannel is READY here (checked above). Sticky
             // TRANSIENT_FAILURE (gRFC A62): if already reporting
@@ -493,23 +504,13 @@ impl FirstPassState {
         SteadyState::enter(ctx, self.subchannels, err)
     }
 
-    // Starts a connection attempt on `sc`, the subchannel at the frontier.
-    fn trigger_connection(&mut self, ctx: &mut PickFirstContext<'_>, sc: &Arc<dyn Subchannel>) {
-        // TODO: Track only subchannel-reported state (do not assume
-        // Connecting here) and mark subchannels that have failed in the first
-        // pass, to match the Go/C++ implementations (gRFC A61).
-        let was_idle = if let Some(entry) = current_entry_mut(&mut self.subchannels, sc) {
-            let was_idle = entry.state.connectivity_state == ConnectivityState::Idle;
-            entry.state = SubchannelState {
-                connectivity_state: ConnectivityState::Connecting,
-                last_connection_error: None,
-            };
-            was_idle
-        } else {
-            false
-        };
-        if was_idle {
-            sc.connect();
+    // Starts a connection attempt on the subchannel at the frontier. Only
+    // requests a connection if the subchannel last reported IDLE; if it is
+    // already CONNECTING, waits for that attempt.
+    fn trigger_connection(&mut self, ctx: &mut PickFirstContext<'_>) {
+        let entry = &self.subchannels[self.frontier_index];
+        if entry.state.connectivity_state == ConnectivityState::Idle {
+            entry.subchannel.connect();
         }
         // Start the Happy Eyeballs timer unless this is the last subchannel in
         // the list (gRFC A61). Replacing the timer cancels any previous one.
@@ -518,21 +519,25 @@ impl FirstPassState {
             (!is_last).then(|| Timer::start(ctx.runtime.clone(), ctx.work_scheduler.clone()));
     }
 
-    fn advance_frontier(&mut self, reset: bool) -> Option<Arc<dyn Subchannel>> {
+    // Moves the frontier to the next subchannel not in TRANSIENT_FAILURE,
+    // starting from the beginning if `reset`. Subchannels skipped because they
+    // are in TRANSIENT_FAILURE count as failed in this pass. Returns false if
+    // the frontier moved past the end of the list.
+    fn advance_frontier(&mut self, reset: bool) -> bool {
         if reset {
             self.frontier_index = 0;
         } else {
             self.frontier_index += 1;
         }
 
-        while self.frontier_index < self.subchannels.len() {
-            let entry = &self.subchannels[self.frontier_index];
-            match entry.state.connectivity_state {
-                ConnectivityState::TransientFailure => self.frontier_index += 1,
-                _ => return Some(entry.subchannel.clone()),
+        while let Some(entry) = self.subchannels.get_mut(self.frontier_index) {
+            if entry.state.connectivity_state != ConnectivityState::TransientFailure {
+                return true;
             }
+            entry.failed_in_first_pass = true;
+            self.frontier_index += 1;
         }
-        None
+        false
     }
 
     fn resolver_update(
@@ -549,12 +554,19 @@ impl FirstPassState {
         subchannel: Arc<dyn Subchannel>,
         state: &SubchannelState,
     ) -> PickFirstState {
-        let Some(entry) = current_entry_mut(&mut self.subchannels, &subchannel) else {
+        // Matches by identity, as in `current_entry_mut`; the index is needed
+        // to compare against the frontier.
+        let Some(index) = self
+            .subchannels
+            .iter()
+            .position(|e| Arc::ptr_eq(&e.subchannel, &subchannel))
+        else {
             // This update is from an outdated subchannel that is no longer in
             // the subchannel list. Ignore it.
             return PickFirstState::FirstPass(self);
         };
 
+        let entry = &mut self.subchannels[index];
         entry.state = state.clone();
 
         if state.connectivity_state == ConnectivityState::Ready {
@@ -567,38 +579,38 @@ impl FirstPassState {
                 self.last_connection_error = Some(err.clone());
             }
 
-            if let Some(attempting) = self.subchannels.get(self.frontier_index)
-                && Arc::ptr_eq(&attempting.subchannel, &subchannel)
-                && let Some(next_sc) = self.advance_frontier(false)
-            {
-                self.trigger_connection(ctx, &next_sc);
+            // Only count failures of subchannels this pass has reached. A
+            // subchannel ahead of the frontier may be failing an attempt this
+            // pass did not start, and may be IDLE again by the time the
+            // frontier reaches it.
+            if index <= self.frontier_index {
+                entry.failed_in_first_pass = true;
+            }
+
+            if index == self.frontier_index && self.advance_frontier(false) {
+                self.trigger_connection(ctx);
             }
         }
 
-        if self.frontier_index >= self.subchannels.len() {
-            // TODO: End the first pass once every subchannel is marked as
-            // failed, rather than when none are Connecting, to match the Go/C++
-            // implementations.
-            let any_connecting = self
-                .subchannels
-                .iter()
-                .any(|e| e.state.connectivity_state == ConnectivityState::Connecting);
-
-            if !any_connecting {
-                return self.enter_steady_state(ctx);
-            }
+        if self.is_complete() {
+            return self.enter_steady_state(ctx);
         }
 
         PickFirstState::FirstPass(self)
     }
 
+    // Returns whether the first pass is complete: every subchannel has been
+    // reached and has failed at least once during this pass (gRFC A61).
+    fn is_complete(&self) -> bool {
+        self.frontier_index >= self.subchannels.len()
+            && self.subchannels.iter().all(|e| e.failed_in_first_pass)
+    }
+
     // Handles a TimerExpired wakeup. The wakeup may come from the timer of an
     // earlier first pass; only act if the current timer has expired.
     fn timer_expired(mut self, ctx: &mut PickFirstContext<'_>) -> PickFirstState {
-        if self.timer.take_if(|t| t.expired()).is_some()
-            && let Some(next_sc) = self.advance_frontier(false)
-        {
-            self.trigger_connection(ctx, &next_sc);
+        if self.timer.take_if(|t| t.expired()).is_some() && self.advance_frontier(false) {
+            self.trigger_connection(ctx);
         }
         PickFirstState::FirstPass(self)
     }
@@ -1359,6 +1371,46 @@ mod test {
         env.expect_no_events();
     }
 
+    // A new pass asks a reused subchannel to connect if it last reported IDLE,
+    // even though the previous pass already asked it to. Only the reported
+    // state decides whether to connect.
+    #[tokio::test]
+    async fn test_pick_first_new_pass_reconnects_reused_idle_subchannel() {
+        let mut env = new_env();
+        env.simulate_connection(vec!["addr1", "addr2"], None);
+
+        // addr1 has not reported CONNECTING when the next update arrives.
+        let endpoints = create_endpoints(vec!["addr1", "addr2"], None);
+        env.send_resolver_update(endpoints).unwrap();
+        env.expect_connect_to("addr1");
+        env.expect_picker_state(ConnectivityState::Connecting);
+        env.expect_no_events();
+    }
+
+    // A failure from a subchannel the pass has not reached yet does not count
+    // toward ending the pass: the subchannel may be IDLE again by the time the
+    // frontier reaches it, and is then attempted.
+    #[tokio::test]
+    async fn test_pick_first_failure_ahead_of_frontier_not_counted() {
+        let mut env = new_env();
+        let scs = env.simulate_connection(vec!["addr1", "addr2"], None);
+
+        // addr2 fails and finishes backoff before the pass reaches it.
+        env.send_subchannel_update(&scs[1], &SubchannelState::transient_failure("addr2 failed"));
+        env.send_subchannel_update(&scs[1], &SubchannelState::idle());
+
+        // addr1 fails; the pass moves on and attempts addr2.
+        env.send_subchannel_update(&scs[0], &SubchannelState::transient_failure("addr1 failed"));
+        env.expect_connect_to("addr2");
+        env.expect_no_events();
+
+        // addr2 fails during this pass, completing it.
+        env.send_subchannel_update(&scs[1], &SubchannelState::transient_failure("addr2 again"));
+        env.expect_failing_picker("addr2 again");
+        env.expect_request_resolution();
+        env.expect_no_events();
+    }
+
     // If all addresses fail during a connection pass, the LB should enter
     // steady state and monitor for backoff expiry to retry connections.
     #[tokio::test]
@@ -1845,10 +1897,12 @@ mod test {
         assert_eq!(sc2.address().address.to_string(), "addr2");
         env.expect_connect_to("addr2");
         env.expect_no_events();
+        env.send_subchannel_update(&sc2, &SubchannelState::connecting());
+        env.expect_no_events();
 
         // Another update during the pass also leaves the reported state
-        // unchanged. addr2 is already connecting, so it is not asked to
-        // connect again.
+        // unchanged. addr2 reported CONNECTING, so it is not asked to connect
+        // again.
         let endpoints = create_endpoints(vec!["addr2", "addr3"], None);
         env.send_resolver_update(endpoints).unwrap();
         let sc3 = env.expect_new_subchannel();
