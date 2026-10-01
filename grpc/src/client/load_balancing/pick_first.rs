@@ -233,7 +233,8 @@ impl PickFirstPolicy {
 
 // The `PickFirstPolicy` is structured as a discrete finite state machine
 // (`PickFirstState`):
-// - `Idle`: Initial or post-disconnect state; waits for a pick or `exit_idle`
+// - `Idle`: Initial state until the first address list arrives, which starts
+//   a connection attempt. After a disconnect, waits for a pick or `exit_idle`
 //   to trigger a connection attempt.
 // - `FirstPass`: Happy Eyeballs connection pass staggering connection attempts
 //   across resolved addresses.
@@ -373,6 +374,12 @@ impl IdleState {
         ctx: &mut PickFirstContext<'_>,
         addresses: Vec<Address>,
     ) -> PickFirstState {
+        // No previous good update: connect as soon as the initial address list
+        // arrives (gRFC A61). After a disconnect, stay IDLE until a pick or
+        // `exit_idle`.
+        if self.addresses.is_empty() {
+            return FirstPassState::fresh_enter(ctx, addresses);
+        }
         Self::enter(ctx, addresses)
     }
 
@@ -970,9 +977,6 @@ mod test {
         ) -> Vec<Arc<dyn Subchannel>> {
             let endpoints = create_endpoints(addrs.clone(), attrs);
             self.send_resolver_update(endpoints).unwrap();
-            self.expect_picker_state(ConnectivityState::Idle);
-
-            self.policy.exit_idle(&mut self.tcc);
 
             let subchannels: Vec<_> = addrs
                 .iter()
@@ -1226,9 +1230,6 @@ mod test {
                 &mut env.tcc,
             )
             .unwrap();
-        env.expect_picker_state(ConnectivityState::Idle);
-
-        env.policy.exit_idle(&mut env.tcc);
 
         let mut resulting_addrs = Vec::with_capacity(NUM_ADDRS);
         for _ in 0..NUM_ADDRS {
@@ -1294,9 +1295,6 @@ mod test {
         ];
 
         env.send_resolver_update(endpoints).unwrap();
-        env.expect_picker_state(ConnectivityState::Idle);
-
-        env.policy.exit_idle(&mut env.tcc);
 
         // Should only create subchannels for addr1 and addr2 (2 unique addrs).
         let sc1 = env.expect_new_subchannel();
@@ -1673,28 +1671,39 @@ mod test {
         env.expect_no_events();
     }
 
-    // Tests that when in IDLE, receiving resolver updates leaves the policy in
-    // IDLE without creating subchannels or connecting until exit_idle is
-    // called.
+    // The initial resolver update starts connecting without waiting for
+    // exit_idle (gRFC A61: pick_first "will attempt to connect as soon as it
+    // receives its initial address list").
     #[tokio::test]
-    async fn test_pick_first_idle_on_resolver_update_until_exit_idle() {
+    async fn test_pick_first_initial_resolver_update_connects() {
         let mut env = new_env();
 
-        // Send initial resolver update [addr1, addr2]. Expect IDLE picker
-        // update and NO subchannels or connect attempts.
         let endpoints = create_endpoints(vec!["addr1", "addr2"], None);
+        env.send_resolver_update(endpoints).unwrap();
+        let sc1 = env.expect_new_subchannel();
+        assert_eq!(sc1.address().address.to_string(), "addr1");
+        let sc2 = env.expect_new_subchannel();
+        assert_eq!(sc2.address().address.to_string(), "addr2");
+        env.expect_connect_to("addr1");
+        env.expect_picker_state(ConnectivityState::Connecting);
+        env.expect_no_events();
+    }
+
+    // After a disconnect, resolver updates leave the policy IDLE without
+    // creating subchannels until exit_idle is called, which connects to the
+    // latest address list.
+    #[tokio::test]
+    async fn test_pick_first_resolver_update_after_disconnect_stays_idle() {
+        let mut env = new_env();
+        let scs = env.simulate_successful_connection(vec!["addr1", "addr2"], None);
+        env.send_subchannel_update(&scs[0], &SubchannelState::idle());
+        env.expect_picker_state(ConnectivityState::Idle);
+
+        let endpoints = create_endpoints(vec!["addr3", "addr4"], None);
         env.send_resolver_update(endpoints).unwrap();
         env.expect_picker_state(ConnectivityState::Idle);
         env.expect_no_events();
 
-        // Send second resolver update [addr3, addr4] while still in IDLE.
-        let endpoints2 = create_endpoints(vec!["addr3", "addr4"], None);
-        env.send_resolver_update(endpoints2).unwrap();
-        env.expect_picker_state(ConnectivityState::Idle);
-        env.expect_no_events();
-
-        // Explicitly exit idle. Subchannels are now created for the latest
-        // address list [addr3, addr4] and connection begins.
         env.policy.exit_idle(&mut env.tcc);
         let sc3 = env.expect_new_subchannel();
         assert_eq!(sc3.address().address.to_string(), "addr3");
