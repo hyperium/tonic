@@ -420,17 +420,14 @@ struct SubchannelEntry {
     failed_in_first_pass: bool,
 }
 
-// Returns the entry for the subchannel if it belongs to the current subchannel
-// list, or `None` if the subchannel is outdated. Matches by subchannel
-// identity, not address: a subchannel from a previous list is outdated even if
-// its address is still present.
-fn current_entry_mut<'a>(
-    entries: &'a mut [SubchannelEntry],
-    subchannel: &Arc<dyn Subchannel>,
-) -> Option<&'a mut SubchannelEntry> {
+// Returns the position of `subchannel` in `entries`, or `None` if it isn't
+// there (an outdated subchannel from an earlier list). Matches the subchannel
+// object itself, not its address: a subchannel from an earlier list is
+// outdated even if its address is still present.
+fn index_of(entries: &[SubchannelEntry], subchannel: &Arc<dyn Subchannel>) -> Option<usize> {
     entries
-        .iter_mut()
-        .find(|e| Arc::ptr_eq(&e.subchannel, subchannel))
+        .iter()
+        .position(|e| Arc::ptr_eq(&e.subchannel, subchannel))
 }
 
 // Returns the addresses of the subchannels in `entries`, in order.
@@ -584,13 +581,7 @@ impl FirstPassState {
         subchannel: Arc<dyn Subchannel>,
         state: &SubchannelState,
     ) -> PickFirstState {
-        // Matches by identity, as in `current_entry_mut`; the index is needed
-        // to tell whether the pass has reached this subchannel.
-        let Some(index) = self
-            .subchannels
-            .iter()
-            .position(|e| Arc::ptr_eq(&e.subchannel, &subchannel))
-        else {
+        let Some(index) = index_of(&self.subchannels, &subchannel) else {
             // This update is from an outdated subchannel that is no longer in
             // the subchannel list. Ignore it.
             return PickFirstState::FirstPass(self);
@@ -695,12 +686,12 @@ impl SteadyState {
         subchannel: Arc<dyn Subchannel>,
         state: &SubchannelState,
     ) -> PickFirstState {
-        let Some(entry) = current_entry_mut(&mut self.subchannels, &subchannel) else {
+        let Some(index) = index_of(&self.subchannels, &subchannel) else {
             // This update is from an outdated subchannel that is no longer in
             // the subchannel list. Ignore it.
             return PickFirstState::SteadyState(self);
         };
-        entry.state = state.clone();
+        self.subchannels[index].state = state.clone();
 
         match state.connectivity_state {
             ConnectivityState::Ready => {
