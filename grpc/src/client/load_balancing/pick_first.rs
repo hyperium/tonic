@@ -28,6 +28,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
+use std::time::Duration;
 
 use rand::seq::SliceRandom;
 
@@ -58,9 +59,13 @@ use crate::rt::GrpcRuntime;
 
 pub static POLICY_NAME: &str = "pick_first";
 
+// The Connection Attempt Delay (gRFC A61): how long to wait for a connection
+// attempt before also starting one on the next address.
+const CONNECTION_ATTEMPT_DELAY: Duration = Duration::from_millis(250);
+
 type ShufflerFn = dyn Fn(&mut [Endpoint]) + Send + Sync + 'static;
 
-#[derive(Debug, serde::Deserialize, Clone, Default)]
+#[derive(Debug, serde::Deserialize, Default)]
 pub(crate) struct PickFirstConfig {
     #[serde(default, rename = "shuffleAddressList")]
     shuffle_address_list: bool,
@@ -109,7 +114,7 @@ pub(crate) struct PickFirstPolicy {
     shuffler: Arc<ShufflerFn>,
     state: PickFirstState, // Current state of the LB's finite state machine.
     // The connectivity state most recently reported to the channel. This is
-    // distinct from the LB's internal `state`: a connection pass started while
+    // distinct from the LB's internal `state`: a first pass started while
     // in TRANSIENT_FAILURE keeps reporting TRANSIENT_FAILURE (sticky-TF, gRFC
     // A62), even when the LB's internal state is FirstPass.
     connectivity_state: ConnectivityState,
@@ -235,19 +240,6 @@ impl PickFirstPolicy {
     }
 }
 
-// The `PickFirstPolicy` is structured as a discrete finite state machine
-// (`PickFirstState`):
-// - `Idle`: Initial state until the first address list arrives, which starts
-//   a connection attempt. After a disconnect, waits for a pick or `exit_idle`
-//   to trigger a connection attempt.
-// - `FirstPass`: Happy Eyeballs connection pass staggering connection attempts
-//   across resolved addresses.
-// - `SteadyState`: All addresses failed; holds sticky TRANSIENT_FAILURE and
-//   retries connections as backoffs expire.
-// - `Ready`: Successfully connected to a subchannel, routing all picks to it.
-//
-// Each state publishes pickers through `PickFirstContext::update_picker`,
-// which records the reported connectivity state.
 impl LbPolicy for PickFirstPolicy {
     type LbConfig = PickFirstConfig;
 
@@ -371,7 +363,7 @@ impl PickFirstContext<'_> {
 }
 
 // State node: Idle.
-#[derive(Debug, Default)]
+#[derive(Default)]
 struct IdleState {
     addresses: Vec<Address>,
 }
@@ -418,7 +410,7 @@ impl IdleState {
 
 // An entry associating a created subchannel handle with its cached
 // connectivity state.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 struct SubchannelEntry {
     subchannel: Arc<dyn Subchannel>,
     // The state most recently reported by the subchannel.
@@ -450,9 +442,9 @@ fn entry_addresses(entries: &[SubchannelEntry]) -> Vec<Address> {
 struct FirstPassState {
     subchannels: Vec<SubchannelEntry>,
     frontier_index: usize,
-    // The Happy Eyeballs timer for the current connection attempt. `None`
-    // when attempting the last subchannel in the list, or after the frontier
-    // has moved past the end of the list.
+    // The Connection Attempt Delay timer for the current connection attempt.
+    // `None` when attempting the last subchannel in the list, or once the
+    // pass has moved past the end of the list.
     timer: Option<Timer>,
     last_connection_error: Option<String>,
 }
@@ -516,7 +508,7 @@ impl FirstPassState {
         };
 
         if first_pass.advance_frontier(true) {
-            first_pass.trigger_connection(ctx);
+            first_pass.start_connection_attempt(ctx);
 
             // No subchannel is READY here (checked above). Sticky
             // TRANSIENT_FAILURE (gRFC A62): if already reporting
@@ -541,25 +533,26 @@ impl FirstPassState {
         SteadyState::enter(ctx, self.subchannels, err)
     }
 
-    // Starts a connection attempt on the subchannel at the frontier. Only
+    // Starts a connection attempt on the subchannel the pass has reached. Only
     // requests a connection if the subchannel last reported IDLE; if it is
     // already CONNECTING, waits for that attempt.
-    fn trigger_connection(&mut self, ctx: &mut PickFirstContext<'_>) {
+    fn start_connection_attempt(&mut self, ctx: &mut PickFirstContext<'_>) {
         let entry = &self.subchannels[self.frontier_index];
         if entry.state.connectivity_state == ConnectivityState::Idle {
             entry.subchannel.connect();
         }
-        // Start the Happy Eyeballs timer unless this is the last subchannel in
-        // the list (gRFC A61). Replacing the timer cancels any previous one.
+        // Start the Connection Attempt Delay timer unless this is the last
+        // subchannel in the list (gRFC A61). Replacing the timer cancels any
+        // previous one.
         let is_last = self.frontier_index + 1 >= self.subchannels.len();
         self.timer =
             (!is_last).then(|| Timer::start(ctx.runtime.clone(), ctx.work_scheduler.clone()));
     }
 
-    // Moves the frontier to the next subchannel not in TRANSIENT_FAILURE,
+    // Moves the pass to the next subchannel not in TRANSIENT_FAILURE,
     // starting from the beginning if `reset`. Subchannels skipped because they
     // are in TRANSIENT_FAILURE count as failed in this pass. Returns false if
-    // the frontier moved past the end of the list.
+    // the pass moved past the end of the list.
     fn advance_frontier(&mut self, reset: bool) -> bool {
         if reset {
             self.frontier_index = 0;
@@ -592,7 +585,7 @@ impl FirstPassState {
         state: &SubchannelState,
     ) -> PickFirstState {
         // Matches by identity, as in `current_entry_mut`; the index is needed
-        // to compare against the frontier.
+        // to tell whether the pass has reached this subchannel.
         let Some(index) = self
             .subchannels
             .iter()
@@ -617,19 +610,19 @@ impl FirstPassState {
             }
 
             // Only count failures of subchannels this pass has reached. A
-            // subchannel ahead of the frontier may be failing an attempt this
-            // pass did not start, and may be IDLE again by the time the
-            // frontier reaches it.
+            // subchannel the pass has not reached yet may be failing an attempt
+            // this pass did not start, and may be IDLE again by the time the
+            // pass reaches it.
             if index <= self.frontier_index {
                 entry.failed_in_first_pass = true;
             }
 
-            // The attempt at the frontier failed: cancel its timer and move on
-            // to the next subchannel, if any.
+            // The current connection attempt failed: cancel its timer and move
+            // on to the next subchannel, if any.
             if index == self.frontier_index {
                 self.timer = None;
                 if self.advance_frontier(false) {
-                    self.trigger_connection(ctx);
+                    self.start_connection_attempt(ctx);
                 }
             }
         }
@@ -652,7 +645,7 @@ impl FirstPassState {
     // earlier first pass; only act if the current timer has expired.
     fn timer_expired(mut self, ctx: &mut PickFirstContext<'_>) -> PickFirstState {
         if self.timer.take_if(|t| t.expired()).is_some() && self.advance_frontier(false) {
-            self.trigger_connection(ctx);
+            self.start_connection_attempt(ctx);
         }
         PickFirstState::FirstPass(self)
     }
@@ -662,7 +655,6 @@ impl FirstPassState {
 #[derive(Debug)]
 struct SteadyState {
     subchannels: Vec<SubchannelEntry>,
-    failure_threshold: usize,
     failure_count: usize,
     last_connection_error: String,
 }
@@ -683,7 +675,6 @@ impl SteadyState {
         }
 
         PickFirstState::SteadyState(SteadyState {
-            failure_threshold: subchannels.len(),
             failure_count: 0,
             last_connection_error: last_error,
             subchannels,
@@ -728,7 +719,7 @@ impl SteadyState {
                 // report the latest error and request re-resolution
                 // (gRFC A61).
                 self.failure_count += 1;
-                if self.failure_count >= self.failure_threshold {
+                if self.failure_count >= self.subchannels.len() {
                     self.failure_count = 0;
                     ctx.set_failing_picker(&self.last_connection_error);
                     ctx.controller.request_resolution();
@@ -795,7 +786,19 @@ impl ReadyState {
     }
 }
 
-// The Pick First State Machine enum.
+// `PickFirstPolicy` is structured as a discrete finite state machine with
+// these states:
+// - `Idle`: Initial state until the first address list arrives, which starts
+//   a connection attempt. After a disconnect, waits for a pick or `exit_idle`
+//   to trigger a connection attempt.
+// - `FirstPass`: Happy Eyeballs pass (gRFC A61) staggering connection attempts
+//   across resolved addresses.
+// - `SteadyState`: All addresses failed; holds sticky TRANSIENT_FAILURE and
+//   retries connections as backoffs expire.
+// - `Ready`: Successfully connected to a subchannel, routing all picks to it.
+//
+// Each state publishes pickers through `PickFirstContext::update_picker`,
+// which records the reported connectivity state.
 enum PickFirstState {
     Idle(IdleState),
     FirstPass(FirstPassState),
@@ -873,13 +876,13 @@ impl Debug for PickFirstState {
     }
 }
 
-// Work data sent when the happy eyeballs timer fires. Distinguishes timer
-// wakeups from IdlePicker connection requests, which carry no data.
+// Work data sent when the Connection Attempt Delay timer fires. Distinguishes
+// timer wakeups from IdlePicker connection requests, which carry no data.
 #[derive(Debug)]
 struct TimerExpired;
 
-// Implements the happy eyeballs timer task. `expired` becomes set when it
-// fires. When dropped, the timer is cancelled.
+// The Connection Attempt Delay timer (gRFC A61). `expired` becomes set when
+// it fires. When dropped, the timer is cancelled.
 struct Timer {
     expired: Arc<AtomicBool>,
     handle: BoxedTaskHandle,
@@ -891,7 +894,7 @@ impl Timer {
         let expired = Arc::new(AtomicBool::new(false));
         let expired_clone = expired.clone();
         let handle = runtime.clone().spawn(Box::pin(async move {
-            runtime.sleep(std::time::Duration::from_millis(250)).await;
+            runtime.sleep(CONNECTION_ATTEMPT_DELAY).await;
             expired_clone.store(true, Ordering::SeqCst);
             work_scheduler.schedule_work(Some(Box::new(TimerExpired)));
         }));
@@ -1130,14 +1133,14 @@ mod test {
             }
         }
 
-        // Advances the paused tokio clock past the 250ms Happy Eyeballs delay,
+        // Advances the paused tokio clock past the Connection Attempt Delay,
         // letting any pending timer fire.
         async fn advance_past_timer(&mut self) {
             tokio::time::sleep(Duration::from_millis(300)).await;
         }
 
-        // Lets the Happy Eyeballs timer fire and returns the resulting work
-        // without delivering it. Requires a paused tokio clock.
+        // Lets the Connection Attempt Delay timer fire and returns the
+        // resulting work without delivering it. Requires a paused tokio clock.
         async fn expect_timer_work(&mut self) -> Option<WorkData> {
             self.advance_past_timer().await;
             let data = self.expect_schedule_work();
@@ -1149,8 +1152,8 @@ mod test {
             data
         }
 
-        // Lets the Happy Eyeballs timer fire and delivers the resulting work
-        // to the policy. Requires a paused tokio clock.
+        // Lets the Connection Attempt Delay timer fire and delivers the
+        // resulting work to the policy. Requires a paused tokio clock.
         async fn fire_timer(&mut self) {
             let data = self.expect_timer_work().await;
             self.policy.work(data, &mut self.tcc);
@@ -1197,7 +1200,7 @@ mod test {
         env.expect_no_events();
     }
 
-    // If all addresses fail during a connection pass, the LB should update to
+    // If all addresses fail during the first pass, the LB should update to
     // TransientFailure and request re-resolution.
     #[tokio::test]
     async fn test_pick_first_exhaustion() {
@@ -1472,7 +1475,7 @@ mod test {
         env.expect_no_events();
     }
 
-    // If the timer expires during a connection pass, the LB should advance to
+    // If the timer expires during the first pass, the LB should advance to
     // the next subchannel and trigger a connection attempt. No timer is
     // started for the last subchannel.
     #[tokio::test(start_paused = true)]
@@ -1538,9 +1541,9 @@ mod test {
 
     // A failure from a subchannel the pass has not reached yet does not count
     // toward ending the pass: the subchannel may be IDLE again by the time the
-    // frontier reaches it, and is then attempted.
+    // pass reaches it, and is then attempted.
     #[tokio::test]
-    async fn test_pick_first_failure_ahead_of_frontier_not_counted() {
+    async fn test_pick_first_failure_not_yet_reached_not_counted() {
         let mut env = new_env();
         let scs = env.simulate_connection(vec!["addr1", "addr2"], None);
 
@@ -1560,7 +1563,7 @@ mod test {
         env.expect_no_events();
     }
 
-    // If all addresses fail during a connection pass, the LB should enter
+    // If all addresses fail during the first pass, the LB should enter
     // steady state and monitor for backoff expiry to retry connections.
     #[tokio::test]
     async fn test_pick_first_steady_state_retries() {
@@ -1708,11 +1711,11 @@ mod test {
         env.expect_no_events();
     }
 
-    // When the attempt at the frontier fails and no subchannel is left to
-    // attempt, the pass cancels the Happy Eyeballs timer and waits for the
-    // earlier attempts to finish.
+    // When the current connection attempt fails and no subchannel is left to
+    // attempt, the pass cancels the Connection Attempt Delay timer and waits
+    // for the earlier attempts to finish.
     #[tokio::test(start_paused = true)]
-    async fn test_pick_first_frontier_failure_with_nothing_left_cancels_timer() {
+    async fn test_pick_first_attempt_failure_with_nothing_left_cancels_timer() {
         let mut env = new_env();
         let scs = env.simulate_connection(vec!["addr1", "addr2", "addr3"], None);
 
@@ -1844,7 +1847,7 @@ mod test {
     async fn test_pick_first_resolver_update_preserves_subchannel_failure_state() {
         let mut env = new_env();
 
-        // addr1 fails with TransientFailure. Frontier advances to addr2.
+        // addr1 fails with TransientFailure. The pass moves on to addr2.
         env.simulate_failed_connection(vec!["addr1", "addr2"], None);
         env.expect_connect_to("addr2");
 
@@ -1948,7 +1951,7 @@ mod test {
         env.expect_no_events();
     }
 
-    // Tests that during a connection pass, updates from subchannels whose
+    // Tests that during the first pass, updates from subchannels whose
     // addresses were removed by a resolver update are ignored.
     #[tokio::test]
     async fn test_pick_first_ignores_removed_subchannel_updates_in_first_pass() {
@@ -1963,7 +1966,7 @@ mod test {
         env.expect_connect_to("addr3");
 
         // Updates from the removed subchannels do not select them or advance
-        // the connection pass.
+        // the first pass.
         env.send_subchannel_update(&scs[0], &SubchannelState::ready());
         env.send_subchannel_update(
             &scs[1],
@@ -1971,7 +1974,7 @@ mod test {
         );
         env.expect_no_events();
 
-        // The connection pass continues with addr3.
+        // The first pass continues with addr3.
         env.send_subchannel_update(&sc3, &SubchannelState::ready());
         env.expect_ready_picker("addr3");
         env.expect_no_events();
@@ -2012,7 +2015,7 @@ mod test {
     }
 
     // Tests that updates from a discarded subchannel are ignored during a
-    // connection pass and in READY, even though its address is still in the
+    // first pass and in READY, even though its address is still in the
     // address list.
     #[tokio::test]
     async fn test_pick_first_ignores_stale_subchannel_with_current_address() {
@@ -2061,9 +2064,8 @@ mod test {
     }
 
     // Tests that once reporting TRANSIENT_FAILURE after all addresses fail,
-    // the policy keeps reporting it across resolver updates and new
-    // connection passes until a subchannel becomes READY (sticky-TF, gRFC
-    // A62).
+    // the policy keeps reporting it across resolver updates and new first
+    // passes until a subchannel becomes READY (sticky-TF, gRFC A62).
     #[tokio::test]
     async fn test_pick_first_sticky_transient_failure_across_resolver_updates() {
         let mut env = new_env();
