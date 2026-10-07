@@ -80,7 +80,9 @@ impl LbPolicyBuilder for PickFirstBuilder {
             state: PickFirstState::Idle(IdleState {
                 addresses: Vec::new(),
             }),
-            connectivity_state: ConnectivityState::Connecting,
+            // Not yet reported. IDLE, not CONNECTING, so that `update_picker`
+            // doesn't drop the first CONNECTING as a repeat.
+            connectivity_state: ConnectivityState::Idle,
         }
     }
 
@@ -339,8 +341,18 @@ impl PickFirstContext<'_> {
         *self.connectivity_state
     }
 
-    // Reports `connectivity_state` and `picker` to the channel.
+    // Reports `connectivity_state` and `picker` to the channel. A repeat of
+    // IDLE or CONNECTING is dropped, since its picker behaves like the current
+    // one.
     fn update_picker(&mut self, connectivity_state: ConnectivityState, picker: Arc<dyn Picker>) {
+        if connectivity_state == *self.connectivity_state
+            && matches!(
+                connectivity_state,
+                ConnectivityState::Idle | ConnectivityState::Connecting
+            )
+        {
+            return;
+        }
         *self.connectivity_state = connectivity_state;
         self.controller.update_picker(LbState {
             connectivity_state,
@@ -439,7 +451,8 @@ struct FirstPassState {
     subchannels: Vec<SubchannelEntry>,
     frontier_index: usize,
     // The Happy Eyeballs timer for the current connection attempt. `None`
-    // when attempting the last subchannel in the list.
+    // when attempting the last subchannel in the list, or after the frontier
+    // has moved past the end of the list.
     timer: Option<Timer>,
     last_connection_error: Option<String>,
 }
@@ -485,11 +498,21 @@ impl FirstPassState {
             new_subchannels.push(entry);
         }
 
+        // Subchannels already in TRANSIENT_FAILURE count as failed in this
+        // pass. Start from the last of their errors in list order, so that the
+        // pass reports a real connection error even if no subchannel fails
+        // again.
+        let last_connection_error = new_subchannels
+            .iter()
+            .rev()
+            .filter(|e| e.state.connectivity_state == ConnectivityState::TransientFailure)
+            .find_map(|e| e.state.last_connection_error.clone());
+
         let mut first_pass = FirstPassState {
             subchannels: new_subchannels,
             frontier_index: 0,
             timer: None,
-            last_connection_error: None,
+            last_connection_error,
         };
 
         if first_pass.advance_frontier(true) {
@@ -601,8 +624,13 @@ impl FirstPassState {
                 entry.failed_in_first_pass = true;
             }
 
-            if index == self.frontier_index && self.advance_frontier(false) {
-                self.trigger_connection(ctx);
+            // The attempt at the frontier failed: cancel its timer and move on
+            // to the next subchannel, if any.
+            if index == self.frontier_index {
+                self.timer = None;
+                if self.advance_frontier(false) {
+                    self.trigger_connection(ctx);
+                }
             }
         }
 
@@ -1502,7 +1530,6 @@ mod test {
         let endpoints = create_endpoints(vec!["addr1", "addr2"], None);
         env.send_resolver_update(endpoints).unwrap();
         env.expect_connect_to("addr1");
-        env.expect_picker_state(ConnectivityState::Connecting);
         env.expect_no_events();
     }
 
@@ -1635,7 +1662,6 @@ mod test {
         assert_eq!(sc.address().address.to_string(), addr);
         assert_ne!(sc.address(), scs[0].address());
         env.expect_connect_to(addr);
-        env.expect_picker_state(ConnectivityState::Connecting);
         env.expect_no_events();
     }
 
@@ -1673,6 +1699,33 @@ mod test {
         env.send_subchannel_update(&scs[1], &SubchannelState::transient_failure("addr2 failed"));
         env.expect_no_events();
 
+        env.send_subchannel_update(&scs[0], &SubchannelState::transient_failure("addr1 failed"));
+        env.expect_failing_picker("addr1 failed");
+        env.expect_request_resolution();
+        env.expect_no_events();
+    }
+
+    // When the attempt at the frontier fails and no subchannel is left to
+    // attempt, the pass cancels the Happy Eyeballs timer and waits for the
+    // earlier attempts to finish.
+    #[tokio::test(start_paused = true)]
+    async fn test_pick_first_frontier_failure_with_nothing_left_cancels_timer() {
+        let mut env = new_env();
+        let scs = env.simulate_connection(vec!["addr1", "addr2", "addr3"], None);
+
+        env.fire_timer().await;
+        env.expect_connect_to("addr2");
+
+        // addr3 fails before the pass reaches it, then addr2 fails while addr1
+        // is still connecting.
+        env.send_subchannel_update(&scs[2], &SubchannelState::transient_failure("addr3 failed"));
+        env.send_subchannel_update(&scs[1], &SubchannelState::transient_failure("addr2 failed"));
+        env.expect_no_events();
+
+        env.advance_past_timer().await;
+        env.expect_no_events();
+
+        // addr1 fails, ending the pass.
         env.send_subchannel_update(&scs[0], &SubchannelState::transient_failure("addr1 failed"));
         env.expect_failing_picker("addr1 failed");
         env.expect_request_resolution();
@@ -1791,7 +1844,6 @@ mod test {
         // Because addr1 is already in TransientFailure, the policy should skip
         // addr1 and immediately connect addr3.
         env.expect_connect_to("addr3");
-        env.expect_picker_state(ConnectivityState::Connecting);
         env.expect_no_events();
     }
 
@@ -1826,7 +1878,6 @@ mod test {
 
         let endpoints = create_endpoints(vec!["addr3", "addr4"], None);
         env.send_resolver_update(endpoints).unwrap();
-        env.expect_picker_state(ConnectivityState::Idle);
         env.expect_no_events();
 
         env.policy.exit_idle(&mut env.tcc);
@@ -1894,7 +1945,6 @@ mod test {
         let sc3 = env.expect_new_subchannel();
         assert_eq!(sc3.address().address.to_string(), "addr3");
         env.expect_connect_to("addr3");
-        env.expect_picker_state(ConnectivityState::Connecting);
 
         // Updates from the removed subchannels do not select them or advance
         // the connection pass.
@@ -2040,6 +2090,24 @@ mod test {
         // A READY subchannel ends sticky TRANSIENT_FAILURE.
         env.send_subchannel_update(&sc3, &SubchannelState::ready());
         env.expect_ready_picker("addr3");
+        env.expect_no_events();
+    }
+
+    // Tests that a pass starting with every subchannel already in
+    // TRANSIENT_FAILURE ends at once and reports their connection error.
+    #[tokio::test]
+    async fn test_pick_first_pass_starting_in_transient_failure_reports_connection_error() {
+        let mut env = new_env();
+        env.simulate_failed_connection(vec!["addr1"], None);
+        env.expect_failing_picker("connection refused");
+        env.expect_request_resolution();
+
+        // addr1 is reused and still in TRANSIENT_FAILURE, so the new pass has
+        // nothing to attempt.
+        let endpoints = create_endpoints(vec!["addr1"], None);
+        env.send_resolver_update(endpoints).unwrap();
+        env.expect_failing_picker("connection refused");
+        env.expect_request_resolution();
         env.expect_no_events();
     }
 
