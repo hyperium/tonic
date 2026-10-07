@@ -723,11 +723,14 @@ impl SteadyState {
             ConnectivityState::TransientFailure => {
                 if let Some(err) = &state.last_connection_error {
                     self.last_connection_error.clone_from(err);
-                    ctx.set_failing_picker(&self.last_connection_error);
                 }
+                // Every N failures, where N is the number of subchannels,
+                // report the latest error and request re-resolution
+                // (gRFC A61).
                 self.failure_count += 1;
                 if self.failure_count >= self.failure_threshold {
                     self.failure_count = 0;
+                    ctx.set_failing_picker(&self.last_connection_error);
                     ctx.controller.request_resolution();
                 }
                 PickFirstState::SteadyState(self)
@@ -1732,23 +1735,36 @@ mod test {
         env.expect_no_events();
     }
 
-    // In steady state, each new subchannel failure updates the failing picker
-    // with the most recent connection error.
+    // In steady state, every N failures, where N is the number of subchannels,
+    // the policy reports the latest error and requests re-resolution
+    // (gRFC A61).
     #[tokio::test]
-    async fn test_pick_first_steady_state_freshest_error() {
+    async fn test_pick_first_steady_state_reports_every_n_failures() {
         let mut env = new_env();
-        let scs = env.simulate_failed_connection(vec!["addr1"], None);
-
-        env.expect_failing_picker("connection refused");
+        let scs = env.simulate_failed_connection(vec!["addr1", "addr2"], None);
+        env.expect_connect_to("addr2");
+        env.send_subchannel_update(&scs[1], &SubchannelState::transient_failure("addr2 failed"));
+        env.expect_failing_picker("addr2 failed");
         env.expect_request_resolution();
 
-        env.send_subchannel_update(
-            &scs[0],
-            &SubchannelState::transient_failure("steady state network drop"),
-        );
-        env.expect_failing_picker("steady state network drop");
-        // Every subchannel has failed again, so re-resolution is requested.
+        // The first failure in steady state is counted, but not reported.
+        env.send_subchannel_update(&scs[0], &SubchannelState::idle());
+        env.expect_connect_to("addr1");
+        env.send_subchannel_update(&scs[0], &SubchannelState::transient_failure("addr1 again"));
+        env.expect_no_events();
+
+        // The second failure reaches N.
+        env.send_subchannel_update(&scs[1], &SubchannelState::idle());
+        env.expect_connect_to("addr2");
+        env.send_subchannel_update(&scs[1], &SubchannelState::transient_failure("addr2 again"));
+        env.expect_failing_picker("addr2 again");
         env.expect_request_resolution();
+        env.expect_no_events();
+
+        // The count starts over.
+        env.send_subchannel_update(&scs[0], &SubchannelState::idle());
+        env.expect_connect_to("addr1");
+        env.send_subchannel_update(&scs[0], &SubchannelState::transient_failure("addr1 third"));
         env.expect_no_events();
     }
 
