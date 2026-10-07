@@ -395,6 +395,11 @@ impl IdleState {
     }
 
     fn exit_idle(self, ctx: &mut PickFirstContext<'_>) -> PickFirstState {
+        // No address list yet: nothing to connect to. The first resolver
+        // update starts connecting.
+        if self.addresses.is_empty() {
+            return PickFirstState::Idle(self);
+        }
         FirstPassState::fresh_enter(ctx, self.addresses)
     }
 }
@@ -1864,33 +1869,15 @@ mod test {
         env.expect_no_events();
     }
 
-    // Tests that calling exit_idle on an empty IdleState transitions to
-    // Transient Failure, requests resolution, and immediately starts
-    // connecting once valid endpoints arrive, while continuing to report
-    // TRANSIENT_FAILURE until a subchannel is READY (sticky-TF).
+    // Tests that exit_idle before any resolver update is ignored, and that
+    // the first resolver update then connects and reports CONNECTING.
     #[tokio::test]
-    async fn test_pick_first_exit_idle_with_empty_addresses_transitions_to_transient_failure_and_recovers()
-     {
+    async fn test_pick_first_ignores_exit_idle_before_resolver_update() {
         let mut env = new_env();
-
-        // Calling exit_idle before any resolver update.
         env.policy.exit_idle(&mut env.tcc);
-        env.expect_failing_picker("all addresses in transient failure");
-        env.expect_request_resolution();
-
-        // Name resolution completes with [addr1, addr2]. Subchannels are
-        // created and connection initiates immediately. No CONNECTING picker
-        // is reported.
-        let endpoints = create_endpoints(vec!["addr1", "addr2"], None);
-        env.send_resolver_update(endpoints).unwrap();
-        let sc1 = env.expect_new_subchannel();
-        env.expect_new_subchannel();
-        env.expect_connect_to("addr1");
         env.expect_no_events();
 
-        // The policy leaves TRANSIENT_FAILURE once a subchannel is READY.
-        env.send_subchannel_update(&sc1, &SubchannelState::ready());
-        env.expect_ready_picker("addr1");
+        env.simulate_connection(vec!["addr1", "addr2"], None);
         env.expect_no_events();
     }
 
