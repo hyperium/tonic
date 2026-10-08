@@ -139,7 +139,8 @@ enum AddressFamily {
 
 impl PickFirstPolicy {
     // Converts the update endpoints to an address list.
-    // Shuffles endpoints (if enabled) before flattening and de-duplication.
+    // Shuffles endpoints (if enabled) before flattening, de-duplication and
+    // interleaving (gRFC A61). Returns an error if the list is empty.
     fn compile_address(
         &self,
         mut endpoints: Vec<Endpoint>,
