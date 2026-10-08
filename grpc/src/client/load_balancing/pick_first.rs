@@ -361,7 +361,7 @@ impl PickFirstContext<'_> {
 }
 
 // State node: Idle.
-#[derive(Default)]
+#[derive(Debug, Default)]
 struct IdleState {
     addresses: Vec<Address>,
 }
@@ -434,6 +434,7 @@ fn entry_addresses(entries: &[SubchannelEntry]) -> Vec<Address> {
 }
 
 // State node: FirstPass (Happy Eyeballs).
+#[derive(Debug)]
 struct FirstPassState {
     subchannels: Vec<SubchannelEntry>,
     frontier_index: usize,
@@ -721,6 +722,7 @@ impl SteadyState {
 }
 
 // State node: Ready.
+#[derive(Debug)]
 struct ReadyState {
     addresses: Vec<Address>,
     selected: Arc<dyn Subchannel>,
@@ -788,6 +790,7 @@ impl ReadyState {
 //
 // Each state publishes pickers through `PickFirstContext::update_picker`,
 // which records the reported connectivity state.
+#[derive(Debug)]
 enum PickFirstState {
     Idle(IdleState),
     FirstPass(FirstPassState),
@@ -844,27 +847,6 @@ impl PickFirstState {
     }
 }
 
-impl Debug for PickFirstState {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Idle(s) => f
-                .debug_struct("Idle")
-                .field("addresses", &s.addresses)
-                .finish(),
-            Self::FirstPass(fp) => f
-                .debug_struct("FirstPass")
-                .field("frontier_index", &fp.frontier_index)
-                .field("subchannels", &fp.subchannels)
-                .finish(),
-            Self::SteadyState(ss) => f.debug_tuple("SteadyState").field(ss).finish(),
-            Self::Ready(r) => f
-                .debug_struct("Ready")
-                .field("selected", &r.selected.address())
-                .finish(),
-        }
-    }
-}
-
 // Work data sent when the Connection Attempt Delay timer fires. Distinguishes
 // timer wakeups from WakeUpPicker connection requests, which carry no data.
 #[derive(Debug)]
@@ -893,6 +875,14 @@ impl Timer {
     // Returns whether the timer has expired yet.
     fn expired(&self) -> bool {
         self.expired.load(Ordering::SeqCst)
+    }
+}
+
+impl Debug for Timer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Timer")
+            .field("expired", &self.expired())
+            .finish()
     }
 }
 
