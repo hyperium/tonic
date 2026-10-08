@@ -784,8 +784,8 @@ impl ReadyState {
 //   to trigger a connection attempt.
 // - `FirstPass`: Happy Eyeballs pass (gRFC A61) staggering connection attempts
 //   across resolved addresses.
-// - `SteadyState`: All addresses failed; holds sticky TRANSIENT_FAILURE and
-//   retries connections as backoffs expire.
+// - `SteadyState`: All addresses failed, or there are none; holds sticky
+//   TRANSIENT_FAILURE and retries connections as backoffs expire.
 // - `Ready`: Successfully connected to a subchannel, routing all picks to it.
 //
 // Each state publishes pickers through `PickFirstContext::update_picker`,
