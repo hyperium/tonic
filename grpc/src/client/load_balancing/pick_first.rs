@@ -45,6 +45,7 @@ use crate::client::load_balancing::Pick;
 use crate::client::load_balancing::PickResult;
 use crate::client::load_balancing::Picker;
 use crate::client::load_balancing::QueuingPicker;
+use crate::client::load_balancing::WakeUpPicker;
 use crate::client::load_balancing::WorkData;
 use crate::client::load_balancing::WorkScheduler;
 use crate::client::load_balancing::subchannel::Subchannel;
@@ -275,7 +276,7 @@ impl LbPolicy for PickFirstPolicy {
     }
 
     fn work(&mut self, data: Option<WorkData>, controller: &mut dyn ChannelController) {
-        // No data: an IdlePicker pick requested a connection.
+        // No data: a WakeUpPicker pick requested a connection.
         let Some(data) = data else {
             self.exit_idle(controller);
             return;
@@ -370,7 +371,7 @@ struct IdleState {
 
 impl IdleState {
     fn enter(ctx: &mut PickFirstContext<'_>, addresses: Vec<Address>) -> PickFirstState {
-        let picker = Arc::new(IdlePicker::new(ctx.work_scheduler.clone()));
+        let picker = Arc::new(WakeUpPicker::new(ctx.work_scheduler.clone()));
         ctx.update_picker(ConnectivityState::Idle, picker);
         PickFirstState::Idle(IdleState { addresses })
     }
@@ -868,7 +869,7 @@ impl Debug for PickFirstState {
 }
 
 // Work data sent when the Connection Attempt Delay timer fires. Distinguishes
-// timer wakeups from IdlePicker connection requests, which carry no data.
+// timer wakeups from WakeUpPicker connection requests, which carry no data.
 #[derive(Debug)]
 struct TimerExpired;
 
@@ -916,30 +917,6 @@ impl Picker for OneSubchannelPicker {
             metadata: MetadataMap::new(),
             on_complete: None,
         })
-    }
-}
-
-#[derive(Debug)]
-struct IdlePicker {
-    triggered_work: AtomicBool,
-    work_scheduler: Arc<dyn WorkScheduler>,
-}
-
-impl IdlePicker {
-    fn new(work_scheduler: Arc<dyn WorkScheduler>) -> Self {
-        Self {
-            triggered_work: AtomicBool::new(false),
-            work_scheduler,
-        }
-    }
-}
-
-impl Picker for IdlePicker {
-    fn pick(&self, _: &RequestHeaders) -> PickResult {
-        if !self.triggered_work.swap(true, Ordering::Relaxed) {
-            self.work_scheduler.schedule_work(None);
-        }
-        PickResult::Queue
     }
 }
 
@@ -1763,8 +1740,8 @@ mod test {
     }
 
     // Tests that when a selected subchannel disconnects (transitions to Idle),
-    // the policy requests re-resolution, reports an Idle state and uses an
-    // IdlePicker.
+    // the policy requests re-resolution, reports an Idle state and uses a
+    // WakeUpPicker.
     #[tokio::test]
     async fn test_pick_first_disconnect_to_idle_and_reconnect() {
         let mut env = new_env();
