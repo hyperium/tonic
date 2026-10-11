@@ -596,7 +596,7 @@ pub(crate) struct AdsWorker<C, R> {
     /// Cancellation handles for resource timers (gRFC A57).
     /// Key is (type_url, resource_name). Dropping the sender cancels the timer.
     resource_timers: HashMap<(String, String), (u64, oneshot::Sender<()>)>,
-    /// IDs are never reused, including across reconnects and subscription removal.
+    /// IDs continue across reconnects and subscription removal, wrapping at u64::MAX.
     next_resource_timer_id: u64,
     /// Optional backend + per-client A78 metric attributes
     /// (`grpc.target` + `grpc.xds.server`).
@@ -1298,9 +1298,7 @@ where
 
         let (cancel_tx, cancel_rx) = oneshot::channel::<()>();
         let timer_id = self.next_resource_timer_id;
-        self.next_resource_timer_id = timer_id
-            .checked_add(1)
-            .expect("resource timer IDs exhausted");
+        self.next_resource_timer_id = timer_id.wrapping_add(1);
         let type_url_owned = type_url.to_string();
         let command_tx = self.command_tx.clone();
         let runtime = self.runtime.clone();
