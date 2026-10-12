@@ -23,6 +23,7 @@
  */
 
 use std::time::Duration;
+use std::time::Instant;
 
 use http::Method;
 use http::Response;
@@ -195,10 +196,13 @@ fn parse_grpc_timeout(s: &str) -> Option<Duration> {
 }
 
 /// Validates incoming HTTP/2 request parts and extracts [`RequestHeaders`]
-/// (method path, timeout, compression encodings, and filtered metadata).
+/// (method path, deadline, compression encodings, and filtered metadata).
+///
+/// `now` is the time the call started; the deadline is `now` plus `grpc-timeout`.
 pub fn extract_request_headers(
     parts: &Parts,
     connection_info: ConnectionInfo,
+    now: Instant,
 ) -> Result<RequestHeaders, RequestValidationError> {
     validate_grpc_request(parts)?;
 
@@ -216,16 +220,17 @@ pub fn extract_request_headers(
     // reserved headers from the application-visible MetadataMap.
     // TODO: Revisit symmetry with `client::CallOptions` (whether timeout/deadline
     // and compression encodings should live on `server::RequestHeaders` or `server::CallOptions`).
-    let timeout = match metadata.remove("grpc-timeout") {
+    let deadline = match metadata.remove("grpc-timeout") {
         Some(val) => {
             let s = val.to_str();
-            let dur = parse_grpc_timeout(s).ok_or_else(|| {
+            let timeout = parse_grpc_timeout(s).ok_or_else(|| {
                 RequestValidationError::new(
                     StatusCodeError::Internal,
                     format!("malformed grpc-timeout header: {s}"),
                 )
             })?;
-            Some(dur)
+            // A timeout too far in the future to represent means no deadline.
+            now.checked_add(timeout)
         }
         None => None,
     };
@@ -238,8 +243,8 @@ pub fn extract_request_headers(
 
     let mut request_headers =
         RequestHeaders::new(method_name, connection_info).with_metadata(metadata);
-    if let Some(dur) = timeout {
-        request_headers = request_headers.with_timeout(dur);
+    if let Some(deadline) = deadline {
+        request_headers = request_headers.with_deadline(deadline);
     }
     if let Some(enc) = encoding {
         request_headers = request_headers.with_encoding(enc);
@@ -483,9 +488,10 @@ mod tests {
             .unwrap()
             .into_parts();
 
-        let headers = extract_request_headers(&parts, test_connection_info()).unwrap();
+        let now = Instant::now();
+        let headers = extract_request_headers(&parts, test_connection_info(), now).unwrap();
         assert_eq!(headers.method_name(), "/test.Service/InspectHeaders");
-        assert_eq!(headers.timeout(), Some(Duration::from_secs(5)));
+        assert_eq!(headers.deadline(), Some(now + Duration::from_secs(5)));
         assert_eq!(headers.encoding(), Some("identity"));
         assert_eq!(headers.accept_encoding(), Some("gzip,identity"));
 
@@ -527,9 +533,10 @@ mod tests {
             .unwrap()
             .into_parts();
 
-        let headers = extract_request_headers(&parts, test_connection_info()).unwrap();
+        let headers =
+            extract_request_headers(&parts, test_connection_info(), Instant::now()).unwrap();
         assert_eq!(headers.method_name(), "/test.Service/Minimal");
-        assert_eq!(headers.timeout(), None);
+        assert_eq!(headers.deadline(), None);
         assert_eq!(headers.encoding(), None);
         assert_eq!(headers.accept_encoding(), None);
         assert!(headers.metadata().is_empty());
@@ -545,7 +552,8 @@ mod tests {
             .unwrap()
             .into_parts();
 
-        let err = extract_request_headers(&parts, test_connection_info()).unwrap_err();
+        let err =
+            extract_request_headers(&parts, test_connection_info(), Instant::now()).unwrap_err();
         assert_eq!(err.http_status, Some(StatusCode::METHOD_NOT_ALLOWED));
         assert_eq!(err.grpc_status.code(), StatusCodeError::Internal);
     }
@@ -561,7 +569,8 @@ mod tests {
             .unwrap()
             .into_parts();
 
-        let err = extract_request_headers(&parts, test_connection_info()).unwrap_err();
+        let err =
+            extract_request_headers(&parts, test_connection_info(), Instant::now()).unwrap_err();
         assert_eq!(err.http_status, None);
         assert_eq!(err.grpc_status.code(), StatusCodeError::Internal);
         assert!(
@@ -586,7 +595,8 @@ mod tests {
             .unwrap()
             .into_parts();
 
-        let err = extract_request_headers(&parts, test_connection_info()).unwrap_err();
+        let err =
+            extract_request_headers(&parts, test_connection_info(), Instant::now()).unwrap_err();
         assert_eq!(err.http_status, None);
         assert_eq!(err.grpc_status.code(), StatusCodeError::Internal);
         assert_eq!(

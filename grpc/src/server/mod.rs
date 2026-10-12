@@ -47,7 +47,7 @@
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::Instant;
 
 use tokio::sync::watch;
 
@@ -64,6 +64,7 @@ use crate::send_future::SendFuture;
 
 pub mod builder;
 pub mod descriptor;
+pub(crate) mod http2_config;
 pub mod interceptor;
 pub(crate) mod router;
 pub mod service;
@@ -527,8 +528,9 @@ pub struct RequestHeaders {
     metadata: MetadataMap,
     /// Information about the client.
     connection_info: ConnectionInfo,
-    /// The timeout (`grpc-timeout`) specified by the client.
-    timeout: Option<Duration>,
+    /// The deadline for the call, derived from the client's `grpc-timeout`
+    /// when the call started.
+    deadline: Option<Instant>,
     /// The message compression encoding (`grpc-encoding`) specified by the client.
     encoding: Option<AsciiMetadataValue>,
     /// The accepted response compression encodings (`grpc-accept-encoding`) specified by the client.
@@ -542,7 +544,7 @@ impl RequestHeaders {
             method_name: method_name.into(),
             connection_info,
             metadata: MetadataMap::default(),
-            timeout: None,
+            deadline: None,
             encoding: None,
             accept_encoding: None,
         }
@@ -586,15 +588,15 @@ impl RequestHeaders {
         &self.connection_info
     }
 
-    /// Sets the `grpc-timeout` duration on these headers.
-    pub fn with_timeout(mut self, timeout: Duration) -> Self {
-        self.timeout = Some(timeout);
+    /// Sets the deadline for the call on these headers.
+    pub fn with_deadline(mut self, deadline: Instant) -> Self {
+        self.deadline = Some(deadline);
         self
     }
 
-    /// Returns the `grpc-timeout` duration sent by the client, if present.
-    pub fn timeout(&self) -> Option<Duration> {
-        self.timeout
+    /// Returns the deadline for the call, if the client sent a `grpc-timeout`.
+    pub fn deadline(&self) -> Option<Instant> {
+        self.deadline
     }
 
     /// Sets the `grpc-encoding` value on these headers.

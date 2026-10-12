@@ -27,6 +27,7 @@ use std::error::Error as StdError;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::time::Instant;
 
 use bytes::Bytes;
 use http::HeaderValue;
@@ -111,10 +112,12 @@ where
         Box::pin(async move {
             // 1. Validate request and extract gRPC request headers.
             let (parts, body) = req.into_parts();
-            let request_headers = match extract_request_headers(&parts, connection_info) {
-                Ok(h) => h,
-                Err(err) => return Ok(err.into_http()),
-            };
+            // TODO: Use the runtime's clock, so deadlines follow a paused test clock.
+            let request_headers =
+                match extract_request_headers(&parts, connection_info, Instant::now()) {
+                    Ok(h) => h,
+                    Err(err) => return Ok(err.into_http()),
+                };
 
             // 2. Create channels.
             let (initial_tx, initial_rx) = oneshot::channel::<InitialResponse>();
@@ -127,7 +130,9 @@ where
             // 4. Spawn handler on runtime and retain its TaskHandle so that
             // stream cancellation (`RST_STREAM`) or connection teardown aborts it.
             // TODO: Move deadline enforcement to the transport-agnostic Server layer.
-            let deadline = request_headers.timeout().map(|t| runtime.sleep(t));
+            let deadline = request_headers
+                .deadline()
+                .map(|d| runtime.sleep(d.saturating_duration_since(Instant::now())));
             // TODO: Handle mid-stream handler panics (panicking after `ResponseHeaders` are
             // sent drops `tx` without calling `send_trailers`, closing `body_rx` cleanly so
             // `EncodeBody` emits `grpc-status: 0`).

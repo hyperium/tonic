@@ -51,8 +51,8 @@ use crate::rt::hyper_wrapper::HyperStream;
 use crate::server::DynHandle;
 use crate::server::GracefulConnection;
 use crate::server::Transport;
+use crate::server::http2_config::Http2Config;
 
-use super::config::Http2Config;
 use super::service::HyperGrpcService;
 
 /// Concrete Hyper HTTP/2 server connection type used once the credential handshake completes.
@@ -76,9 +76,7 @@ fn jittered_age(age: Duration, factor: f64) -> Duration {
 pub struct HyperTransport {
     io: BoxEndpoint,
     creds: Arc<dyn ServerCredentials>,
-    config: Http2Config,
-    /// Factor applied to `max_connection_age` for this connection.
-    age_jitter: f64,
+    config: Arc<Http2Config>,
 }
 
 impl HyperTransport {
@@ -86,29 +84,9 @@ impl HyperTransport {
     pub(crate) fn new(
         io: BoxEndpoint,
         creds: Arc<dyn ServerCredentials>,
-        config: Http2Config,
+        config: Arc<Http2Config>,
     ) -> Self {
-        let age_jitter = match config.get_max_connection_age() {
-            Some(_) => random_age_jitter(),
-            None => 1.0,
-        };
-        Self::with_age_jitter(io, creds, config, age_jitter)
-    }
-
-    /// Like [`HyperTransport::new`], but with a fixed `max_connection_age`
-    /// jitter factor.
-    fn with_age_jitter(
-        io: BoxEndpoint,
-        creds: Arc<dyn ServerCredentials>,
-        config: Http2Config,
-        age_jitter: f64,
-    ) -> Self {
-        Self {
-            io,
-            creds,
-            config,
-            age_jitter,
-        }
+        Self { io, creds, config }
     }
 }
 
@@ -121,14 +99,7 @@ impl Transport for HyperTransport {
         runtime: GrpcRuntime,
         _token: Internal,
     ) -> HyperServingConnection {
-        HyperServingConnection::new(
-            self.io,
-            self.creds,
-            self.config,
-            self.age_jitter,
-            handler,
-            runtime,
-        )
+        HyperServingConnection::new(self.io, self.creds, self.config, handler, runtime)
     }
 }
 
@@ -179,6 +150,14 @@ enum ConnectionAgeState {
 /// Default timeout for the initial credential handshake when not overridden in [`Http2Config`].
 const DEFAULT_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(120);
 
+/// Default time a connection may go without receiving anything before the server sends a
+/// keep-alive PING, when not overridden in [`Http2Config`].
+const DEFAULT_KEEP_ALIVE_INTERVAL: Duration = Duration::from_secs(2 * 60 * 60);
+
+/// Default time the server waits for the ACK of a keep-alive PING before closing the
+/// connection, when not overridden in [`Http2Config`].
+const DEFAULT_KEEP_ALIVE_TIMEOUT: Duration = Duration::from_secs(20);
+
 /// A serving HTTP/2 connection.
 ///
 /// Drives the initial server credential handshake (`ServingPhase::Handshaking`)
@@ -187,18 +166,36 @@ const DEFAULT_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(120);
 pub struct HyperServingConnection {
     phase: ServingPhase,
     connection_age_state: ConnectionAgeState,
-    config: Http2Config,
+    config: Arc<Http2Config>,
     runtime: GrpcRuntime,
 }
 
 impl HyperServingConnection {
+    /// Starts serving an accepted endpoint, drawing this connection's
+    /// `max_connection_age` jitter.
     fn new(
         io: BoxEndpoint,
         creds: Arc<dyn ServerCredentials>,
-        config: Http2Config,
-        age_jitter: f64,
+        config: Arc<Http2Config>,
         handler: Arc<dyn DynHandle>,
         runtime: GrpcRuntime,
+    ) -> Self {
+        let age_jitter = match config.get_max_connection_age() {
+            Some(_) => random_age_jitter(),
+            None => 1.0,
+        };
+        Self::with_age_jitter(io, creds, config, handler, runtime, age_jitter)
+    }
+
+    /// Like [`HyperServingConnection::new`], but with a fixed `max_connection_age`
+    /// jitter factor.
+    fn with_age_jitter(
+        io: BoxEndpoint,
+        creds: Arc<dyn ServerCredentials>,
+        config: Arc<Http2Config>,
+        handler: Arc<dyn DynHandle>,
+        runtime: GrpcRuntime,
+        age_jitter: f64,
     ) -> Self {
         let rt_clone = runtime.clone();
         let handshake_timeout = config
@@ -268,12 +265,19 @@ impl HyperServingConnection {
                 inner: runtime.clone(),
             })
             .max_concurrent_streams(config.get_max_concurrent_streams())
+            .adaptive_window(true)
             .initial_connection_window_size(config.get_initial_connection_window_size())
             .initial_stream_window_size(config.get_initial_stream_window_size())
-            .keep_alive_interval(config.get_keep_alive_interval());
-        if let Some(timeout) = config.get_keep_alive_timeout() {
-            h2_builder.keep_alive_timeout(timeout);
-        }
+            .keep_alive_interval(
+                config
+                    .get_keep_alive_interval()
+                    .unwrap_or(DEFAULT_KEEP_ALIVE_INTERVAL),
+            )
+            .keep_alive_timeout(
+                config
+                    .get_keep_alive_timeout()
+                    .unwrap_or(DEFAULT_KEEP_ALIVE_TIMEOUT),
+            );
 
         h2_builder.serve_connection(HyperStream::new(endpoint), service)
     }
@@ -431,7 +435,7 @@ mod tests {
         let rt = default_runtime();
         let (server_ep, _client_ep) = endpoint_pair();
         let creds = Arc::new(StubHandshakeCreds(HandshakeBehavior::Fail));
-        let transport = HyperTransport::new(server_ep, creds, Http2Config::new());
+        let transport = HyperTransport::new(server_ep, creds, Arc::new(Http2Config::new()));
         let serving = transport.serve(Arc::new(DummyHandle), rt, Internal);
         assert_eq!(serving.await, Err("simulated handshake error".to_string()));
     }
@@ -441,8 +445,8 @@ mod tests {
         let rt = default_runtime();
         let (server_ep, _client_ep) = endpoint_pair();
         let creds = Arc::new(StubHandshakeCreds(HandshakeBehavior::Stall));
-        let config = Http2Config::new().handshake_timeout(Duration::from_millis(30));
-        let transport = HyperTransport::new(server_ep, creds, config);
+        let config = Http2Config::new().with_handshake_timeout(Duration::from_millis(30));
+        let transport = HyperTransport::new(server_ep, creds, Arc::new(config));
         let serving = transport.serve(Arc::new(DummyHandle), rt, Internal);
         assert_eq!(serving.await, Err("handshake timed out".to_string()));
     }
@@ -452,7 +456,7 @@ mod tests {
         let rt = default_runtime();
         let (server_ep, _client_ep) = endpoint_pair();
         let creds = Arc::new(StubHandshakeCreds(HandshakeBehavior::Stall));
-        let transport = HyperTransport::new(server_ep, creds, Http2Config::new());
+        let transport = HyperTransport::new(server_ep, creds, Arc::new(Http2Config::new()));
         let mut serving = pin!(transport.serve(Arc::new(DummyHandle), rt, Internal));
 
         poll_fn(|cx| {
@@ -472,7 +476,7 @@ mod tests {
         let creds = Arc::new(InsecureTestCreds);
         let handler = Arc::new(SlowHandle(Duration::from_secs(60)));
 
-        let transport = HyperTransport::new(server_ep, creds, Http2Config::new());
+        let transport = HyperTransport::new(server_ep, creds, Arc::new(Http2Config::new()));
         let serving = transport.serve(handler, rt.clone(), Internal);
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
         let server_task = tokio::spawn(async move {
@@ -519,11 +523,17 @@ mod tests {
         let rt = default_runtime();
         let (server_ep, client_ep) = endpoint_pair();
         let creds = Arc::new(InsecureTestCreds);
-        let config = Http2Config::new().max_connection_age(Duration::from_millis(30));
+        let config = Http2Config::new().with_max_connection_age(Duration::from_millis(30));
         let handler = Arc::new(SlowHandle(Duration::from_secs(60)));
 
-        let transport = HyperTransport::with_age_jitter(server_ep, creds, config, 1.0);
-        let serving = transport.serve(handler, rt.clone(), Internal);
+        let serving = HyperServingConnection::with_age_jitter(
+            server_ep,
+            creds,
+            Arc::new(config),
+            handler,
+            rt.clone(),
+            1.0,
+        );
         let server_task = tokio::spawn(serving);
 
         let (mut send_req, client_conn) =
@@ -562,11 +572,17 @@ mod tests {
         let (server_ep, client_ep) = endpoint_pair();
         let creds = Arc::new(InsecureTestCreds);
         let config = Http2Config::new()
-            .max_connection_age(Duration::from_millis(30))
-            .max_connection_age_grace(Duration::from_millis(30));
+            .with_max_connection_age(Duration::from_millis(30))
+            .with_max_connection_age_grace(Duration::from_millis(30));
 
-        let transport = HyperTransport::with_age_jitter(server_ep, creds, config, 1.0);
-        let serving = transport.serve(Arc::new(PendingStreamHandle), rt.clone(), Internal);
+        let serving = HyperServingConnection::with_age_jitter(
+            server_ep,
+            creds,
+            Arc::new(config),
+            Arc::new(PendingStreamHandle),
+            rt.clone(),
+            1.0,
+        );
         let server_task = tokio::spawn(serving);
 
         let (mut send_req, client_conn) =
@@ -629,10 +645,16 @@ mod tests {
         let creds = Arc::new(StubHandshakeCreds(HandshakeBehavior::Stall));
         // A 200s age jittered by 0.5 fires at 100s, before the 120s default
         // handshake timeout; without the jitter the handshake would time out first.
-        let config = Http2Config::new().max_connection_age(Duration::from_secs(200));
+        let config = Http2Config::new().with_max_connection_age(Duration::from_secs(200));
 
-        let transport = HyperTransport::with_age_jitter(server_ep, creds, config, 0.5);
-        let serving = transport.serve(Arc::new(DummyHandle), default_runtime(), Internal);
+        let serving = HyperServingConnection::with_age_jitter(
+            server_ep,
+            creds,
+            Arc::new(config),
+            Arc::new(DummyHandle),
+            default_runtime(),
+            0.5,
+        );
 
         assert_eq!(serving.await, Ok(()));
     }

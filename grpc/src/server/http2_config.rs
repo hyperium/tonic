@@ -51,29 +51,41 @@ impl Http2Config {
     }
 
     /// Sets the maximum allowed request message payload size in bytes.
-    pub fn max_recv_message_size(mut self, size: usize) -> Self {
+    /// If not set, the limit is 4 MiB.
+    pub fn with_max_recv_message_size(mut self, size: usize) -> Self {
         self.max_recv_message_size = Some(size);
         self
     }
 
     /// Sets the maximum number of concurrent HTTP/2 streams per connection.
-    pub fn max_concurrent_streams(mut self, max: u32) -> Self {
+    /// If not set, the number of concurrent streams is unlimited.
+    pub fn with_max_concurrent_streams(mut self, max: u32) -> Self {
         self.max_concurrent_streams = Some(max);
         self
     }
 
-    /// Sets the initial HTTP/2 connection-level flow control window size.
-    /// Values above 2^31 - 1 are ignored.
-    pub fn initial_connection_window_size(mut self, size: u32) -> Self {
+    /// Sets the initial HTTP/2 connection-level flow control window size, and
+    /// turns off dynamic flow control. Values above 2^31 - 1 are ignored.
+    ///
+    /// If neither window size is set, both start at 64 KiB and grow with the
+    /// connection's measured bandwidth-delay product. Setting this also stops
+    /// the stream-level window from growing: it stays at 64 KiB unless set with
+    /// [`Http2Config::with_initial_stream_window_size`].
+    pub fn with_initial_connection_window_size(mut self, size: u32) -> Self {
         if size <= MAX_WINDOW_SIZE {
             self.initial_connection_window_size = Some(size);
         }
         self
     }
 
-    /// Sets the initial HTTP/2 stream-level flow control window size.
-    /// Values above 2^31 - 1 are ignored.
-    pub fn initial_stream_window_size(mut self, size: u32) -> Self {
+    /// Sets the initial HTTP/2 stream-level flow control window size, and
+    /// turns off dynamic flow control. Values above 2^31 - 1 are ignored.
+    ///
+    /// If neither window size is set, both start at 64 KiB and grow with the
+    /// connection's measured bandwidth-delay product. Setting this also stops
+    /// the connection-level window from growing: it stays at 64 KiB unless set
+    /// with [`Http2Config::with_initial_connection_window_size`].
+    pub fn with_initial_stream_window_size(mut self, size: u32) -> Self {
         if size <= MAX_WINDOW_SIZE {
             self.initial_stream_window_size = Some(size);
         }
@@ -84,7 +96,8 @@ impl Http2Config {
     ///
     /// The server sends a PING frame after `interval` of inactivity. If
     /// no response is received within `timeout`, the connection is closed.
-    pub fn keep_alive(mut self, interval: Duration, timeout: Duration) -> Self {
+    /// If not set, the interval is 2 hours and the timeout is 20 seconds.
+    pub fn with_keep_alive(mut self, interval: Duration, timeout: Duration) -> Self {
         self.keep_alive_interval = Some(interval);
         self.keep_alive_timeout = Some(timeout);
         self
@@ -94,10 +107,11 @@ impl Http2Config {
     ///
     /// After this duration, the server sends a GOAWAY frame to the client.
     /// Each connection's age is jittered by ±10% (gRFC A9) so that connections
-    /// accepted together don't all reconnect at once.
-    /// If `max_connection_age_grace` is also set, in-flight RPCs are given
-    /// a grace period to complete before the connection is force-closed.
-    pub fn max_connection_age(mut self, age: Duration) -> Self {
+    /// accepted together don't all reconnect at once. In-flight RPCs then get
+    /// `max_connection_age_grace` to complete before the connection is
+    /// force-closed; without a grace period they may run indefinitely.
+    /// If not set, connections have no maximum age.
+    pub fn with_max_connection_age(mut self, age: Duration) -> Self {
         self.max_connection_age = Some(age);
         self
     }
@@ -106,8 +120,10 @@ impl Http2Config {
     ///
     /// After GOAWAY is sent, existing RPCs are given this much additional
     /// time to complete. After the grace period, the connection is forcibly
-    /// terminated. Has no effect without `max_connection_age`.
-    pub fn max_connection_age_grace(mut self, grace: Duration) -> Self {
+    /// terminated. Has no effect without `max_connection_age`. If not set,
+    /// the grace period is infinite: in-flight RPCs may run indefinitely after
+    /// the GOAWAY.
+    pub fn with_max_connection_age_grace(mut self, grace: Duration) -> Self {
         self.max_connection_age_grace = Some(grace);
         self
     }
@@ -116,44 +132,53 @@ impl Http2Config {
     /// (e.g. TLS) to complete.
     ///
     /// Connections that have not finished handshaking when this elapses are
-    /// terminated.
-    pub fn handshake_timeout(mut self, timeout: Duration) -> Self {
+    /// terminated. If not set, the timeout is 120 seconds.
+    pub fn with_handshake_timeout(mut self, timeout: Duration) -> Self {
         self.handshake_timeout = Some(timeout);
         self
     }
 
+    /// Returns the maximum request message size, or `None` if unset.
     pub fn get_max_recv_message_size(&self) -> Option<usize> {
         self.max_recv_message_size
     }
 
+    /// Returns the maximum number of concurrent streams, or `None` if unset.
     pub fn get_max_concurrent_streams(&self) -> Option<u32> {
         self.max_concurrent_streams
     }
 
+    /// Returns the initial connection-level window size, or `None` if unset.
     pub fn get_initial_connection_window_size(&self) -> Option<u32> {
         self.initial_connection_window_size
     }
 
+    /// Returns the initial stream-level window size, or `None` if unset.
     pub fn get_initial_stream_window_size(&self) -> Option<u32> {
         self.initial_stream_window_size
     }
 
+    /// Returns the keep-alive ping interval, or `None` if unset.
     pub fn get_keep_alive_interval(&self) -> Option<Duration> {
         self.keep_alive_interval
     }
 
+    /// Returns the keep-alive ping timeout, or `None` if unset.
     pub fn get_keep_alive_timeout(&self) -> Option<Duration> {
         self.keep_alive_timeout
     }
 
+    /// Returns the maximum connection age, or `None` if unset.
     pub fn get_max_connection_age(&self) -> Option<Duration> {
         self.max_connection_age
     }
 
+    /// Returns the grace period after the maximum connection age, or `None` if unset.
     pub fn get_max_connection_age_grace(&self) -> Option<Duration> {
         self.max_connection_age_grace
     }
 
+    /// Returns the credential handshake timeout, or `None` if unset.
     pub fn get_handshake_timeout(&self) -> Option<Duration> {
         self.handshake_timeout
     }
@@ -180,14 +205,14 @@ mod tests {
     #[test]
     fn http2_config_setters_and_getters() {
         let cfg = Http2Config::new()
-            .max_recv_message_size(8 * 1024 * 1024)
-            .max_concurrent_streams(100)
-            .initial_connection_window_size(1024 * 1024)
-            .initial_stream_window_size(512 * 1024)
-            .keep_alive(Duration::from_secs(30), Duration::from_secs(10))
-            .max_connection_age(Duration::from_secs(300))
-            .max_connection_age_grace(Duration::from_secs(15))
-            .handshake_timeout(Duration::from_secs(60));
+            .with_max_recv_message_size(8 * 1024 * 1024)
+            .with_max_concurrent_streams(100)
+            .with_initial_connection_window_size(1024 * 1024)
+            .with_initial_stream_window_size(512 * 1024)
+            .with_keep_alive(Duration::from_secs(30), Duration::from_secs(10))
+            .with_max_connection_age(Duration::from_secs(300))
+            .with_max_connection_age_grace(Duration::from_secs(15))
+            .with_handshake_timeout(Duration::from_secs(60));
 
         assert_eq!(cfg.get_max_recv_message_size(), Some(8 * 1024 * 1024));
         assert_eq!(cfg.get_max_concurrent_streams(), Some(100));
@@ -206,8 +231,8 @@ mod tests {
     #[test]
     fn initial_connection_window_size_ignores_values_above_http2_maximum() {
         let cfg = Http2Config::new()
-            .initial_connection_window_size(MAX_WINDOW_SIZE)
-            .initial_connection_window_size(MAX_WINDOW_SIZE + 1);
+            .with_initial_connection_window_size(MAX_WINDOW_SIZE)
+            .with_initial_connection_window_size(MAX_WINDOW_SIZE + 1);
 
         assert_eq!(
             cfg.get_initial_connection_window_size(),
@@ -218,8 +243,8 @@ mod tests {
     #[test]
     fn initial_stream_window_size_ignores_values_above_http2_maximum() {
         let cfg = Http2Config::new()
-            .initial_stream_window_size(MAX_WINDOW_SIZE)
-            .initial_stream_window_size(MAX_WINDOW_SIZE + 1);
+            .with_initial_stream_window_size(MAX_WINDOW_SIZE)
+            .with_initial_stream_window_size(MAX_WINDOW_SIZE + 1);
 
         assert_eq!(cfg.get_initial_stream_window_size(), Some(MAX_WINDOW_SIZE));
     }
