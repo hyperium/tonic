@@ -195,17 +195,29 @@ fn validate_lb_endpoint(lb_ep: LbEndpoint) -> xds_client::Result<Option<Resolved
 }
 
 impl EndpointsResource {
-    /// Returns all healthy endpoints (Unknown and Healthy status).
+    /// Returns the healthy endpoints (Unknown and Healthy status) of the highest
+    /// priority that has any.
+    ///
+    /// Priority 0 is the highest. Lower priorities are failover capacity: they are
+    /// used only when every higher priority has no healthy endpoint (gRFC A56).
     pub(crate) fn healthy_endpoints(&self) -> impl Iterator<Item = &ResolvedEndpoint> {
+        let is_healthy = |e: &&ResolvedEndpoint| {
+            matches!(
+                e.health_status,
+                HealthStatus::Unknown | HealthStatus::Healthy
+            )
+        };
+        let priority = self
+            .localities
+            .iter()
+            .filter(|l| l.endpoints.iter().any(|e| is_healthy(&e)))
+            .map(|l| l.priority)
+            .min();
         self.localities
             .iter()
+            .filter(move |l| Some(l.priority) == priority)
             .flat_map(|l| &l.endpoints)
-            .filter(|e| {
-                matches!(
-                    e.health_status,
-                    HealthStatus::Unknown | HealthStatus::Healthy
-                )
-            })
+            .filter(is_healthy)
     }
 }
 
@@ -268,6 +280,51 @@ mod tests {
         let healthy: Vec<_> = validated.healthy_endpoints().collect();
         // Healthy + Unknown = 2 (Unhealthy excluded)
         assert_eq!(healthy.len(), 2);
+    }
+
+    fn make_locality(priority: u32, ip: &str, health: EnvoyHealthStatus) -> LocalityLbEndpoints {
+        LocalityLbEndpoints {
+            lb_endpoints: vec![make_lb_endpoint(ip, 8080, health as i32)],
+            load_balancing_weight: Some(UInt32Value { value: 100 }),
+            priority,
+            ..Default::default()
+        }
+    }
+
+    fn healthy_ips(cla: ClusterLoadAssignment) -> Vec<String> {
+        let validated = EndpointsResource::validate(cla).unwrap();
+        validated
+            .healthy_endpoints()
+            .map(|e| e.address.to_string())
+            .collect()
+    }
+
+    #[test]
+    fn test_healthy_endpoints_use_highest_priority() {
+        let cla = ClusterLoadAssignment {
+            cluster_name: "c1".to_string(),
+            endpoints: vec![
+                make_locality(1, "10.0.1.1", EnvoyHealthStatus::Healthy),
+                make_locality(0, "10.0.0.1", EnvoyHealthStatus::Healthy),
+                make_locality(0, "10.0.0.2", EnvoyHealthStatus::Unknown),
+            ],
+            ..Default::default()
+        };
+        assert_eq!(healthy_ips(cla), ["10.0.0.1:8080", "10.0.0.2:8080"]);
+    }
+
+    #[test]
+    fn test_healthy_endpoints_fail_over_to_lower_priority() {
+        let cla = ClusterLoadAssignment {
+            cluster_name: "c1".to_string(),
+            endpoints: vec![
+                make_locality(0, "10.0.0.1", EnvoyHealthStatus::Unhealthy),
+                make_locality(1, "10.0.1.1", EnvoyHealthStatus::Healthy),
+                make_locality(2, "10.0.2.1", EnvoyHealthStatus::Healthy),
+            ],
+            ..Default::default()
+        };
+        assert_eq!(healthy_ips(cla), ["10.0.1.1:8080"]);
     }
 
     #[test]
