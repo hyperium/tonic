@@ -258,6 +258,9 @@ fn is_connection_error(err: &io::Error) -> bool {
 ///
 /// Per-connection errors are retried immediately. Other errors are retried with
 /// exponential back-off, as configured by `policy`, without limit.
+// TODO: Every accept error is retried, because there's no simple cross-platform way
+// to tell retryable errors from permanent ones. Following other Rust servers is our
+// best guess for now.
 async fn accept_with_retry<T, F, Fut>(policy: &AcceptRetryPolicy, mut accept: F) -> T
 where
     F: FnMut() -> Fut,

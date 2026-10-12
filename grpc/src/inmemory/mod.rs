@@ -189,15 +189,11 @@ impl InMemoryListener {
 impl Listener for InMemoryListener {
     type Transport = InMemoryServerCall;
 
-    async fn accept(&self, _token: Internal) -> Option<Result<Self::Transport, String>> {
+    async fn accept(&self, _token: Internal) -> Result<Self::Transport, String> {
         let mut r = self.inner.r.lock().await;
         tokio::select! {
-            call = r.recv() => {
-                call.map(Ok)
-            }
-            _ = self.inner.close_notify.notified() => {
-                None
-            }
+            call = r.recv() => call.ok_or_else(|| "listener closed".to_string()),
+            _ = self.inner.close_notify.notified() => Err("listener closed".to_string()),
         }
     }
 

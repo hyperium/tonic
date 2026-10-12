@@ -133,12 +133,11 @@ pub trait Listener: sealed::Sealed {
 
     /// Accepts the next incoming connection.
     ///
-    /// Returns `None` when the listener has closed cleanly and will produce no
-    /// further connections, or `Some(Err(..))` when accepting failed. The two
-    /// are distinct: the former is a normal end of service, the latter is an
-    /// error the caller is expected to report.
+    /// Returns an error once the listener can't produce any more connections,
+    /// because it was closed or because accepting failed. The server then stops
+    /// accepting and returns that error.
     #[doc(hidden)]
-    async fn accept(&self, token: Internal) -> Option<Result<Self::Transport, String>>;
+    async fn accept(&self, token: Internal) -> Result<Self::Transport, String>;
 
     /// Returns the address this listener is bound to.
     fn local_addr(&self) -> Box<dyn ListenerAddress>;
@@ -225,7 +224,7 @@ impl Server {
         &self.runtime
     }
 
-    /// Serves on the given listener until it stops producing connections.
+    /// Serves on the given listener until accepting fails.
     ///
     /// After the accept loop ends, the listener is dropped, all open HTTP/2
     /// connections receive a GOAWAY frame, and the server waits for in-flight
@@ -233,15 +232,16 @@ impl Server {
     ///
     /// # Errors
     ///
-    /// If the listener fails to accept, the server drains as above and then
-    /// returns the listener's error. Draining has no time limit.
+    /// This only returns once the listener fails to accept: the server drains as
+    /// above and then returns the listener's error. Draining has no time limit.
+    // TODO: Revisit the serve and accept error API, especially the error type, before GA.
     pub async fn serve(&self, listener: impl Listener) -> Result<(), String> {
         self.serve_with_shutdown(listener, std::future::pending())
             .await
     }
 
-    /// Serves on the given listener until `signal` resolves, then drains
-    /// all in-flight connections before returning.
+    /// Serves on the given listener until `signal` resolves or the listener
+    /// fails, then drains all in-flight connections before returning.
     ///
     /// When `signal` completes:
     /// 1. The server stops accepting new connections and drops the listener,
@@ -270,12 +270,11 @@ impl Server {
             tokio::select! {
                 conn = listener.accept(crate::private::Internal) => {
                     let connection = match conn {
-                        Some(Ok(c)) => c,
-                        Some(Err(err)) => {
+                        Ok(c) => c,
+                        Err(err) => {
                             exit_err = Some(err);
                             break;
                         }
-                        None => break,
                     };
                     let handler = match self.handler.as_ref() {
                         Some(h) => h.clone(),
@@ -780,26 +779,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn server_stops_when_listener_closes() {
-        let listener = crate::inmemory::InMemoryListener::new();
-        let server = Server::builder().build();
-
-        let listener_for_serve = listener.clone();
-        let server_handle = tokio::spawn(async move {
-            // serve() runs until the listener stops producing connections.
-            server.serve(listener_for_serve).await.unwrap();
-        });
-
-        // Closing the listener makes accept() return None.
-        listener.close().await;
-
-        tokio::time::timeout(std::time::Duration::from_secs(2), server_handle)
-            .await
-            .expect("server did not exit after listener close")
-            .unwrap();
-    }
-
-    #[tokio::test]
     async fn dropped_sender_breaks_watch_loop() {
         let coordinator = GracefulCoordinator::new();
         let (conn, shutdown_called, _finish) = MockConnection::new();
@@ -924,8 +903,13 @@ mod tests {
     impl Listener for MockListener {
         type Transport = MockTransport;
 
-        async fn accept(&self, _token: Internal) -> Option<Result<Self::Transport, String>> {
-            self.rx.lock().await.recv().await.map(Ok)
+        async fn accept(&self, _token: Internal) -> Result<Self::Transport, String> {
+            self.rx
+                .lock()
+                .await
+                .recv()
+                .await
+                .ok_or_else(|| "mock listener closed".to_string())
         }
 
         fn local_addr(&self) -> Box<dyn ListenerAddress> {
@@ -1175,8 +1159,8 @@ mod tests {
         impl Listener for FailingListener {
             type Transport = MockTransport;
 
-            async fn accept(&self, _token: Internal) -> Option<Result<Self::Transport, String>> {
-                Some(Err("simulated listener accept error".to_string()))
+            async fn accept(&self, _token: Internal) -> Result<Self::Transport, String> {
+                Err("simulated listener accept error".to_string())
             }
 
             fn local_addr(&self) -> Box<dyn ListenerAddress> {
