@@ -40,7 +40,7 @@ impl<T: Encoder, U: Stream> EncodedBytes<T, U> {
         max_message_size: Option<usize>,
     ) -> Self {
         let buffer_settings = encoder.buffer_settings();
-        let buf = BytesMut::with_capacity(buffer_settings.buffer_size);
+        let buf = new_encode_buffer(buffer_settings);
 
         let compression_encoding =
             if compression_override == SingleMessageCompressionOverride::Disable {
@@ -50,7 +50,7 @@ impl<T: Encoder, U: Stream> EncodedBytes<T, U> {
             };
 
         let uncompression_buf = if compression_encoding.is_some() {
-            BytesMut::with_capacity(buffer_settings.buffer_size)
+            new_encode_buffer(buffer_settings)
         } else {
             BytesMut::new()
         };
@@ -99,7 +99,7 @@ where
                     return Poll::Ready(None);
                 }
                 Poll::Pending | Poll::Ready(None) => {
-                    return Poll::Ready(Some(Ok(buf.split_to(buf.len()).freeze())));
+                    return Poll::Ready(Some(Ok(take_encode_buffer(buf, buffer_settings))));
                 }
                 Poll::Ready(Some(Ok(item))) => {
                     if let Err(status) = encode_item(
@@ -111,11 +111,13 @@ where
                         buffer_settings,
                         item,
                     ) {
+                        reset_encode_buffer(buf, buffer_settings);
+                        reset_encode_buffer(uncompression_buf, buffer_settings);
                         return Poll::Ready(Some(Err(status)));
                     }
 
                     if buf.len() >= buffer_settings.yield_threshold {
-                        return Poll::Ready(Some(Ok(buf.split_to(buf.len()).freeze())));
+                        return Poll::Ready(Some(Ok(take_encode_buffer(buf, buffer_settings))));
                     }
                 }
                 Poll::Ready(Some(Err(status))) => {
@@ -123,10 +125,33 @@ where
                         return Poll::Ready(Some(Err(status)));
                     }
                     *error = Some(status);
-                    return Poll::Ready(Some(Ok(buf.split_to(buf.len()).freeze())));
+                    return Poll::Ready(Some(Ok(take_encode_buffer(buf, buffer_settings))));
                 }
             }
         }
+    }
+}
+
+fn new_encode_buffer(settings: BufferSettings) -> BytesMut {
+    BytesMut::with_capacity(
+        settings
+            .buffer_size
+            .min(settings.max_encoding_buffer_retained_capacity),
+    )
+}
+
+fn take_encode_buffer(buf: &mut BytesMut, settings: BufferSettings) -> Bytes {
+    if buf.capacity() > settings.max_encoding_buffer_retained_capacity {
+        // Splitting would leave the empty buffer sharing the outgoing allocation.
+        std::mem::replace(buf, new_encode_buffer(settings)).freeze()
+    } else {
+        buf.split_to(buf.len()).freeze()
+    }
+}
+
+fn reset_encode_buffer(buf: &mut BytesMut, settings: BufferSettings) {
+    if buf.capacity() > settings.max_encoding_buffer_retained_capacity {
+        *buf = new_encode_buffer(settings);
     }
 }
 
@@ -158,7 +183,11 @@ where
 
         let uncompressed_len = uncompression_buf.len();
 
-        compress(
+        // Compression advances the scratch buffer, reducing its visible capacity
+        // without releasing the allocation. Check before that happens.
+        let release_scratch =
+            uncompression_buf.capacity() > buffer_settings.max_encoding_buffer_retained_capacity;
+        let result = compress(
             CompressionSettings {
                 encoding,
                 buffer_growth_interval: buffer_settings.buffer_size,
@@ -167,7 +196,11 @@ where
             buf,
             uncompressed_len,
         )
-        .map_err(|err| Status::internal(format!("Error compressing: {err}")))?;
+        .map_err(|err| Status::internal(format!("Error compressing: {err}")));
+        if release_scratch {
+            *uncompression_buf = new_encode_buffer(buffer_settings);
+        }
+        result?;
     } else {
         encoder
             .encode(item, &mut EncodeBuf::new(buf))
@@ -330,6 +363,122 @@ where
                 .trailers()
                 .map(|t| t.map(Frame::trailers))
                 .into(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct TestEncoder {
+        settings: BufferSettings,
+        fail: bool,
+    }
+
+    impl Encoder for TestEncoder {
+        type Item = Bytes;
+        type Error = Status;
+
+        fn encode(&mut self, item: Bytes, dst: &mut EncodeBuf<'_>) -> Result<(), Status> {
+            dst.put_slice(&item);
+            if self.fail {
+                Err(Status::internal("test encoder failure"))
+            } else {
+                Ok(())
+            }
+        }
+
+        fn buffer_settings(&self) -> BufferSettings {
+            self.settings
+        }
+    }
+
+    #[tokio::test]
+    async fn encoding_buffer_retention() {
+        let settings = BufferSettings::new(16, 1);
+        let bounded = settings.max_encoding_buffer_retained_capacity(64);
+        for (settings, capacity, release) in [
+            (settings, 256, false),
+            (bounded, 32, false),
+            (bounded, 64, false),
+            (bounded, 256, true),
+            (settings.max_encoding_buffer_retained_capacity(0), 256, true),
+        ] {
+            let source = tokio_stream::iter([Ok(Bytes::from_static(b"hello"))])
+                .chain(tokio_stream::pending());
+            let mut stream = EncodedBytes::new(
+                TestEncoder {
+                    settings,
+                    fail: false,
+                },
+                source,
+                None,
+                SingleMessageCompressionOverride::default(),
+                None,
+            );
+            stream.buf = BytesMut::with_capacity(capacity);
+            let frame = stream.next().await.unwrap().unwrap();
+            assert_eq!(frame.try_into_mut().is_ok(), release);
+            if release {
+                assert_eq!(
+                    stream.buf.capacity(),
+                    16.min(settings.max_encoding_buffer_retained_capacity)
+                );
+            }
+        }
+    }
+
+    #[tokio::test]
+    #[cfg(feature = "gzip")]
+    async fn encoding_buffer_retention_compression() {
+        let payload = Bytes::from(vec![42; 256]);
+        for limit in [0, 64] {
+            let settings = BufferSettings::new(16, 1).max_encoding_buffer_retained_capacity(limit);
+            let source = tokio_stream::iter([Ok(payload.clone())]).chain(tokio_stream::pending());
+            let mut stream = EncodedBytes::new(
+                TestEncoder {
+                    settings,
+                    fail: false,
+                },
+                source,
+                Some(CompressionEncoding::Gzip),
+                SingleMessageCompressionOverride::default(),
+                None,
+            );
+            let frame = stream.next().await.unwrap().unwrap();
+            assert_eq!(stream.buf.capacity(), 16.min(limit));
+            // Compression consumes the scratch bytes, but must also release their allocation.
+            assert_eq!(stream.uncompression_buf.capacity(), 16.min(limit));
+            assert!(frame.try_into_mut().is_ok());
+        }
+    }
+
+    #[tokio::test]
+    async fn encoding_buffer_retention_on_error() {
+        for encoding in [
+            None,
+            #[cfg(feature = "gzip")]
+            Some(CompressionEncoding::Gzip),
+        ] {
+            let settings = BufferSettings::new(16, 1).max_encoding_buffer_retained_capacity(64);
+            let source = tokio_stream::iter([Ok(Bytes::from(vec![42; 256]))]);
+            let mut stream = EncodedBytes::new(
+                TestEncoder {
+                    settings,
+                    fail: true,
+                },
+                source,
+                encoding,
+                SingleMessageCompressionOverride::default(),
+                None,
+            );
+            stream.next().await.unwrap().unwrap_err();
+            assert_eq!(stream.buf.capacity(), 16);
+            assert_eq!(
+                stream.uncompression_buf.capacity(),
+                if encoding.is_some() { 16 } else { 0 }
+            );
         }
     }
 }
