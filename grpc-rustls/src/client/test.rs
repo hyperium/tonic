@@ -39,19 +39,19 @@ use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
 use tokio_rustls::TlsAcceptor;
 
-use crate::credentials::ChannelCredentials;
-use crate::credentials::client::ClientHandshakeInfo;
-use crate::credentials::common::Authority;
-use crate::credentials::rustls::ALPN_PROTO_STR_H2;
-use crate::credentials::rustls::Identity;
-use crate::credentials::rustls::RootCertificates;
-use crate::credentials::rustls::StaticProvider;
-use crate::credentials::rustls::client::ClientTlsConfig;
-use crate::credentials::rustls::client::RustlsChannelCredentials;
-use crate::private;
-use crate::rt;
-use crate::rt::EndpointIoStream;
-use crate::rt::TcpOptions;
+use crate::ALPN_PROTO_STR_H2;
+use crate::Identity;
+use crate::RootCertificates;
+use crate::StaticProvider;
+use crate::client::ClientTlsConfig;
+use crate::client::RustlsChannelCredentials;
+use grpc::__unstable::Internal;
+use grpc::__unstable::credentials::client::ClientHandshakeInfo;
+use grpc::__unstable::credentials::common::Authority;
+use grpc::__unstable::rt;
+use grpc::__unstable::rt::EndpointIoStream;
+use grpc::__unstable::rt::TcpOptions;
+use grpc::credentials::ChannelCredentials;
 
 static INIT: Once = Once::new();
 
@@ -175,7 +175,7 @@ async fn test_tls_key_log() {
             endpoint,
             &ClientHandshakeInfo::default(),
             &runtime,
-            private::Internal,
+            Internal,
         )
         .await
         .expect("Handshake failed");
@@ -230,7 +230,7 @@ async fn test_tls_handshake_wrong_server_name() {
             endpoint,
             &ClientHandshakeInfo::default(),
             &runtime,
-            private::Internal,
+            Internal,
         )
         .await;
 
@@ -252,7 +252,7 @@ async fn test_tls_validate_authority() {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
 
-    let server_task = tokio::spawn(async move {
+    let _server_task = tokio::spawn(async move {
         if let Ok((stream, _)) = listener.accept().await {
             // Complete handshake and hold connection
             if let Ok(mut stream) = acceptor.accept(stream).await {
@@ -283,7 +283,7 @@ async fn test_tls_validate_authority() {
             endpoint,
             &ClientHandshakeInfo::default(),
             &runtime,
-            private::Internal,
+            Internal,
         )
         .await
         .expect("Handshake failed");
@@ -332,7 +332,7 @@ async fn test_mtls_handshake_no_identity() {
             endpoint,
             &ClientHandshakeInfo::default(),
             &runtime,
-            private::Internal,
+            Internal,
         )
         .await
         .expect("Client handshake expected to succeed with TLS 1.3");
@@ -380,7 +380,7 @@ async fn test_mtls_handshake_with_identitiy() {
             endpoint,
             &ClientHandshakeInfo::default(),
             &runtime,
-            private::Internal,
+            Internal,
         )
         .await
         .expect("Handshake failed with client identity");
@@ -606,7 +606,7 @@ async fn run_handshake_test(server_alpn: Vec<Vec<u8>>, expect_success: bool) {
             endpoint,
             &ClientHandshakeInfo::default(),
             &runtime,
-            private::Internal,
+            Internal,
         )
         .await;
 

@@ -17,6 +17,7 @@ path = "src/main.rs"
 async-stream = "0.3"
 grpc = { path = "../grpc" }
 grpc-protobuf = { path = "../grpc-protobuf" }
+grpc-rustls = { path = "../grpc-rustls" }
 hdrhistogram = { version = "7.5", default-features = false }
 pico-args = "0.5"
 prost = "0.14"

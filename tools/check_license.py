@@ -14,7 +14,7 @@ import sys
 # Third-party adapted files. These will hold unique authors.
 IGNORE_FILES = {
     "src/client/transport/http_connect/rewind.rs",
-    "src/credentials/rustls/key_log.rs"
+    "grpc-rustls/src/key_log.rs"
 }  
 TARGET_EXTENSIONS = (".rs",)
 
