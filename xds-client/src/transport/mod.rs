@@ -32,14 +32,6 @@ use std::future::Future;
 #[cfg(feature = "transport-tonic")]
 pub mod tonic;
 
-
-#[cfg(feature = "transport-grpc")]
-pub mod grpc;
-
-mod sealed {
-    pub trait Sealed {}
-}
-
 /// Factory for creating xDS transport streams.
 ///
 /// This abstraction allows for different transport implementations:
@@ -61,9 +53,7 @@ pub trait Transport: Send + Sync + 'static {
 }
 
 /// Sending half of a bidirectional xDS ADS stream.
-///
-/// Sealed for now to limit API surface.
-pub trait TransportSender: sealed::Sealed + Send + 'static {
+pub trait TransportSender: Send + 'static {
     /// Send serialized DiscoveryRequest bytes to the server.
     ///
     /// # Cancel safety
@@ -75,9 +65,7 @@ pub trait TransportSender: sealed::Sealed + Send + 'static {
 }
 
 /// Receiving half of a bidirectional xDS ADS stream.
-///
-/// Sealed for now to limit API surface.
-pub trait TransportReceiver: sealed::Sealed + Send + 'static {
+pub trait TransportReceiver: Send + 'static {
     /// Receive serialized DiscoveryResponse bytes from the server.
     ///
     /// Returns:
@@ -92,17 +80,6 @@ pub trait TransportReceiver: sealed::Sealed + Send + 'static {
     /// to the TransportReceiver are undefined and data may be lost.
     fn recv(&mut self) -> impl Future<Output = Result<Option<Bytes>>> + Send;
 }
-
-#[cfg(feature = "transport-tonic")]
-impl sealed::Sealed for tonic::TonicAdsSender {}
-#[cfg(feature = "transport-tonic")]
-impl sealed::Sealed for tonic::TonicAdsReceiver {}
-
-#[cfg(feature = "transport-grpc")]
-impl sealed::Sealed for grpc::GrpcAdsSender {}
-#[cfg(feature = "transport-grpc")]
-impl sealed::Sealed for grpc::GrpcAdsReceiver {}
-
 
 /// Factory for creating transports to xDS servers.
 ///
@@ -146,11 +123,10 @@ pub trait TransportBuilder: Send + Sync + 'static {
 
 /// In-crate mock transport for worker tests.
 ///
-/// Lives here because [`Transport`], [`TransportSender`], and [`TransportReceiver`]
-/// are sealed: test code outside this module cannot implement them.
+/// Lives here because the traits used to be sealed.
 #[cfg(test)]
 pub(crate) mod mock {
-    use super::{Transport, TransportBuilder, TransportReceiver, TransportSender, sealed};
+    use super::{Transport, TransportBuilder, TransportReceiver, TransportSender};
     use crate::client::config::ServerConfig;
     use crate::error::{Error, Result};
     use bytes::Bytes;
@@ -216,8 +192,6 @@ pub(crate) mod mock {
         requests: mpsc::UnboundedSender<Bytes>,
     }
 
-    impl sealed::Sealed for MockSender {}
-
     impl TransportSender for MockSender {
         async fn send(&mut self, request: Bytes) -> Result<()> {
             self.requests
@@ -229,8 +203,6 @@ pub(crate) mod mock {
     pub(crate) struct MockReceiver {
         responses: mpsc::UnboundedReceiver<Result<Option<Bytes>>>,
     }
-
-    impl sealed::Sealed for MockReceiver {}
 
     impl TransportReceiver for MockReceiver {
         async fn recv(&mut self) -> Result<Option<Bytes>> {

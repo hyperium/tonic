@@ -23,9 +23,6 @@ tonic = { version = "0.14", optional = true }
 tokio-stream = { version = "0.1", optional = true }
 http = { version = "1", optional = true }
 
-# Optional dependencies for grpc transport
-grpc = { version = "0.10.0", path = "../grpc", optional = true }
-
 # Optional dependencies for prost codec
 envoy-types = { version = "0.7", optional = true }
 prost = { version = "0.14", optional = true }
@@ -38,10 +35,6 @@ transport-tonic = [
     "tonic/codegen",
     "dep:tokio-stream",
     "dep:http",
-]
-transport-grpc = [
-    "rt-tokio",
-    "dep:grpc",
 ]
 _tonic-tls-any = ["transport-tonic"]
 tonic-tls-ring = ["_tonic-tls-any", "tonic/tls-ring"]
@@ -60,7 +53,6 @@ tonic = { version = "0.14" }
 async-stream = "0.3"
 envoy-types = "0.7"
 prost = "0.14"
-xds-test-util = { path = "../xds-test-util" }
 
 [[example]]
 name = "basic"
@@ -71,8 +63,7 @@ required-features = ["tonic-tls-ring"]
 allowed_external_types = [
     # major released
     "bytes::*",
-    # Re-exported in the public API behind the transport-tonic / transport-grpc / codegen-prost features.
+    # Re-exported in the public API behind the transport-tonic / codegen-prost features.
     "tonic::*",
-    "grpc::*",
     "prost::*",
 ]

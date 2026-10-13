@@ -21,8 +21,14 @@ allowed_external_types = []
 protobuf = "4.35.1-release"
 protobuf-well-known-types = "4.35.1-release"
 bytes = "1.11.0"
+grpc = { version = "0.10.0", path = "../grpc" }
 xds-client = { version = "0.1.0-alpha.4", path = "../xds-client", default-features = false }
 regex = "1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+xds-client = { version = "0.1.0-alpha.4", path = "../xds-client", default-features = false, features = ["rt-tokio", "codegen-prost"] }
+xds-test-util = { path = "../xds-test-util" }
 
 [build-dependencies]
 protobuf-codegen = "4.35.1-release"

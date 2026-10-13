@@ -101,10 +101,6 @@ pub use transport::{Transport, TransportBuilder, TransportReceiver, TransportSen
 #[cfg(feature = "rt-tokio")]
 pub use runtime::tokio::TokioRuntime;
 
-// gRPC transport
-#[cfg(feature = "transport-grpc")]
-pub use transport::grpc::{GrpcTransport, GrpcTransportBuilder};
-
 // Tonic transport
 #[cfg(feature = "transport-tonic")]
 pub use transport::tonic::{TonicCallCredentials, TonicTransport, TonicTransportBuilder};

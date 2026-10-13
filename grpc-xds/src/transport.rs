@@ -22,10 +22,13 @@
  *
  */
 
-//! `grpc` crate based transport implementation.
+//! `grpc` crate based transport implementation for `xds-client`.
 //!
 //! This transport uses the `grpc` crate's [`Channel`] and low-level streams
 //! to send and receive raw bytes.
+
+// TODO: remove once XdsClient is wired up in grpc-xds.
+#![allow(dead_code)]
 
 use std::sync::Arc;
 
@@ -45,14 +48,13 @@ use grpc::core::RecvMessage;
 use grpc::core::SendMessage;
 use grpc::credentials::ChannelCredentials;
 use grpc::credentials::LocalChannelCredentials;
-
-use crate::client::config::ServerConfig;
-use crate::error::Error;
-use crate::error::Result;
-use crate::transport::Transport;
-use crate::transport::TransportBuilder;
-use crate::transport::TransportReceiver;
-use crate::transport::TransportSender;
+use xds_client::Error;
+use xds_client::Result;
+use xds_client::ServerConfig;
+use xds_client::Transport;
+use xds_client::TransportBuilder;
+use xds_client::TransportReceiver;
+use xds_client::TransportSender;
 
 /// The gRPC path for the ADS StreamAggregatedResources RPC.
 const ADS_PATH: &str =
@@ -60,7 +62,7 @@ const ADS_PATH: &str =
 
 /// Factory for creating gRPC-based transports for `xds-client`.
 #[derive(Clone)]
-pub struct GrpcTransportBuilder {
+pub(crate) struct GrpcTransportBuilder {
     credentials: Arc<dyn ChannelCredentials>,
 }
 
@@ -80,12 +82,12 @@ impl Default for GrpcTransportBuilder {
 
 impl GrpcTransportBuilder {
     /// Creates a new transport builder with default credentials.
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
     /// Sets the channel credentials to use when building channels.
-    pub fn with_credentials(mut self, credentials: Arc<dyn ChannelCredentials>) -> Self {
+    pub(crate) fn with_credentials(mut self, credentials: Arc<dyn ChannelCredentials>) -> Self {
         self.credentials = credentials;
         self
     }
@@ -102,7 +104,7 @@ impl TransportBuilder for GrpcTransportBuilder {
 
 /// A gRPC transport connected to an xDS management server using the `grpc` crate.
 #[derive(Clone)]
-pub struct GrpcTransport {
+pub(crate) struct GrpcTransport {
     channel: Channel,
 }
 
@@ -114,7 +116,7 @@ impl std::fmt::Debug for GrpcTransport {
 
 impl GrpcTransport {
     /// Creates a transport wrapping an existing `grpc::client::Channel`.
-    pub fn from_channel(channel: Channel) -> Self {
+    pub(crate) fn from_channel(channel: Channel) -> Self {
         Self { channel }
     }
 }
@@ -132,7 +134,7 @@ impl Transport for GrpcTransport {
 }
 
 /// Sending half of a `GrpcTransport` ADS stream.
-pub struct GrpcAdsSender(Box<dyn DynSendStream>);
+pub(crate) struct GrpcAdsSender(Box<dyn DynSendStream>);
 
 impl std::fmt::Debug for GrpcAdsSender {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -152,7 +154,7 @@ impl TransportSender for GrpcAdsSender {
 }
 
 /// Receiving half of a `GrpcTransport` ADS stream.
-pub struct GrpcAdsReceiver(Box<dyn DynRecvStream>);
+pub(crate) struct GrpcAdsReceiver(Box<dyn DynRecvStream>);
 
 impl std::fmt::Debug for GrpcAdsReceiver {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -175,7 +177,8 @@ impl TransportReceiver for GrpcAdsReceiver {
                 }
                 ResponseStreamItem::Trailers(trailers) => {
                     if let Err(err) = trailers.into_status() {
-                        return Err(Error::GrpcStream(err));
+                        let (code, message) = err.into_parts();
+                        return Err(Error::GrpcStream(code as i32, message));
                     }
                     return Ok(None);
                 }
@@ -207,14 +210,25 @@ impl RecvMessage for RawBytesBuffer {
 
 #[cfg(test)]
 mod tests {
-    use envoy_types::pb::envoy::service::discovery::v3::DiscoveryRequest;
-    use envoy_types::pb::envoy::service::discovery::v3::DiscoveryResponse;
+    use std::collections::HashMap;
+
     use grpc::credentials::LocalChannelCredentials;
-    use prost::Message;
+    use protobuf::Parse as _;
+    use protobuf::Serialize as _;
+    use xds_client::ClientConfig;
+    use xds_client::Node;
+    use xds_client::ProstCodec;
+    use xds_client::ResourceEvent;
+    use xds_client::TokioRuntime;
+    use xds_client::XdsClient;
     use xds_test_util::XdsTestControlPlaneService;
     use xds_test_util::config::AdsTypeUrl;
+    use xds_test_util::config::build_inline_listener;
 
     use super::*;
+    use crate::generated::envoy::service::discovery::v3::DiscoveryRequest;
+    use crate::generated::envoy::service::discovery::v3::DiscoveryResponse;
+    use crate::resource::ListenerResource;
 
     #[tokio::test]
     async fn test_builder_build() {
@@ -253,12 +267,10 @@ mod tests {
 
         let (mut tx, mut rx) = transport.new_stream().await.expect("new stream");
 
-        let request = DiscoveryRequest {
-            type_url: AdsTypeUrl::Lds.to_string(),
-            resource_names: vec!["listener-1".to_string()],
-            ..Default::default()
-        };
-        tx.send(request.encode_to_vec().into())
+        let mut request = DiscoveryRequest::new();
+        request.set_type_url(AdsTypeUrl::Lds.to_string());
+        request.resource_names_mut().push("listener-1");
+        tx.send(request.serialize().expect("serialize").into())
             .await
             .expect("send discovery request");
 
@@ -267,7 +279,42 @@ mod tests {
             .await
             .expect("recv result")
             .expect("response message");
-        let response = DiscoveryResponse::decode(response_bytes).expect("decode response");
-        assert_eq!(response.type_url, AdsTypeUrl::Lds.to_string());
+        let response = DiscoveryResponse::parse(&response_bytes).expect("decode response");
+        assert_eq!(
+            response.type_url().to_str().unwrap(),
+            AdsTypeUrl::Lds.to_string()
+        );
+    }
+
+    #[tokio::test]
+    async fn watch_with_grpc_transport() {
+        let control_plane = XdsTestControlPlaneService::new();
+        let running_cp = control_plane.start().await.expect("start control plane");
+
+        let mut listeners = HashMap::new();
+        listeners.insert(
+            "listener-1".to_string(),
+            build_inline_listener("listener-1", "cluster-1"),
+        );
+        control_plane.set_xds_config(&AdsTypeUrl::Lds, listeners);
+
+        let config = ClientConfig::new(
+            Node::new("test", "0"),
+            format!("dns:///{}", running_cp.addr()),
+        );
+        let client =
+            XdsClient::builder(config, GrpcTransportBuilder::new(), ProstCodec, TokioRuntime)
+                .build();
+
+        let mut watcher = client.watch::<ListenerResource>("listener-1").await;
+        let event = watcher.next().await.expect("watcher event");
+        let ResourceEvent::ResourceChanged {
+            result: Ok(listener),
+            done: _done,
+        } = event
+        else {
+            panic!("expected ResourceChanged Ok, got {event:?}");
+        };
+        assert_eq!(listener.name, "listener-1");
     }
 }

@@ -52,6 +52,9 @@ pub(crate) mod resource;
 /// from a channel's Listener/RouteConfiguration/Cluster/Endpoints resources.
 pub(crate) mod xds_config;
 
+/// `grpc` crate based [`xds_client::Transport`] implementation.
+pub(crate) mod transport;
+
 #[cfg(test)]
 mod tests {
     //! Sanity checks that the generated xDS modules are importable and usable
