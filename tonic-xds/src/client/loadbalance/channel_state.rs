@@ -216,6 +216,8 @@ impl OutlierChannelState {
     /// Decrement the multiplier, saturating at zero. Atomic against
     /// concurrent `try_eject` and other decrements.
     pub(crate) fn decrement_multiplier(&self) {
+        // TODO: Switch to `try_update` and remove this allow once MSRV >= 1.95.
+        #[allow(deprecated)]
         let _ = self
             .ejection_multiplier
             .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |v| {

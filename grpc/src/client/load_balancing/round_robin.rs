@@ -112,8 +112,9 @@ impl RoundRobinPolicy {
         let pickers = self
             .child_manager
             .children()
-            .filter(|cs| cs.state.connectivity_state == aggregate_state)
-            .map(|cs| cs.state.picker.clone())
+            .map(|(_, child)| child.state())
+            .filter(|state| state.connectivity_state == aggregate_state)
+            .map(|state| state.picker.clone())
             .collect();
         let picker_update = LbState {
             connectivity_state: aggregate_state,

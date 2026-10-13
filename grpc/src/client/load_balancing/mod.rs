@@ -49,6 +49,7 @@ pub mod endpoint_filtering;
 pub mod graceful_switch;
 pub mod lazy;
 pub mod pick_first;
+pub mod priority;
 pub mod registry;
 pub mod round_robin;
 pub mod subchannel;
