@@ -903,14 +903,48 @@ fn build_shuffler() -> Arc<ShufflerFn> {
 
 #[cfg(test)]
 mod test {
+    use std::collections::HashMap;
     use std::time::Duration;
 
     use super::*;
     use crate::StatusCodeError;
     use crate::client::RequestHeaders;
     use crate::client::load_balancing::PickResult;
+    use crate::client::load_balancing::test_utils::TestChannelController;
     use crate::client::load_balancing::test_utils::TestEnv;
     use crate::rt::default_runtime;
+
+    // A ChannelController wrapper that delegates to TestChannelController,
+    // overriding the initial SubchannelState returned by new_subchannel for
+    // configured addresses.
+    struct InitialStateController<'a> {
+        tcc: &'a mut TestChannelController,
+        initial_states: HashMap<&'a str, SubchannelState>,
+    }
+
+    impl ChannelController for InitialStateController<'_> {
+        fn new_subchannel(
+            &mut self,
+            address: &Address,
+            work_scheduler: Arc<dyn WorkScheduler>,
+        ) -> (Arc<dyn Subchannel>, SubchannelState) {
+            let (sc, state) = self.tcc.new_subchannel(address, work_scheduler);
+            let state = self
+                .initial_states
+                .get(&*address.address)
+                .cloned()
+                .unwrap_or(state);
+            (sc, state)
+        }
+
+        fn update_picker(&mut self, update: LbState) {
+            self.tcc.update_picker(update);
+        }
+
+        fn request_resolution(&mut self) {
+            self.tcc.request_resolution();
+        }
+    }
 
     // Helper to create endpoints from a list of address strings.
     // If attrs are provided, they will be added to each endpoint; otherwise,
@@ -951,6 +985,26 @@ mod test {
     }
 
     impl TestEnv<PickFirstPolicy> {
+        // Sends a resolver update for `addrs` while overriding the initial
+        // SubchannelState returned by new_subchannel for entries in
+        // `initial_states`.
+        fn send_resolver_update_with_initial_states(
+            &mut self,
+            addrs: Vec<&str>,
+            initial_states: &[(&str, SubchannelState)],
+        ) -> Result<(), String> {
+            let update = ResolverUpdate {
+                endpoints: Ok(create_endpoints(addrs, None)),
+                ..Default::default()
+            };
+            let mut controller = InitialStateController {
+                tcc: &mut self.tcc,
+                initial_states: initial_states.iter().cloned().collect(),
+            };
+            self.policy
+                .resolver_update(update, &PickFirstConfig::default(), &mut controller)
+        }
+
         // Helper to simulate a basic connection against a list of
         // addresses. Returns the subchannels created, in address order. Does
         // not imply that the connection succeeded or failed.
@@ -2059,6 +2113,70 @@ mod test {
         env.expect_connect_to("addr1");
         env.send_subchannel_update(&scs[0], &SubchannelState::ready());
         env.expect_ready_picker("addr1");
+        env.expect_no_events();
+    }
+
+    // If new_subchannel returns a subchannel that is already READY, the first
+    // pass immediately selects it without connecting earlier subchannels or
+    // creating subchannels for later addresses.
+    #[tokio::test]
+    async fn test_pick_first_new_subchannel_initially_ready() {
+        let mut env = new_env();
+        env.send_resolver_update_with_initial_states(
+            vec!["addr1", "addr2", "addr3"],
+            &[("addr2", SubchannelState::ready())],
+        )
+        .unwrap();
+
+        env.expect_new_subchannels(&["addr1", "addr2"]);
+        env.expect_ready_picker("addr2");
+        env.expect_no_events();
+    }
+
+    // If new_subchannel returns a subchannel already in TRANSIENT_FAILURE, the
+    // first pass counts it as failed and skips to the next address.
+    #[tokio::test]
+    async fn test_pick_first_new_subchannel_initially_transient_failure() {
+        let mut env = new_env();
+        env.send_resolver_update_with_initial_states(
+            vec!["addr1", "addr2"],
+            &[(
+                "addr1",
+                SubchannelState::transient_failure("initial failure"),
+            )],
+        )
+        .unwrap();
+
+        let scs = env.expect_new_subchannels(&["addr1", "addr2"]);
+        env.expect_connect_to("addr2");
+        env.expect_picker_state(ConnectivityState::Connecting);
+        env.expect_no_events();
+
+        // Once addr2 also fails, the pass finishes without waiting for addr1.
+        env.send_subchannel_update(&scs[1], &SubchannelState::transient_failure("addr2 failed"));
+        env.expect_failing_picker("addr2 failed");
+        env.expect_request_resolution();
+        env.expect_no_events();
+    }
+
+    // If new_subchannel returns a subchannel already in CONNECTING, the first
+    // pass waits on it without calling connect(), and advances when the
+    // Connection Attempt Delay timer fires.
+    #[tokio::test(start_paused = true)]
+    async fn test_pick_first_new_subchannel_initially_connecting() {
+        let mut env = new_env();
+        env.send_resolver_update_with_initial_states(
+            vec!["addr1", "addr2"],
+            &[("addr1", SubchannelState::connecting())],
+        )
+        .unwrap();
+
+        env.expect_new_subchannels(&["addr1", "addr2"]);
+        env.expect_picker_state(ConnectivityState::Connecting);
+        env.expect_no_events();
+
+        env.fire_timer().await;
+        env.expect_connect_to("addr2");
         env.expect_no_events();
     }
 }
