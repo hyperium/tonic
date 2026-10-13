@@ -27,7 +27,7 @@ use std::error::Error;
 use std::net::SocketAddr;
 use tokio::{net::TcpListener, sync::oneshot};
 use tonic::server::NamedService;
-use tonic::transport::{Channel, ClientTlsConfig, Endpoint, Server, ServerTlsConfig};
+use tonic::transport::{Server, ServerTlsConfig};
 use tonic::{Request, Response, Status};
 
 pub(crate) use crate::testutil::proto::helloworld::{
@@ -82,10 +82,9 @@ impl Greeter for FailFirstNGreeter {
     }
 }
 
-/// A test server that runs a gRPC service and provides a channel for clients to connect.
+/// A test server that runs a gRPC service. Tests reach it via its
+/// [`addr`](Self::addr) through xDS-discovered endpoints.
 pub(crate) struct TestServer {
-    /// The gRPC channel for talking to the test server.
-    pub channel: Channel,
     /// Signal the server to shutdown.
     pub shutdown: oneshot::Sender<()>,
     /// Handle to wait for server to exit.
@@ -102,7 +101,6 @@ impl NamedService for TestServer {
 pub(crate) async fn spawn_greeter_server(
     msg: &str,
     server_tls: Option<ServerTlsConfig>,
-    client_tls: Option<ClientTlsConfig>,
 ) -> Result<TestServer, Box<dyn Error>> {
     // Bind to an ephemeral port (random free port assigned by OS)
     let listener = TcpListener::bind("127.0.0.1:0").await?;
@@ -135,19 +133,7 @@ pub(crate) async fn spawn_greeter_server(
         Ok(())
     });
 
-    let channel = if let Some(client_tls) = client_tls {
-        let endpoint_str = format!("https://{addr}");
-        Endpoint::from_shared(endpoint_str)?
-            .tls_config(client_tls)?
-            .connect()
-            .await?
-    } else {
-        let endpoint_str = format!("http://{addr}");
-        Endpoint::from_shared(endpoint_str)?.connect().await?
-    };
-
     Ok(TestServer {
-        channel,
         shutdown: tx,
         handle,
         addr,
@@ -175,12 +161,7 @@ pub(crate) async fn spawn_fail_first_n_server(
             .await
     });
 
-    let channel = Endpoint::from_shared(format!("http://{addr}"))?
-        .connect()
-        .await?;
-
     Ok(TestServer {
-        channel,
         shutdown: tx,
         handle,
         addr,

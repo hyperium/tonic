@@ -141,6 +141,7 @@ impl OutlierStatsRegistry {
     }
 
     /// Number of registered channels.
+    #[allow(dead_code)]
     pub(crate) fn len(&self) -> usize {
         self.channels.len()
     }

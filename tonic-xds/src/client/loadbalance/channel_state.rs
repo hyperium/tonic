@@ -42,10 +42,10 @@
 //! manage multiple in-flight state changes and handle cancellation by key.
 //!
 //! The state types hold the raw service `S` directly. In-flight tracking and
-//! load reporting are handled separately by [`LbChannel`] at the pool level.
+//! load reporting are handled separately by [`EndpointChannel`] at the pool level.
 //!
 //! [`KeyedFutures`]: crate::client::loadbalance::keyed_futures::KeyedFutures
-//! [`LbChannel`]: crate::client::loadbalance::channel::LbChannel
+//! [`EndpointChannel`]: crate::client::endpoint::EndpointChannel
 
 use std::future::Future;
 use std::pin::Pin;
@@ -104,6 +104,7 @@ impl EndpointCounters {
 /// can update registry-level counters exactly once per transition.
 #[derive(Debug)]
 pub(crate) struct OutlierChannelState {
+    #[allow(dead_code)]
     addr: EndpointAddress,
     counters: EndpointCounters,
     /// Bumped on each ejection; decremented (saturating) on each
@@ -128,6 +129,7 @@ impl OutlierChannelState {
     }
 
     /// Endpoint address this state belongs to.
+    #[allow(dead_code)]
     pub(crate) fn addr(&self) -> &EndpointAddress {
         &self.addr
     }
@@ -387,6 +389,7 @@ impl<S> ReadyChannel<S> {
     /// Drop the connection and start a fresh connect for the same
     /// address. The outlier state is re-attached from `registry`
     /// when the new connect resolves.
+    #[allow(dead_code)]
     pub(crate) fn reconnect<C: Connector<Service = S>>(
         self,
         connector: Arc<C>,

@@ -164,6 +164,31 @@
 //! [A48]: https://github.com/grpc/proposal/blob/master/A48-xds-least-request-lb-policy.md
 //! [A63]: https://github.com/grpc/proposal/blob/master/A63-xds-string-matcher-ignore-case.md
 
+//! Load-balancer selection. The default `tower-lb` stack is used unless the
+//! `tonic-xds-lb` feature is enabled, which switches to the in-crate
+//! implementation.
+//!
+//! In test builds both backends are compiled (the `any(test, …)` arm) so the
+//! channel tests can exercise each in a single run. These two macros stamp that
+//! cfg onto a group of items, keeping the selection logic in one place.
+
+/// Compiles each item for the `tower-lb` backend: selected in production when
+/// `tonic-xds-lb` is disabled (the default), and always compiled in test builds
+/// so both backends can be exercised in one test run.
+macro_rules! cfg_tower_lb {
+    ($($item:item)*) => {
+        $( #[cfg(any(test, not(feature = "tonic-xds-lb")))] $item )*
+    };
+}
+
+/// Compiles each item for the `tonic-xds-lb` backend: selected in production
+/// when its feature is enabled, and always compiled in test builds.
+macro_rules! cfg_tonic_xds_lb {
+    ($($item:item)*) => {
+        $( #[cfg(any(test, feature = "tonic-xds-lb"))] $item )*
+    };
+}
+
 pub(crate) mod client;
 pub(crate) mod common;
 pub(crate) mod xds;
