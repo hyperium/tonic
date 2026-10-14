@@ -29,6 +29,11 @@
 //! `XdsCache`; this module diffs consecutive snapshots and produces
 //! `Change::Insert` / `Change::Remove` events that Tower's P2C balancer
 //! (or any other `Discover`-based balancer) can consume.
+//!
+//! Two flavours share one diff loop, differing only in what an added endpoint
+//! is turned into: [`EndpointManager::discover_endpoints`] connects it through
+//! a [`Connector`], while [`discover_addresses`] emits a bare [`IdleChannel`]
+//! for balancers that own the connection lifecycle themselves.
 
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -40,6 +45,8 @@ use tower::discover::Change;
 
 use crate::client::endpoint::{Connector, EndpointAddress};
 use crate::client::lb::BoxDiscover;
+use crate::client::loadbalance::channel_state::IdleChannel;
+use crate::common::async_util::BoxFuture;
 use crate::xds::cache::CacheWatch;
 use crate::xds::resource::EndpointsResource;
 
@@ -69,20 +76,52 @@ impl<S: Send + 'static> EndpointManager<S> {
     /// Diffs each snapshot against the previous set of healthy endpoints,
     /// emitting `Change::Insert` for new endpoints and `Change::Remove`
     /// for removed ones.
+    ///
+    /// Each inserted endpoint is connected through the [`Connector`], so it
+    /// reaches the balancer already established. A CDS update therefore only
+    /// reaches endpoints discovered after it: channels already handed out keep
+    /// the connection (and any TLS session) they were created with.
     pub(crate) fn discover_endpoints(
         &self,
         watch: CacheWatch<EndpointsResource>,
     ) -> BoxDiscover<EndpointAddress, S> {
         let connector = self.connector.clone();
-        let (tx, rx) = mpsc::channel(ENDPOINT_CHANNEL_CAPACITY);
-
-        // The spawned task exits naturally when either:
-        // - The CacheWatch closes (cache.remove_endpoints() drops the watch sender)
-        // - The receiver is dropped (consumer no longer reading Change events)
-        tokio::spawn(diff_loop(watch, connector, tx));
-
-        Box::pin(ReceiverStream::new(rx))
+        spawn_diff_loop(watch, move |addr| connector.connect(addr))
     }
+}
+
+/// Returns a stream of endpoint changes carrying addresses only.
+///
+/// Each added endpoint is emitted as an [`IdleChannel`] — the initial state of
+/// the load balancer's channel state machine — without connecting. For
+/// balancers that drive connect / eject / reconnect themselves and so need the
+/// address rather than a live channel.
+#[expect(dead_code, reason = "consumed by the in-crate load balancer wiring")]
+pub(crate) fn discover_addresses(
+    watch: CacheWatch<EndpointsResource>,
+) -> BoxDiscover<EndpointAddress, IdleChannel> {
+    spawn_diff_loop(watch, |addr| {
+        let channel = IdleChannel::new(addr.clone());
+        Box::pin(async move { channel })
+    })
+}
+
+/// Spawns the shared diff loop and returns the change stream it feeds.
+///
+/// The spawned task exits naturally when either:
+/// - The `CacheWatch` closes (`cache.remove_endpoints()` drops the watch sender)
+/// - The receiver is dropped (consumer no longer reading `Change` events)
+fn spawn_diff_loop<S, F>(
+    watch: CacheWatch<EndpointsResource>,
+    make_service: F,
+) -> BoxDiscover<EndpointAddress, S>
+where
+    S: Send + 'static,
+    F: Fn(&EndpointAddress) -> BoxFuture<S> + Send + 'static,
+{
+    let (tx, rx) = mpsc::channel(ENDPOINT_CHANNEL_CAPACITY);
+    tokio::spawn(diff_loop(watch, make_service, tx));
+    Box::pin(ReceiverStream::new(rx))
 }
 
 /// Background task: watches endpoint snapshots and emits incremental changes.
@@ -90,11 +129,14 @@ impl<S: Send + 'static> EndpointManager<S> {
 /// Each time a new [`EndpointsResource`] arrives from the cache, we diff
 /// `healthy_endpoints()` against the previous set and emit `Insert` for
 /// new endpoints followed by `Remove` for gone ones.
-async fn diff_loop<S: Send + 'static>(
+async fn diff_loop<S, F>(
     mut watch: CacheWatch<EndpointsResource>,
-    connector: Arc<dyn Connector<Service = S> + Send + Sync>,
+    make_service: F,
     tx: mpsc::Sender<Result<Change<EndpointAddress, S>, BoxError>>,
-) {
+) where
+    S: Send + 'static,
+    F: Fn(&EndpointAddress) -> BoxFuture<S>,
+{
     let mut active: HashSet<EndpointAddress> = HashSet::new();
 
     while let Some(endpoints) = watch.next().await {
@@ -104,7 +146,7 @@ async fn diff_loop<S: Send + 'static>(
             .collect();
 
         for added in new_set.difference(&active) {
-            let svc = connector.connect(added).await;
+            let svc = make_service(added).await;
             if tx
                 .send(Ok(Change::Insert(added.clone(), svc)))
                 .await
