@@ -586,26 +586,23 @@ impl LbPolicy for PickFirstPolicy {
 
     fn work(&mut self, data: Option<WorkData>, channel_controller: &mut dyn ChannelController) {
         if let Some(data) = data {
-            let data = match data.downcast::<SubchannelUpdate>() {
+            // If data is set, it should be a subchannel update.
+            match data.downcast::<SubchannelUpdate>() {
                 Ok(update) => {
                     self.subchannel_update(update.subchannel, &update.state, channel_controller);
-                    return;
                 }
-                Err(data) => data,
-            };
-            if data.downcast_ref::<LeaveIdle>().is_some() {
-                if self.connectivity_state == ConnectivityState::Idle {
-                    self.exit_idle(channel_controller);
-                }
-                return;
+                Err(data) => debug_assert!(
+                    false,
+                    "work called with {data:?}; expected a SubchannelUpdate"
+                ),
             }
-            debug_assert!(
-                false,
-                "work called with {data:?}; expected a SubchannelUpdate or LeaveIdle"
-            );
             return;
         }
-        if self.timer.as_ref().is_some_and(|t| t.expired()) {
+        if self.connectivity_state == ConnectivityState::Idle {
+            // TODO: is it safe to assume any call to work() while idle means we
+            // should connect?
+            self.exit_idle(channel_controller);
+        } else if self.timer.as_ref().is_some_and(|t| t.expired()) {
             // Advance frontier and trigger next connection.
             if let Some(next_sc) = self.advance_frontier(false) {
                 self.trigger_subchannel_connection(next_sc, channel_controller);
@@ -665,10 +662,6 @@ impl Picker for OneSubchannelPicker {
     }
 }
 
-// Work data sent by `IdlePicker` on its first pick to exit IDLE.
-#[derive(Debug)]
-struct LeaveIdle;
-
 #[derive(Debug)]
 struct IdlePicker {
     triggered_work: AtomicBool,
@@ -687,7 +680,7 @@ impl IdlePicker {
 impl Picker for IdlePicker {
     fn pick(&self, _: &RequestHeaders) -> PickResult {
         if !self.triggered_work.swap(true, Ordering::Relaxed) {
-            self.work_scheduler.schedule_work(Some(Box::new(LeaveIdle)));
+            self.work_scheduler.schedule_work(None);
         }
         PickResult::Queue
     }
