@@ -63,8 +63,7 @@ use serde::Deserialize;
 static POLICY_NAME: &str = "xds_cluster_manager_experimental";
 static START: Once = Once::new();
 
-// Target cluster attribute for an RPC, keyed by its `TypeId` in the
-// per-call attribute map.
+// Target cluster option for an RPC, keyed by its `TypeId` in `CallOptions`.
 #[derive(Debug, Clone)]
 struct XdsCluster(Arc<str>);
 
@@ -128,7 +127,7 @@ impl ClusterManagerPolicy {
     // aggregate connectivity state of the children.
     fn update_picker(&mut self, channel_controller: &mut dyn ChannelController) {
         let connectivity_state = self.child_manager.aggregate_states();
-        let pickers = self
+        let children = self
             .child_manager
             .children()
             .map(|(id, child)| (id.clone(), child.state().picker.clone()))
@@ -136,7 +135,7 @@ impl ClusterManagerPolicy {
 
         channel_controller.update_picker(LbState {
             connectivity_state,
-            picker: Arc::new(ClusterPicker::new(pickers)),
+            picker: Arc::new(ClusterPicker { children }),
         });
     }
 }
@@ -184,16 +183,10 @@ impl LbPolicy for ClusterManagerPolicy {
 }
 
 // Picker that delegates to the child picker corresponding to the cluster
-// call attribute.
+// call option.
 #[derive(Debug)]
 struct ClusterPicker {
     children: HashMap<String, Arc<dyn Picker>>,
-}
-
-impl ClusterPicker {
-    fn new(children: HashMap<String, Arc<dyn Picker>>) -> Self {
-        Self { children }
-    }
 }
 
 impl Picker for ClusterPicker {
@@ -230,6 +223,8 @@ pub(crate) fn reg() {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Mutex;
+
     use grpc::__unstable::client::load_balancing::GLOBAL_LB_REGISTRY;
     use grpc::__unstable::client::load_balancing::WorkScheduler;
     use grpc::__unstable::client::load_balancing::round_robin::POLICY_NAME as RR_POLICY_NAME;
@@ -304,7 +299,9 @@ mod tests {
         should_panic(expected = "cluster attribute not present")
     )]
     fn missing_cluster_attribute_is_internal_error() {
-        let cluster_picker = ClusterPicker::new(HashMap::new());
+        let cluster_picker = ClusterPicker {
+            children: HashMap::new(),
+        };
         let req = RequestHeaders::new();
         let opts = CallOptions::new();
         match cluster_picker.pick(PickOptions::new(&req, &opts)) {
@@ -531,11 +528,11 @@ mod tests {
     }
 
     #[derive(Clone, Debug, Default)]
-    struct PickedChild(Arc<std::sync::Mutex<Option<String>>>);
+    struct PickedChild(Arc<Mutex<Option<String>>>);
 
     // Endpoints the picked child received in its last resolver update.
     #[derive(Clone, Debug, Default)]
-    struct ChildEndpoints(Arc<std::sync::Mutex<Option<Vec<Endpoint>>>>);
+    struct ChildEndpoints(Arc<Mutex<Option<Vec<Endpoint>>>>);
 
     #[derive(Debug)]
     struct TaggedPicker {
@@ -557,7 +554,7 @@ mod tests {
 
     #[derive(Debug, Default)]
     struct MockScheduler {
-        queued_work: std::sync::Mutex<Vec<Option<WorkData>>>,
+        queued_work: Mutex<Vec<Option<WorkData>>>,
     }
 
     impl WorkScheduler for MockScheduler {
