@@ -67,6 +67,7 @@ use tower_service::Service as TowerService;
 
 use crate::StatusCodeError;
 use crate::StatusError;
+use crate::attributes::Attributes;
 use crate::byte_str::ByteStr;
 use crate::client::CallOptions;
 use crate::client::Invoke;
@@ -87,7 +88,6 @@ use crate::core::Address;
 use crate::core::ConnectionInfo;
 use crate::core::RecvMessage;
 use crate::core::SendMessage;
-use crate::immutable_attributes::ImmutableAttributes;
 use crate::private;
 use crate::rt::BoxedTaskHandle;
 use crate::rt::GrpcRuntime;
@@ -466,12 +466,12 @@ impl Transport for TransportBuilder {
         let local_address = Address {
             network_type: handshake_ouput.endpoint.get_network_type(),
             address: ByteStr::from(handshake_ouput.endpoint.get_local_address().to_string()),
-            attributes: ImmutableAttributes::new(),
+            attributes: Attributes::new(),
         };
         let remote_address = Address {
             network_type: handshake_ouput.endpoint.get_network_type(),
             address: ByteStr::from(handshake_ouput.endpoint.get_peer_address().to_string()),
-            attributes: ImmutableAttributes::new(),
+            attributes: Attributes::new(),
         };
 
         let transport = HyperStream::new(handshake_ouput.endpoint);

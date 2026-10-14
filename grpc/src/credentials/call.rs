@@ -30,8 +30,8 @@ use std::sync::Arc;
 use crate::async_trait;
 
 use crate::StatusError;
+use crate::attributes::Attributes;
 use crate::credentials::SecurityLevel;
-use crate::immutable_attributes::ImmutableAttributes;
 use crate::metadata::MetadataMap;
 
 /// Details regarding the call, e.g. URL and method.
@@ -69,7 +69,7 @@ pub struct ClientConnectionSecurityInfo {
     security_protocol: &'static str,
     security_level: SecurityLevel,
     /// Stores extra data derived from the underlying protocol.
-    attributes: ImmutableAttributes,
+    attributes: Attributes,
 }
 
 impl ClientConnectionSecurityInfo {
@@ -78,7 +78,7 @@ impl ClientConnectionSecurityInfo {
     pub fn new(
         security_protocol: &'static str,
         security_level: SecurityLevel,
-        attributes: ImmutableAttributes,
+        attributes: Attributes,
     ) -> Self {
         Self {
             security_protocol,
@@ -101,7 +101,7 @@ impl ClientConnectionSecurityInfo {
 
     /// Returns arbitrary data set by the
     /// [`ChannelCredentials`](super::ChannelCredentials).
-    pub fn attributes(&self) -> &ImmutableAttributes {
+    pub fn attributes(&self) -> &Attributes {
         &self.attributes
     }
 }
@@ -242,7 +242,7 @@ mod tests {
         let auth_info = ClientConnectionSecurityInfo::new(
             "test",
             SecurityLevel::PrivacyAndIntegrity,
-            ImmutableAttributes::new(),
+            Attributes::new(),
         );
         let mut metadata = MetadataMap::new();
 

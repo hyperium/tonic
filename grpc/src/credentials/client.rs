@@ -27,13 +27,13 @@ use std::sync::Arc;
 
 use crate::async_trait;
 
+use crate::attributes::Attributes;
 use crate::credentials::ChannelCredentials;
 use crate::credentials::ProtocolInfo;
 use crate::credentials::SecurityInfo;
 use crate::credentials::call::CallCredentials;
 use crate::credentials::call::CompositeCallCredentials;
 use crate::credentials::common::Authority;
-use crate::immutable_attributes::ImmutableAttributes;
 use crate::private;
 use crate::rt::BoxEndpoint;
 use crate::rt::GrpcRuntime;
@@ -77,15 +77,15 @@ impl ValidateAuthority for Box<dyn ValidateAuthority> {
 #[derive(Default, Clone)]
 pub struct ClientHandshakeInfo {
     /// The bag of attributes containing the handshake data.
-    attributes: ImmutableAttributes,
+    attributes: Attributes,
 }
 
 impl ClientHandshakeInfo {
-    pub fn new(attributes: ImmutableAttributes) -> Self {
+    pub fn new(attributes: Attributes) -> Self {
         Self { attributes }
     }
 
-    pub fn attributes(&self) -> &ImmutableAttributes {
+    pub fn attributes(&self) -> &Attributes {
         &self.attributes
     }
 }
@@ -213,7 +213,7 @@ mod tests {
         let auth_info = ClientConnectionSecurityInfo::new(
             "local",
             SecurityLevel::NoSecurity,
-            ImmutableAttributes::new(),
+            Attributes::new(),
         );
         let mut metadata = MetadataMap::new();
 

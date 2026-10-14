@@ -43,20 +43,18 @@
 //! * [`credentials`] - Securing connections and providing access tokens
 //! * [`metadata`] - Data sent with all RPCs typically used by interceptors
 //! * [`core`] - Common types shared between clients and servers
-//! * [`attributes`] - Mutable per-call key/value storage
-//! * [`immutable_attributes`] - Immutable key/value storage used by gRPC
-//!   plugins
+//! * [`attributes`] - Generic key/value storage used by gRPC plugins
 //!
 //! [gRPC]: https://grpc.io
 //! [our website]: https://grpc.io/docs/languages/rust
 #![allow(dead_code, unused_variables)]
 
 pub mod attributes;
+pub mod call_attributes;
 pub mod client;
 pub(crate) mod codec;
 pub mod core;
 pub mod credentials;
-pub mod immutable_attributes;
 pub mod metadata;
 pub mod server;
 

@@ -56,6 +56,7 @@ use tonic_prost::prost::Message as ProstMessage;
 
 use crate::StatusCodeError;
 use crate::StatusError;
+use crate::attributes::Attributes;
 use crate::client::CallOptions;
 use crate::client::Channel;
 use crate::client::Invoke as _;
@@ -94,7 +95,6 @@ use crate::echo_pb::EchoRequest;
 use crate::echo_pb::EchoResponse;
 use crate::echo_pb::echo_server::Echo;
 use crate::echo_pb::echo_server::EchoServer;
-use crate::immutable_attributes::ImmutableAttributes;
 use crate::metadata::AsciiMetadataKey;
 use crate::metadata::MetadataMap;
 use crate::private;
@@ -173,7 +173,7 @@ pub(crate) async fn tonic_transport_rpc() {
     let address = Address {
         network_type: TCP_IP_NETWORK_TYPE,
         address: addr.to_string().into(),
-        attributes: ImmutableAttributes::new(),
+        attributes: Attributes::new(),
     };
     let (conn, _sec_info, mut disconnection_listener) = builder
         .dyn_connect(
@@ -813,7 +813,7 @@ async fn tonic_transport_invalid_base64_headers() {
     let address = Address {
         network_type: TCP_IP_NETWORK_TYPE,
         address: addr.to_string().into(),
-        attributes: ImmutableAttributes::new(),
+        attributes: Attributes::new(),
     };
     let (conn, _sec_info, _disconnection_listener) = builder
         .dyn_connect(
@@ -894,7 +894,7 @@ async fn tonic_transport_recv_drop_cancels_send() {
     let address = Address {
         network_type: TCP_IP_NETWORK_TYPE,
         address: addr.to_string().into(),
-        attributes: ImmutableAttributes::new(),
+        attributes: Attributes::new(),
     };
     let (conn, _sec_info, _disconnection_listener) = builder
         .dyn_connect(
@@ -1222,7 +1222,7 @@ async fn tonic_transport_recv_drop_sends_rst_stream() {
     let address = Address {
         network_type: TCP_IP_NETWORK_TYPE,
         address: addr.to_string().into(),
-        attributes: ImmutableAttributes::new(),
+        attributes: Attributes::new(),
     };
 
     let (conn, _sec_info, _disconnection_listener) = builder

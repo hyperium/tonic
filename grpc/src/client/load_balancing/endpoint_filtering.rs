@@ -140,18 +140,18 @@ pub fn group_by_path(endpoints: Vec<Endpoint>) -> HashMap<String, Vec<Endpoint>>
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::attributes::Attributes;
     use crate::byte_str::ByteStr;
     use crate::core::Address;
-    use crate::immutable_attributes::ImmutableAttributes;
 
     fn test_endpoint(addr: &str) -> Endpoint {
         Endpoint {
             addresses: vec![Address {
                 network_type: "tcp",
                 address: ByteStr::from(addr.to_string()),
-                attributes: ImmutableAttributes::new(),
+                attributes: Attributes::new(),
             }],
-            attributes: ImmutableAttributes::new(),
+            attributes: Attributes::new(),
         }
     }
 

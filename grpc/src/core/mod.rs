@@ -44,9 +44,9 @@ use std::hash::Hash;
 
 use bytes::Buf;
 
+use crate::attributes::Attributes;
 use crate::byte_str::ByteStr;
 use crate::credentials::SecurityInfo;
-use crate::immutable_attributes::ImmutableAttributes;
 
 /// Represents a message sent by either a client or a server.
 #[allow(unused)]
@@ -133,9 +133,9 @@ pub struct Address {
     /// connection to it.
     pub address: ByteStr,
 
-    /// Contains arbitrary data about this address intended for
+    /// Attributes contains arbitrary data about this address intended for
     /// consumption by the subchannel.
-    pub attributes: ImmutableAttributes,
+    pub attributes: Attributes,
 }
 
 impl Hash for Address {
@@ -197,12 +197,12 @@ pub(crate) fn test_connection_info() -> ConnectionInfo {
         local_address: Address {
             network_type: "",
             address: ByteStr::default(),
-            attributes: ImmutableAttributes::new(),
+            attributes: Attributes::new(),
         },
         remote_address: Address {
             network_type: "",
             address: ByteStr::default(),
-            attributes: ImmutableAttributes::new(),
+            attributes: Attributes::new(),
         },
         security_info: SecurityInfo::new(""),
     }

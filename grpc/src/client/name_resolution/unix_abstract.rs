@@ -22,6 +22,7 @@
  *
  */
 
+use crate::attributes::Attributes;
 use crate::byte_str::ByteStr;
 use crate::client::name_resolution::Address;
 use crate::client::name_resolution::NopResolver;
@@ -29,7 +30,6 @@ use crate::client::name_resolution::ResolverBuilder;
 use crate::client::name_resolution::Target;
 use crate::client::name_resolution::UNIX_NETWORK_TYPE;
 use crate::client::name_resolution::global_registry;
-use crate::immutable_attributes::ImmutableAttributes;
 
 pub(crate) fn reg() {
     global_registry().add_builder(Box::new(Builder {}));
@@ -82,7 +82,7 @@ fn parse_target(target: &Target) -> Result<Address, String> {
     Ok(Address {
         network_type: UNIX_NETWORK_TYPE,
         address: ByteStr::from(addr_string),
-        attributes: ImmutableAttributes::new(),
+        attributes: Attributes::new(),
     })
 }
 

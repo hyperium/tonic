@@ -22,7 +22,7 @@
  *
  */
 
-//! Compares [`Attributes`] against [`http::Extensions`] at 5, 10 and 15
+//! Compares [`CallAttributes`] against [`http::Extensions`] at 5, 10 and 15
 //! stored attributes.
 
 use std::hint::black_box;
@@ -34,7 +34,7 @@ use criterion::Criterion;
 use criterion::criterion_group;
 use criterion::criterion_main;
 use criterion::measurement::WallTime;
-use grpc::attributes::Attributes;
+use grpc::call_attributes::CallAttributes;
 use http::Extensions;
 
 /// Shorthand for the criterion group type threaded through the helpers below.
@@ -93,7 +93,7 @@ pub struct RetryPolicy {
 /// The bounds every payload satisfies.
 ///
 /// `Sync` is here only because [`http::Extensions`] demands it;
-/// [`Attributes`] does not. Requiring it of both keeps one workload able to
+/// [`CallAttributes`] does not. Requiring it of both keeps one workload able to
 /// drive either, at no cost, since all the payloads below are plain data.
 trait Attr: Clone + Send + Sync + 'static {}
 
@@ -110,7 +110,7 @@ trait TypeMap {
     fn fetch<T: Attr>(&self) -> Option<&T>;
 }
 
-impl TypeMap for Attributes {
+impl TypeMap for CallAttributes {
     #[inline(always)]
     fn create() -> Self {
         Self::new()
@@ -258,12 +258,12 @@ fn lookup_one<M: TypeMap, const N: usize>(group: &mut Group<'_>, label: &str) {
 }
 
 fn lifecycle_tier<const N: usize>(group: &mut Group<'_>) {
-    lifecycle_one::<Attributes, N>(group, "Attributes");
+    lifecycle_one::<CallAttributes, N>(group, "CallAttributes");
     lifecycle_one::<Extensions, N>(group, "http::Extensions");
 }
 
 fn lookup_tier<const N: usize>(group: &mut Group<'_>) {
-    lookup_one::<Attributes, N>(group, "Attributes");
+    lookup_one::<CallAttributes, N>(group, "CallAttributes");
     lookup_one::<Extensions, N>(group, "http::Extensions");
 }
 

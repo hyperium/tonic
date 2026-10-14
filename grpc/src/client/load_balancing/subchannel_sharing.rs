@@ -382,7 +382,7 @@ mod tests {
     use std::sync::mpsc;
 
     use super::*;
-    use crate::attributes::Attributes;
+    use crate::call_attributes::CallAttributes;
     use crate::client::ConnectivityState;
     use crate::client::load_balancing::DynLbConfig;
     use crate::client::load_balancing::LbPolicy;
@@ -764,7 +764,7 @@ mod tests {
         let req = new_request_headers();
         let result = state
             .picker
-            .pick(PickOptions::new(&req, &Attributes::new()));
+            .pick(PickOptions::new(&req, &CallAttributes::new()));
         let PickResult::Pick(pick) = result else {
             panic!("expected Pick")
         };

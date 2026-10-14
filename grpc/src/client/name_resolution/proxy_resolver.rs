@@ -261,11 +261,11 @@ mod tests {
     use http::HeaderValue;
 
     use super::*;
+    use crate::attributes::Attributes;
     use crate::byte_str::ByteStr;
     use crate::client::name_resolution::test_utils::TestChannelController;
     use crate::client::name_resolution::test_utils::TestWorkScheduler;
     use crate::core::Address;
-    use crate::immutable_attributes::ImmutableAttributes;
     use crate::rt;
     use crate::rt::GrpcEndpoint;
     use crate::rt::GrpcRuntime;
@@ -349,7 +349,7 @@ mod tests {
             let addr = Address {
                 network_type: "tcp",
                 address: ByteStr::from(DIRECT_ADDRESS.to_string()),
-                attributes: ImmutableAttributes::new(),
+                attributes: Attributes::new(),
             };
             NopResolver::new_with_addr(addr, options)
         }
@@ -653,7 +653,7 @@ mod tests {
             let addr = Address {
                 network_type: "tcp",
                 address: ByteStr::from(DIRECT_ADDRESS.to_string()),
-                attributes: ImmutableAttributes::new(),
+                attributes: Attributes::new(),
             };
             NopResolver::new_with_addr(addr, options)
         }

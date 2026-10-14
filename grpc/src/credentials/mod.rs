@@ -49,11 +49,11 @@ pub use client::CompositeChannelCredentials;
 pub use local::LocalChannelCredentials;
 pub use local::LocalServerCredentials;
 
+use crate::attributes::Attributes;
 use crate::credentials::call::CallCredentials;
 use crate::credentials::client::ClientHandshakeInfo;
 use crate::credentials::client::HandshakeOutput;
 use crate::credentials::common::Authority;
-use crate::immutable_attributes::ImmutableAttributes;
 use crate::private;
 use crate::rt::BoxEndpoint;
 use crate::rt::GrpcRuntime;
@@ -142,7 +142,7 @@ pub struct SecurityInfo {
     security_protocol: &'static str,
     security_level: SecurityLevel,
     /// Stores extra data derived from the underlying protocol.
-    attributes: ImmutableAttributes,
+    attributes: Attributes,
 }
 
 impl SecurityInfo {
@@ -151,7 +151,7 @@ impl SecurityInfo {
         Self {
             security_protocol,
             security_level: SecurityLevel::NoSecurity,
-            attributes: ImmutableAttributes::new(),
+            attributes: Attributes::new(),
         }
     }
 
@@ -172,12 +172,12 @@ impl SecurityInfo {
     }
 
     /// Returns the attributes of this `SecurityInfo`.
-    pub fn attributes(&self) -> &ImmutableAttributes {
+    pub fn attributes(&self) -> &Attributes {
         &self.attributes
     }
 
     /// Returns the mutable attributes of this `SecurityInfo`.
-    pub fn attributes_mut(&mut self) -> &mut ImmutableAttributes {
+    pub fn attributes_mut(&mut self) -> &mut Attributes {
         &mut self.attributes
     }
 }

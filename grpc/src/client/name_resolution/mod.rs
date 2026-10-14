@@ -39,10 +39,10 @@ use percent_encoding::percent_decode_str;
 use percent_encoding::utf8_percent_encode;
 use url::Url;
 
+use crate::attributes::Attributes;
 use crate::client::service_config::ParseResult;
 use crate::client::service_config::ServiceConfig;
 use crate::core::Address;
-use crate::immutable_attributes::ImmutableAttributes;
 use crate::rt::GrpcRuntime;
 
 mod backoff;
@@ -273,9 +273,9 @@ pub trait ChannelController: Send + Sync {
 /// ResolverUpdate contains the current Resolver state relevant to the
 /// channel.
 pub struct ResolverUpdate {
-    /// Contains arbitrary data about the resolver intended for
+    /// Attributes contains arbitrary data about the resolver intended for
     /// consumption by the load balancing policy.
-    pub attributes: ImmutableAttributes,
+    pub attributes: Attributes,
 
     /// A list of endpoints which each identify a logical host serving the
     /// service indicated by the target URI.
@@ -315,9 +315,9 @@ pub struct Endpoint {
     /// Addresses contains a list of addresses used to access this endpoint.
     pub addresses: Vec<Address>,
 
-    /// Contains arbitrary data about this endpoint intended for
+    /// Attributes contains arbitrary data about this endpoint intended for
     /// consumption by the LB policy.
-    pub attributes: ImmutableAttributes,
+    pub attributes: Attributes,
 }
 
 impl Hash for Endpoint {
@@ -484,11 +484,11 @@ mod test {
         let addr_a = Address {
             network_type: "tcp",
             address: ByteStr::from(addr_base.to_string()),
-            attributes: ImmutableAttributes::new(),
+            attributes: Attributes::new(),
         };
 
         // Address B: with metadata attributes
-        let attrs = ImmutableAttributes::new().add("metadata_payload".to_string());
+        let attrs = Attributes::new().add("metadata_payload".to_string());
         let addr_b = Address {
             network_type: "tcp",
             address: ByteStr::from(addr_base.to_string()),
@@ -512,7 +512,7 @@ mod test {
         let addr_diff_net = Address {
             network_type: "uds",
             address: ByteStr::from(addr_base.to_string()),
-            attributes: ImmutableAttributes::new(),
+            attributes: Attributes::new(),
         };
         let mut hasher_diff_net = DefaultHasher::new();
         addr_diff_net.hash(&mut hasher_diff_net);
@@ -526,7 +526,7 @@ mod test {
         let addr_diff_addr = Address {
             network_type: "tcp",
             address: ByteStr::from("127.0.0.1:8081".to_string()),
-            attributes: ImmutableAttributes::new(),
+            attributes: Attributes::new(),
         };
         let mut hasher_diff_addr = DefaultHasher::new();
         addr_diff_addr.hash(&mut hasher_diff_addr);

@@ -40,6 +40,7 @@ use tokio::sync::oneshot;
 
 use crate::StatusCodeError;
 use crate::StatusError;
+use crate::attributes::Attributes;
 use crate::byte_str::ByteStr;
 use crate::client::CallOptions;
 use crate::client::DynRecvStream as ClientDynRecvStream;
@@ -70,7 +71,6 @@ use crate::core::RecvMessage;
 use crate::core::SendMessage;
 use crate::credentials::SecurityInfo;
 use crate::credentials::SecurityLevel;
-use crate::immutable_attributes::ImmutableAttributes;
 use crate::rt::GrpcRuntime;
 use crate::server::DynHandle;
 use crate::server::GracefulConnection;
@@ -452,7 +452,7 @@ impl Transport for InMemoryTransport {
         let local_address = Address {
             network_type: address.network_type,
             address: ByteStr::default(),
-            attributes: ImmutableAttributes::new(),
+            attributes: Attributes::new(),
         };
         let connection_info = ConnectionInfo::new(local_address, address.clone(), sec_info);
         let conn = InMemoryConnection {

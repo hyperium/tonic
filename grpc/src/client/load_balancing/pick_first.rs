@@ -745,7 +745,7 @@ impl SteadyState {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::attributes::Attributes;
+    use crate::call_attributes::CallAttributes;
     use crate::client::RequestHeaders;
     use crate::client::load_balancing::test_utils::TestEnv;
     use crate::client::load_balancing::test_utils::TestEvent;
@@ -756,7 +756,7 @@ mod test {
     // default attributes will be used.
     fn create_endpoints(
         addrs: Vec<&str>,
-        attrs: Option<crate::immutable_attributes::ImmutableAttributes>,
+        attrs: Option<crate::attributes::Attributes>,
     ) -> Vec<Endpoint> {
         addrs
             .into_iter()
@@ -796,7 +796,7 @@ mod test {
         fn simulate_connection(
             &mut self,
             addrs: Vec<&str>,
-            attrs: Option<crate::immutable_attributes::ImmutableAttributes>,
+            attrs: Option<crate::attributes::Attributes>,
         ) {
             let addrs_len = addrs.len();
             let endpoints = create_endpoints(addrs, attrs);
@@ -815,7 +815,7 @@ mod test {
         fn simulate_successful_connection(
             &mut self,
             addrs: Vec<&str>,
-            attrs: Option<crate::immutable_attributes::ImmutableAttributes>,
+            attrs: Option<crate::attributes::Attributes>,
         ) {
             self.simulate_connection(addrs, attrs);
 
@@ -833,7 +833,7 @@ mod test {
         fn simulate_failed_connection(
             &mut self,
             addrs: Vec<&str>,
-            attrs: Option<crate::immutable_attributes::ImmutableAttributes>,
+            attrs: Option<crate::attributes::Attributes>,
         ) {
             self.simulate_connection(addrs, attrs);
 
@@ -862,7 +862,7 @@ mod test {
         assert_eq!(state.connectivity_state, ConnectivityState::Ready);
         let res = state.picker.pick(PickOptions::new(
             &RequestHeaders::default(),
-            &Attributes::new(),
+            &CallAttributes::new(),
         ));
         match res {
             PickResult::Pick(pick) => {
@@ -1253,7 +1253,7 @@ mod test {
         assert_eq!(state.connectivity_state, ConnectivityState::Ready);
         let res = state.picker.pick(PickOptions::new(
             &RequestHeaders::default(),
-            &Attributes::new(),
+            &CallAttributes::new(),
         ));
         match res {
             PickResult::Pick(pick) => {
@@ -1327,8 +1327,7 @@ mod test {
         env.simulate_connection(vec![addr], None);
 
         // Push same address but with attributes.
-        let attrs = crate::immutable_attributes::ImmutableAttributes::new()
-            .add("metadata_value".to_string());
+        let attrs = crate::attributes::Attributes::new().add("metadata_value".to_string());
         let endpoints_updated = create_endpoints(vec![addr], Some(attrs));
 
         env.send_resolver_update(endpoints_updated).unwrap();
@@ -1475,7 +1474,7 @@ mod test {
         assert_eq!(state.connectivity_state, ConnectivityState::Ready);
         let res = state.picker.pick(PickOptions::new(
             &RequestHeaders::default(),
-            &Attributes::new(),
+            &CallAttributes::new(),
         ));
         let sc1 = match res {
             PickResult::Pick(pick) => {
@@ -1505,7 +1504,7 @@ mod test {
         // 4. Simulate an RPC (pick) happening.
         let pick_result = idle_picker.pick(PickOptions::new(
             &RequestHeaders::default(),
-            &Attributes::new(),
+            &CallAttributes::new(),
         ));
         assert!(matches!(pick_result, PickResult::Queue));
 

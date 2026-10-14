@@ -31,7 +31,7 @@ use std::sync::Arc;
 
 use crate::StatusCodeError;
 use crate::StatusError;
-use crate::attributes::Attributes;
+use crate::call_attributes::CallAttributes;
 use crate::client::ConnectivityState;
 use crate::client::RequestHeaders;
 use crate::client::load_balancing::subchannel::Subchannel;
@@ -371,12 +371,12 @@ pub struct PickOptions<'a> {
     pub request_headers: &'a RequestHeaders,
     /// The attributes of the call.  Pickers may read attributes set by earlier
     /// stages (e.g. the config selector), but cannot modify them.
-    pub call_attributes: &'a Attributes,
+    pub call_attributes: &'a CallAttributes,
 }
 
 impl<'a> PickOptions<'a> {
     /// Creates a new `PickOptions`.
-    pub fn new(request_headers: &'a RequestHeaders, call_attributes: &'a Attributes) -> Self {
+    pub fn new(request_headers: &'a RequestHeaders, call_attributes: &'a CallAttributes) -> Self {
         Self {
             request_headers,
             call_attributes,

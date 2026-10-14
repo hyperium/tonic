@@ -519,6 +519,7 @@ mod test {
     use std::sync::Mutex;
     use std::sync::mpsc;
 
+    use crate::attributes::Attributes;
     use crate::client::ConnectivityState;
     use crate::client::load_balancing::DynLbConfig;
     use crate::client::load_balancing::DynLbPolicyBuilder;
@@ -539,7 +540,6 @@ mod test {
     use crate::client::name_resolution::Endpoint;
     use crate::client::name_resolution::ResolverUpdate;
     use crate::core::Address;
-    use crate::immutable_attributes::ImmutableAttributes;
     use crate::rt::default_runtime;
 
     // Constructs the test environment for ChildManager tests, registering a
@@ -563,7 +563,7 @@ mod test {
                 child_policy_builder: builder.clone(),
                 child_update: Some((
                     ResolverUpdate {
-                        attributes: ImmutableAttributes::default(),
+                        attributes: Attributes::default(),
                         endpoints: Ok(vec![e.clone()]),
                         service_config: Ok(None),
                         resolution_note: None,
