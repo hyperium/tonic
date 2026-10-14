@@ -418,7 +418,7 @@ async fn blocking_streaming(mut opts: RpcOptions) {
         }
         let start = Instant::now();
         // Perform a single ping-pong.
-        if tx.send(req.clone()).await.is_err() {
+        if tx.send(&req).await.is_err() {
             println!("Stream closed with status: {:?}", rx.status().await);
             return;
         }
