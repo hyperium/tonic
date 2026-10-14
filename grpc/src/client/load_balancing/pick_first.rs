@@ -32,6 +32,7 @@ use std::sync::atomic::Ordering;
 use rand::seq::SliceRandom;
 
 use crate::client::ConnectivityState;
+use crate::client::RequestHeaders;
 use crate::client::load_balancing::ChannelController;
 use crate::client::load_balancing::FailingPicker;
 use crate::client::load_balancing::LbConfigJson;
@@ -39,7 +40,8 @@ use crate::client::load_balancing::LbPolicy;
 use crate::client::load_balancing::LbPolicyBuilder;
 use crate::client::load_balancing::LbPolicyOptions;
 use crate::client::load_balancing::LbState;
-use crate::client::load_balancing::OneSubchannelPicker;
+use crate::client::load_balancing::Pick;
+use crate::client::load_balancing::PickResult;
 use crate::client::load_balancing::Picker;
 use crate::client::load_balancing::QueuingPicker;
 use crate::client::load_balancing::WakeUpPicker;
@@ -51,6 +53,7 @@ use crate::client::load_balancing::subchannel::SubchannelUpdate;
 use crate::client::name_resolution::Endpoint;
 use crate::client::name_resolution::ResolverUpdate;
 use crate::core::Address;
+use crate::metadata::MetadataMap;
 use crate::rt::BoxedTaskHandle;
 use crate::rt::GrpcRuntime;
 
@@ -645,6 +648,21 @@ impl Drop for Timer {
     }
 }
 
+#[derive(Debug)]
+struct OneSubchannelPicker {
+    sc: Arc<dyn Subchannel>,
+}
+
+impl Picker for OneSubchannelPicker {
+    fn pick(&self, _: &RequestHeaders) -> PickResult {
+        PickResult::Pick(Pick {
+            subchannel: self.sc.clone(),
+            metadata: MetadataMap::new(),
+            on_complete: None,
+        })
+    }
+}
+
 fn build_shuffler() -> Arc<ShufflerFn> {
     Arc::new(|endpoints| {
         let mut rng = rand::rng();
@@ -704,8 +722,6 @@ impl SteadyState {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::client::RequestHeaders;
-    use crate::client::load_balancing::PickResult;
     use crate::client::load_balancing::test_utils::TestEnv;
     use crate::client::load_balancing::test_utils::TestEvent;
     use crate::rt::default_runtime;
