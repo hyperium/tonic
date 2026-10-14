@@ -35,6 +35,9 @@
 //!
 //! - **[`SendMessage`] / [`RecvMessage`]:** Traits for encoding and decoding
 //!   messages.
+//! - **[`StreamEnded`]:** Returned when sending on a stream that has ended.
+//! - **[`StreamError`]:** Returned when receiving on a server stream that
+//!   terminated early.
 
 use std::any::TypeId;
 use std::fmt::Display;
@@ -71,6 +74,41 @@ pub trait RecvMessage: Send + Sync {
         None
     }
 }
+
+/// The error returned by stream send operations when the stream has ended.
+///
+/// This error carries no details.  On the client, the RPC's final status, which
+/// explains why the stream ended, is reported separately on the
+/// [`RecvStream`](crate::client::RecvStream).  On the server, the stream may
+/// have been cancelled by the client, reached its deadline, or encountered an
+/// I/O error.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub struct StreamEnded;
+
+impl Display for StreamEnded {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        f.write_str("stream ended")
+    }
+}
+
+impl std::error::Error for StreamEnded {}
+
+/// The error returned by server stream receive operations when the RPC
+/// terminated before the client closed its sending side of the stream.
+///
+/// This error carries no details.  Scenarios that could result in this error
+/// include: the client cancelled the RPC, the deadline expired, an I/O error
+/// occurred, or the server handler sent the trailers.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub struct StreamError;
+
+impl Display for StreamError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        f.write_str("stream terminated before client finished sending")
+    }
+}
+
+impl std::error::Error for StreamError {}
 
 /// Describes what underlying message is inside a [`SendMessage`] or
 /// [`RecvMessage`] so that it can be downcast, e.g. by interceptors.

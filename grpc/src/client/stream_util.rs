@@ -40,6 +40,7 @@ use crate::client::interceptor::Intercept;
 use crate::core::ConnectionInfo;
 use crate::core::RecvMessage;
 use crate::core::SendMessage;
+use crate::core::StreamEnded;
 
 /// An interceptor that wraps the underlying invoker's [`RecvStream`] in a
 /// [`RecvStreamValidator`].
@@ -175,8 +176,12 @@ where
 struct NopSendStream;
 
 impl SendStream for NopSendStream {
-    async fn send(&mut self, msg: &dyn SendMessage, options: SendOptions) -> Result<(), ()> {
-        Err(())
+    async fn send(
+        &mut self,
+        msg: &dyn SendMessage,
+        options: SendOptions,
+    ) -> Result<(), StreamEnded> {
+        Err(StreamEnded)
     }
 }
 

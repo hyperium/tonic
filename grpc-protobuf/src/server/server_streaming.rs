@@ -138,6 +138,8 @@ mod tests {
     use grpc::core::Address;
     use grpc::core::ConnectionInfo;
     use grpc::core::RecvMessage;
+    use grpc::core::StreamEnded;
+    use grpc::core::StreamError;
     use grpc::credentials::SecurityInfo;
     use grpc::server::RecvStream;
     use grpc::server::ResponseStreamItem;
@@ -172,17 +174,17 @@ mod tests {
             &mut self,
             _item: ResponseStreamItem<'a>,
             _options: SendOptions,
-        ) -> Result<(), ()> {
+        ) -> Result<(), StreamEnded> {
             Ok(())
         }
     }
 
     struct MockRecvStream {
-        items: VecDeque<Option<Result<(), ()>>>,
+        items: VecDeque<Option<Result<(), StreamError>>>,
     }
 
     impl MockRecvStream {
-        fn new(items: impl IntoIterator<Item = Option<Result<(), ()>>>) -> Self {
+        fn new(items: impl IntoIterator<Item = Option<Result<(), StreamError>>>) -> Self {
             Self {
                 items: items.into_iter().collect(),
             }
@@ -190,14 +192,14 @@ mod tests {
     }
 
     impl RecvStream for MockRecvStream {
-        async fn next(&mut self, _msg: &mut dyn RecvMessage) -> Option<Result<(), ()>> {
+        async fn next(&mut self, _msg: &mut dyn RecvMessage) -> Option<Result<(), StreamError>> {
             self.items.pop_front().unwrap_or(None)
         }
     }
 
     async fn run_test(
         called: &Arc<AtomicBool>,
-        items: impl IntoIterator<Item = Option<Result<(), ()>>>,
+        items: impl IntoIterator<Item = Option<Result<(), StreamError>>>,
     ) -> Trailers {
         let adapter = ServerStreamingAdapter::new(TestServerStreamingMethod {
             called: called.clone(),
@@ -255,7 +257,7 @@ mod tests {
     #[tokio::test]
     async fn test_server_streaming_stream_failure_on_first_message_returns_error() {
         let called = Arc::new(AtomicBool::new(false));
-        let trailers = run_test(&called, [Some(Err(()))]).await;
+        let trailers = run_test(&called, [Some(Err(StreamError))]).await;
 
         let status = trailers
             .status()
@@ -272,7 +274,7 @@ mod tests {
     #[tokio::test]
     async fn test_server_streaming_stream_failure_on_second_message_returns_error() {
         let called = Arc::new(AtomicBool::new(false));
-        let trailers = run_test(&called, [Some(Ok(())), Some(Err(()))]).await;
+        let trailers = run_test(&called, [Some(Ok(())), Some(Err(StreamError))]).await;
 
         let status = trailers
             .status()
