@@ -907,7 +907,6 @@ mod test {
     use std::time::Duration;
 
     use super::*;
-    use crate::StatusCodeError;
     use crate::client::RequestHeaders;
     use crate::client::load_balancing::PickResult;
     use crate::client::load_balancing::test_utils::TestChannelController;
@@ -1019,7 +1018,7 @@ mod test {
             let subchannels = self.expect_new_subchannels(&addrs);
 
             self.expect_connect_to(addrs[0]);
-            self.expect_picker_state(ConnectivityState::Connecting);
+            self.expect_queuing_picker();
             subchannels
         }
 
@@ -1030,10 +1029,9 @@ mod test {
             addrs: Vec<&str>,
             attrs: Option<crate::attributes::Attributes>,
         ) -> Vec<Arc<dyn Subchannel>> {
-            let first = addrs[0];
             let subchannels = self.simulate_connection(addrs, attrs);
             self.send_subchannel_update(&subchannels[0], &SubchannelState::ready());
-            self.expect_ready_picker(first);
+            self.expect_ready_picker(&subchannels[0]);
             subchannels
         }
 
@@ -1076,16 +1074,8 @@ mod test {
             self.policy.work(data, &mut self.tcc);
             let subchannels = self.expect_new_subchannels(addrs);
             self.expect_connect_to(addrs[0]);
-            self.expect_picker_state(ConnectivityState::Connecting);
+            self.expect_queuing_picker();
             subchannels
-        }
-
-        // Verifies that the policy created a subchannel for `addr`, and
-        // returns it.
-        fn expect_new_subchannel_for(&mut self, addr: &str) -> Arc<dyn Subchannel> {
-            let sc = self.expect_new_subchannel();
-            assert_eq!(sc.address().address.to_string(), addr);
-            sc
         }
 
         // Verifies that the policy created subchannels for `addrs` in order,
@@ -1095,45 +1085,6 @@ mod test {
                 .iter()
                 .map(|addr| self.expect_new_subchannel_for(addr))
                 .collect()
-        }
-
-        // Verifies that the policy asked the subchannel for `addr` to connect.
-        fn expect_connect_to(&mut self, addr: &str) {
-            assert_eq!(self.expect_connect().address.to_string(), addr);
-        }
-
-        // Verifies that the policy produced a picker in `want` state, and
-        // returns it.
-        fn expect_picker_state(&mut self, want: ConnectivityState) -> Arc<dyn Picker> {
-            let state = self.expect_picker_update();
-            assert_eq!(state.connectivity_state, want);
-            state.picker
-        }
-
-        // Verifies that the policy produced a READY picker that picks the
-        // subchannel for `addr`, and returns that subchannel.
-        fn expect_ready_picker(&mut self, addr: &str) -> Arc<dyn Subchannel> {
-            let picker = self.expect_picker_state(ConnectivityState::Ready);
-            match picker.pick(&RequestHeaders::default()) {
-                PickResult::Pick(pick) => {
-                    assert_eq!(pick.subchannel.address().address.to_string(), addr);
-                    pick.subchannel
-                }
-                other => panic!("unexpected pick result {other:?}"),
-            }
-        }
-
-        // Verifies that the policy produced a TRANSIENT_FAILURE picker that
-        // fails picks with UNAVAILABLE and `error`.
-        fn expect_failing_picker(&mut self, error: &str) {
-            let picker = self.expect_picker_state(ConnectivityState::TransientFailure);
-            match picker.pick(&RequestHeaders::default()) {
-                PickResult::Fail(status) => {
-                    assert_eq!(status.code(), StatusCodeError::Unavailable);
-                    assert_eq!(status.message(), error);
-                }
-                other => panic!("unexpected pick result {other:?}"),
-            }
         }
 
         // Advances the paused tokio clock past the Connection Attempt Delay,
@@ -1171,7 +1122,7 @@ mod test {
         let scs = env.simulate_connection(vec!["addr1", "addr2"], None);
 
         env.send_subchannel_update(&scs[0], &SubchannelState::ready());
-        env.expect_ready_picker("addr1");
+        env.expect_ready_picker(&scs[0]);
         env.expect_no_events();
     }
 
@@ -1183,7 +1134,7 @@ mod test {
         env.expect_connect_to("addr2");
 
         env.send_subchannel_update(&scs[1], &SubchannelState::ready());
-        env.expect_ready_picker("addr2");
+        env.expect_ready_picker(&scs[1]);
         env.expect_no_events();
     }
 
@@ -1215,7 +1166,7 @@ mod test {
         env.send_resolver_update(endpoints).unwrap();
         env.expect_new_subchannels(&["addr2", "addr3"]);
         env.expect_connect_to("addr2");
-        env.expect_picker_state(ConnectivityState::Connecting);
+        env.expect_queuing_picker();
         env.expect_no_events();
     }
 
@@ -1268,15 +1219,7 @@ mod test {
             },
         ];
 
-        env.policy
-            .resolver_update(
-                ResolverUpdate {
-                    endpoints: Ok(endpoints),
-                    ..Default::default()
-                },
-                &config,
-                &mut env.tcc,
-            )
+        env.send_resolver_update_with_config(endpoints, &config)
             .unwrap();
 
         // Mock shuffler reverses endpoints: [EP3, EP2, EP1]
@@ -1293,7 +1236,7 @@ mod test {
         env.expect_new_subchannels(&["127.0.0.2:80", "[::2]:80", "127.0.0.1:80", "[::1]:80"]);
 
         env.expect_connect_to("127.0.0.2:80");
-        env.expect_picker_state(ConnectivityState::Connecting);
+        env.expect_queuing_picker();
         env.expect_no_events();
     }
 
@@ -1306,7 +1249,7 @@ mod test {
             .unwrap();
         env.expect_new_subchannels(want);
         env.expect_connect_to(want[0]);
-        env.expect_picker_state(ConnectivityState::Connecting);
+        env.expect_queuing_picker();
         env.expect_no_events();
     }
 
@@ -1445,7 +1388,7 @@ mod test {
         // Should only create subchannels for addr1 and addr2 (2 unique addrs).
         env.expect_new_subchannels(&["addr1", "addr2"]);
         env.expect_connect_to("addr1");
-        env.expect_picker_state(ConnectivityState::Connecting);
+        env.expect_queuing_picker();
         env.expect_no_events();
     }
 
@@ -1503,7 +1446,7 @@ mod test {
         env.expect_connect_to("addr2");
 
         env.send_subchannel_update(&scs[0], &SubchannelState::ready());
-        env.expect_ready_picker("addr1");
+        env.expect_ready_picker(&scs[0]);
 
         // No timer fires: the timer for addr2's attempt was cancelled.
         env.advance_past_timer().await;
@@ -1546,7 +1489,7 @@ mod test {
         // Hold the timer's work, as if READY and IDLE were queued before it.
         let timer_work = env.expect_timer_work().await;
         env.send_subchannel_update(&scs[0], &SubchannelState::ready());
-        env.expect_ready_picker("addr1");
+        env.expect_ready_picker(&scs[0]);
         env.send_subchannel_update(&scs[0], &SubchannelState::idle());
         env.expect_request_resolution();
         env.expect_picker_state(ConnectivityState::Idle);
@@ -1668,7 +1611,7 @@ mod test {
         // Simulate addr1 successfully connecting and becoming READY. The
         // policy should switch to it immediately.
         env.send_subchannel_update(&scs[0], &SubchannelState::ready());
-        env.expect_ready_picker("addr1");
+        env.expect_ready_picker(&scs[0]);
         env.expect_no_events();
     }
 
@@ -1709,7 +1652,7 @@ mod test {
 
         // The in-progress connection attempt is still honored.
         env.send_subchannel_update(&scs[0], &SubchannelState::ready());
-        env.expect_ready_picker("addr1");
+        env.expect_ready_picker(&scs[0]);
         env.expect_no_events();
     }
 
@@ -1851,7 +1794,7 @@ mod test {
         env.send_resolver_update(endpoints).unwrap();
         env.expect_new_subchannels(&["addr1", "addr2"]);
         env.expect_connect_to("addr1");
-        env.expect_picker_state(ConnectivityState::Connecting);
+        env.expect_queuing_picker();
         env.expect_no_events();
     }
 
@@ -1873,7 +1816,7 @@ mod test {
         env.policy.exit_idle(&mut env.tcc);
         env.expect_new_subchannels(&["addr3", "addr4"]);
         env.expect_connect_to("addr3");
-        env.expect_picker_state(ConnectivityState::Connecting);
+        env.expect_queuing_picker();
         env.expect_no_events();
     }
 
@@ -1902,7 +1845,7 @@ mod test {
 
         // The policy leaves TRANSIENT_FAILURE once a subchannel is READY.
         env.send_subchannel_update(&scs[0], &SubchannelState::ready());
-        env.expect_ready_picker("addr1");
+        env.expect_ready_picker(&scs[0]);
         env.expect_no_events();
     }
 
@@ -1942,7 +1885,7 @@ mod test {
 
         // The first pass continues with addr3.
         env.send_subchannel_update(&sc3, &SubchannelState::ready());
-        env.expect_ready_picker("addr3");
+        env.expect_ready_picker(&sc3);
         env.expect_no_events();
     }
 
@@ -1995,8 +1938,7 @@ mod test {
 
         // The new addr1 subchannel is selected.
         env.send_subchannel_update(&new[0], &SubchannelState::ready());
-        let selected = env.expect_ready_picker("addr1");
-        assert!(Arc::ptr_eq(&selected, &new[0]));
+        env.expect_ready_picker(&new[0]);
 
         // A late IDLE from the discarded addr1 subchannel does not disconnect
         // the selected subchannel.
@@ -2070,7 +2012,7 @@ mod test {
 
         // A READY subchannel ends sticky TRANSIENT_FAILURE.
         env.send_subchannel_update(&sc3, &SubchannelState::ready());
-        env.expect_ready_picker("addr3");
+        env.expect_ready_picker(&sc3);
         env.expect_no_events();
     }
 
@@ -2112,7 +2054,7 @@ mod test {
         env.send_subchannel_update(&scs[0], &SubchannelState::idle());
         env.expect_connect_to("addr1");
         env.send_subchannel_update(&scs[0], &SubchannelState::ready());
-        env.expect_ready_picker("addr1");
+        env.expect_ready_picker(&scs[0]);
         env.expect_no_events();
     }
 
@@ -2128,8 +2070,8 @@ mod test {
         )
         .unwrap();
 
-        env.expect_new_subchannels(&["addr1", "addr2"]);
-        env.expect_ready_picker("addr2");
+        let scs = env.expect_new_subchannels(&["addr1", "addr2"]);
+        env.expect_ready_picker(&scs[1]);
         env.expect_no_events();
     }
 
@@ -2149,7 +2091,7 @@ mod test {
 
         let scs = env.expect_new_subchannels(&["addr1", "addr2"]);
         env.expect_connect_to("addr2");
-        env.expect_picker_state(ConnectivityState::Connecting);
+        env.expect_queuing_picker();
         env.expect_no_events();
 
         // Once addr2 also fails, the pass finishes without waiting for addr1.
@@ -2172,7 +2114,7 @@ mod test {
         .unwrap();
 
         env.expect_new_subchannels(&["addr1", "addr2"]);
-        env.expect_picker_state(ConnectivityState::Connecting);
+        env.expect_queuing_picker();
         env.expect_no_events();
 
         env.fire_timer().await;

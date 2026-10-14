@@ -192,8 +192,7 @@ mod tests {
         env.send_resolver_update(vec![]).unwrap();
 
         // Verify that the initial picker is Idle.
-        let lb_state = env.expect_picker_update();
-        assert_eq!(lb_state.connectivity_state, ConnectivityState::Idle);
+        env.expect_picker_state(ConnectivityState::Idle);
 
         // Ensure delegate is not built yet.
         assert!(rx.try_recv().is_err());
@@ -217,10 +216,10 @@ mod tests {
 
         // Give lazy an update and get the resulting picker.
         env.send_resolver_update(vec![]).unwrap();
-        let lb_state = env.expect_picker_update();
+        let picker = env.expect_picker_state(ConnectivityState::Idle);
 
         // Call pick on the picker.
-        let res = lb_state.picker.pick(&new_request_headers());
+        let res = picker.pick(&new_request_headers());
 
         // PickResult should be Queue.
         assert!(matches!(res, PickResult::Queue));
@@ -247,11 +246,11 @@ mod tests {
 
         // Give lazy an update and get the resulting picker.
         env.send_resolver_update(vec![]).unwrap();
-        let lb_state = env.expect_picker_update();
+        let picker = env.expect_picker_state(ConnectivityState::Idle);
 
         // Call pick multiple times.
         for _ in 0..10 {
-            let res = lb_state.picker.pick(&new_request_headers());
+            let res = picker.pick(&new_request_headers());
             assert!(matches!(res, PickResult::Queue));
         }
 
@@ -284,7 +283,7 @@ mod tests {
 
         // Only the first update produces a picker.
         env.send_resolver_update(vec![]).unwrap();
-        env.expect_picker_update();
+        env.expect_picker_state(ConnectivityState::Idle);
         env.send_resolver_update(vec![]).unwrap();
         env.expect_no_events();
 

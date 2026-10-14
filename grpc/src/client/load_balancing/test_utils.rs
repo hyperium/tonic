@@ -31,6 +31,7 @@ use std::sync::mpsc;
 use serde::Deserialize;
 use serde::Serialize;
 
+use crate::client::ConnectivityState;
 use crate::client::RequestHeaders;
 use crate::client::load_balancing::ChannelController;
 use crate::client::load_balancing::DynLbConfig;
@@ -40,6 +41,8 @@ use crate::client::load_balancing::LbPolicy;
 use crate::client::load_balancing::LbPolicyBuilder;
 use crate::client::load_balancing::LbPolicyOptions;
 use crate::client::load_balancing::LbState;
+use crate::client::load_balancing::PickResult;
+use crate::client::load_balancing::Picker;
 use crate::client::load_balancing::Subchannel;
 use crate::client::load_balancing::SubchannelState;
 use crate::client::load_balancing::WorkData;
@@ -49,6 +52,7 @@ use crate::client::load_balancing::subchannel::SubchannelUpdate;
 use crate::client::name_resolution::Endpoint;
 use crate::client::name_resolution::ResolverUpdate;
 use crate::core::Address;
+use crate::status::StatusCodeError;
 
 pub(crate) fn new_request_headers() -> RequestHeaders {
     RequestHeaders::default()
@@ -269,6 +273,14 @@ impl<P> TestEnv<P> {
         }
     }
 
+    /// Calls [`Self::expect_new_subchannel`], verifies that the created
+    /// subchannel's address equals `addr`, and returns the subchannel.
+    pub(crate) fn expect_new_subchannel_for(&mut self, addr: &str) -> Arc<dyn Subchannel> {
+        let sc = self.expect_new_subchannel();
+        assert_eq!(sc.address().address.to_string(), addr);
+        sc
+    }
+
     /// Verifies that the policy asked a subchannel to connect, and returns that
     /// subchannel's address.
     pub(crate) fn expect_connect(&mut self) -> Address {
@@ -278,13 +290,78 @@ impl<P> TestEnv<P> {
         }
     }
 
-    /// Verifies that the policy produced a new picker, and returns the state
-    /// containing it.
+    /// Calls [`Self::expect_connect`] and verifies that the connected
+    /// subchannel's address equals `addr`.
+    pub(crate) fn expect_connect_to(&mut self, addr: &str) {
+        let connected = self.expect_connect();
+        assert_eq!(connected.address.to_string(), addr);
+    }
+
+    /// Verifies that the policy produced a new picker, and returns the
+    /// [`LbState`] containing the connectivity state and picker without
+    /// inspecting either.
     pub(crate) fn expect_picker_update(&mut self) -> LbState {
         match self.next_event() {
             TestEvent::UpdatePicker(state) => state,
             other => panic!("expected UpdatePicker event, got {other:?}"),
         }
+    }
+
+    /// Calls [`Self::expect_picker_update`], verifies that the reported
+    /// connectivity state equals `want`, and returns the picker without
+    /// calling [`Picker::pick`].
+    ///
+    /// Prefer the state-specific helpers ([`Self::expect_queuing_picker`],
+    /// [`Self::expect_ready_picker`], [`Self::expect_failing_picker`]) when
+    /// testing real pickers. Use this directly when:
+    /// - `want` is [`ConnectivityState::Idle`], where calling [`Picker::pick`]
+    ///   has the side effect of initiating connection attempts;
+    /// - `want` is [`ConnectivityState::Ready`] with multiple subchannels and
+    ///   the caller will perform its own multi-pick assertions; or
+    /// - testing against a stub policy whose picker is a placeholder.
+    pub(crate) fn expect_picker_state(&mut self, want: ConnectivityState) -> Arc<dyn Picker> {
+        let state = self.expect_picker_update();
+        assert_eq!(state.connectivity_state, want);
+        state.picker
+    }
+
+    /// Calls [`Self::expect_picker_state`] with
+    /// [`ConnectivityState::Connecting`], verifies that [`Picker::pick`]
+    /// returns [`PickResult::Queue`] per the [`Picker`] contract for
+    /// `CONNECTING`, and returns the picker.
+    pub(crate) fn expect_queuing_picker(&mut self) -> Arc<dyn Picker> {
+        let picker = self.expect_picker_state(ConnectivityState::Connecting);
+        assert_eq!(picker.pick(&new_request_headers()), PickResult::Queue);
+        picker
+    }
+
+    /// Calls [`Self::expect_picker_state`] with [`ConnectivityState::Ready`],
+    /// verifies that [`Picker::pick`] returns [`PickResult::Pick`] for the
+    /// exact `subchannel` instance (pointer equality), and returns the picker.
+    pub(crate) fn expect_ready_picker(
+        &mut self,
+        subchannel: &Arc<dyn Subchannel>,
+    ) -> Arc<dyn Picker> {
+        let picker = self.expect_picker_state(ConnectivityState::Ready);
+        let PickResult::Pick(pick) = picker.pick(&new_request_headers()) else {
+            panic!("expected Pick result");
+        };
+        assert_eq!(&pick.subchannel, subchannel);
+        picker
+    }
+
+    /// Calls [`Self::expect_picker_state`] with
+    /// [`ConnectivityState::TransientFailure`], verifies that [`Picker::pick`]
+    /// returns [`PickResult::Fail`] with [`StatusCodeError::Unavailable`] and
+    /// exact message `error`, and returns the picker.
+    pub(crate) fn expect_failing_picker(&mut self, error: &str) -> Arc<dyn Picker> {
+        let picker = self.expect_picker_state(ConnectivityState::TransientFailure);
+        let PickResult::Fail(status) = picker.pick(&new_request_headers()) else {
+            panic!("expected Fail result");
+        };
+        assert_eq!(status.code(), StatusCodeError::Unavailable);
+        assert_eq!(status.message(), error);
+        picker
     }
 
     /// Verifies that the policy requested re-resolution.
@@ -317,18 +394,27 @@ impl<P> TestEnv<P> {
 }
 
 impl<P: LbPolicy> TestEnv<P> {
+    /// Sends a resolver update containing `endpoints` and `config` to the
+    /// policy.
+    pub(crate) fn send_resolver_update_with_config(
+        &mut self,
+        endpoints: Vec<Endpoint>,
+        config: &P::LbConfig,
+    ) -> Result<(), String> {
+        let update = ResolverUpdate {
+            endpoints: Ok(endpoints),
+            ..Default::default()
+        };
+        self.policy.resolver_update(update, config, &mut self.tcc)
+    }
+
     /// Sends a resolver update containing `endpoints` to the policy, using the
     /// policy's default config.
     pub(crate) fn send_resolver_update(&mut self, endpoints: Vec<Endpoint>) -> Result<(), String>
     where
         P::LbConfig: Default,
     {
-        let update = ResolverUpdate {
-            endpoints: Ok(endpoints),
-            ..Default::default()
-        };
-        self.policy
-            .resolver_update(update, &P::LbConfig::default(), &mut self.tcc)
+        self.send_resolver_update_with_config(endpoints, &P::LbConfig::default())
     }
 
     /// Sends a resolver error to the policy, using the policy's default config.
