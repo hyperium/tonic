@@ -907,8 +907,8 @@ mod test {
     use std::time::Duration;
 
     use super::*;
-    use crate::client::RequestHeaders;
     use crate::client::load_balancing::PickResult;
+    use crate::client::load_balancing::test_utils;
     use crate::client::load_balancing::test_utils::TestChannelController;
     use crate::client::load_balancing::test_utils::TestEnv;
     use crate::rt::default_runtime;
@@ -1065,10 +1065,10 @@ mod test {
             self.expect_request_resolution();
             let picker = self.expect_picker_state(ConnectivityState::Idle);
             self.expect_no_events();
-            assert!(matches!(
-                picker.pick(&RequestHeaders::default()),
+            assert_eq!(
+                picker.pick(&test_utils::new_request_headers()),
                 PickResult::Queue
-            ));
+            );
             let data = self.expect_schedule_work();
             assert!(data.is_none());
             self.policy.work(data, &mut self.tcc);
@@ -1087,10 +1087,20 @@ mod test {
                 .collect()
         }
 
+        // Advances virtual time by `duration` on the paused Tokio runtime,
+        // yielding before and after so spawned timer tasks can register on the
+        // timer wheel and schedule their completion work.
+        async fn advance_time(&mut self, duration: Duration) {
+            tokio::task::yield_now().await;
+            tokio::time::advance(duration).await;
+            tokio::task::yield_now().await;
+        }
+
         // Advances the paused tokio clock past the Connection Attempt Delay,
         // letting any pending timer fire.
         async fn advance_past_timer(&mut self) {
-            tokio::time::sleep(CONNECTION_ATTEMPT_DELAY + Duration::from_millis(1)).await;
+            self.advance_time(CONNECTION_ATTEMPT_DELAY + Duration::from_millis(1))
+                .await;
         }
 
         // Lets the Connection Attempt Delay timer fire and returns the
@@ -1115,8 +1125,8 @@ mod test {
     }
 
     // The LB can successfully connect to the first address, and updates the
-    // picker to READY with the correct subchannel.
-    #[tokio::test]
+    // picker to READY with the correct subchannel (gRFC A61).
+    #[tokio::test(start_paused = true)]
     async fn test_pick_first_basic_connection() {
         let mut env = new_env();
         let scs = env.simulate_connection(vec!["addr1", "addr2"], None);
@@ -1126,8 +1136,9 @@ mod test {
         env.expect_no_events();
     }
 
-    // If the first address fails, the LB should failover to the second address.
-    #[tokio::test]
+    // If the first address fails, the LB should failover to the second address
+    // (gRFC A61).
+    #[tokio::test(start_paused = true)]
     async fn test_pick_first_failover() {
         let mut env = new_env();
         let scs = env.simulate_failed_connection(vec!["addr1", "addr2"], None);
@@ -1140,8 +1151,8 @@ mod test {
 
     // Ensures that if a subchannel is already selected, and is still present in
     // the new resolver update, the LB will keep using it and not switch to a
-    // different subchannel.
-    #[tokio::test]
+    // different subchannel (gRFC A61).
+    #[tokio::test(start_paused = true)]
     async fn test_pick_first_stickiness() {
         let mut env = new_env();
         env.simulate_successful_connection(vec!["addr1", "addr2"], None);
@@ -1171,8 +1182,8 @@ mod test {
     }
 
     // Shuffling and interleaving of addresses is deterministic and correct
-    // based on the provided shuffler and config.
-    #[tokio::test]
+    // based on the provided shuffler and config (gRFC A61, gRFC A62).
+    #[tokio::test(start_paused = true)]
     async fn test_pick_first_shuffling_and_interleaving_deterministic() {
         let mut env = new_env();
 
@@ -1258,7 +1269,7 @@ mod test {
     // IPv4-mapped IPv6 address counts as IPv4. Ported from Go's
     // TestPickFirstLeaf_InterleavingIPV4Preferred, with a numeric zone ID in
     // place of %eth0, as Rust's SocketAddr parses only numeric zone IDs.
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn test_pick_first_interleaving_ipv4_preferred() {
         check_address_order(
             vec![
@@ -1285,9 +1296,9 @@ mod test {
     }
 
     // Addresses are interleaved by family, starting with the family of the
-    // first address, here IPv6. Ported from Go's
+    // first address, here IPv6 (gRFC A61). Ported from Go's
     // TestPickFirstLeaf_InterleavingIPv6Preferred, with a numeric zone ID.
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn test_pick_first_interleaving_ipv6_preferred() {
         check_address_order(
             vec![
@@ -1316,10 +1327,10 @@ mod test {
     }
 
     // Addresses that are not an IP address and port, such as hostnames, form
-    // a third family for interleaving, here the family of the first address.
-    // Ported from Go's TestPickFirstLeaf_InterleavingUnknownPreferred, with a
-    // numeric zone ID.
-    #[tokio::test]
+    // a third family for interleaving, here the family of the first address
+    // (gRFC A61). Ported from Go's
+    // TestPickFirstLeaf_InterleavingUnknownPreferred, with a numeric zone ID.
+    #[tokio::test(start_paused = true)]
     async fn test_pick_first_interleaving_unknown_preferred() {
         check_address_order(
             vec![
@@ -1348,8 +1359,8 @@ mod test {
     }
 
     // De-duplicate addresses that appear multiple times within the same
-    // endpoint, and across different endpoints. One subchannel each.
-    #[tokio::test]
+    // endpoint, and across different endpoints. One subchannel each (gRFC A61).
+    #[tokio::test(start_paused = true)]
     async fn test_pick_first_duplicate_de_duplication() {
         let mut env = new_env();
 
@@ -1393,14 +1404,15 @@ mod test {
     }
 
     // If the resolver update contains no addresses, the LB should clear
-    // subchannels, update to TransientFailure, and request re-resolution.
-    #[tokio::test]
+    // subchannels, update to TransientFailure, and request re-resolution
+    // (gRFC A61).
+    #[tokio::test(start_paused = true)]
     async fn test_pick_first_empty_update_clears_state() {
         let mut env = new_env();
         env.simulate_successful_connection(vec!["addr1", "addr2"], None);
 
         let res = env.send_resolver_update(vec![]);
-        assert!(res.is_err());
+        assert_eq!(res.unwrap_err(), "empty address list");
 
         env.expect_failing_picker("empty address list");
         env.expect_request_resolution();
@@ -1409,7 +1421,7 @@ mod test {
 
     // If the timer expires during the first pass, the LB should advance to
     // the next subchannel and trigger a connection attempt. No timer is
-    // started for the last subchannel.
+    // started for the last subchannel (gRFC A61).
     #[tokio::test(start_paused = true)]
     async fn test_pick_first_timer_advancement() {
         let mut env = new_env();
@@ -1426,7 +1438,7 @@ mod test {
     }
 
     // With a single address, the only connection attempt is on the last
-    // subchannel, so no timer is started.
+    // subchannel, so no timer is started (gRFC A61).
     #[tokio::test(start_paused = true)]
     async fn test_pick_first_no_timer_for_single_address() {
         let mut env = new_env();
@@ -1463,13 +1475,13 @@ mod test {
         let scs = env.simulate_connection(vec!["addr1", "addr2", "addr3"], None);
 
         // addr1 fails partway through its delay; addr2 is attempted at once.
-        tokio::time::sleep(CONNECTION_ATTEMPT_DELAY / 2).await;
+        env.advance_time(CONNECTION_ATTEMPT_DELAY / 2).await;
         env.send_subchannel_update(&scs[0], &SubchannelState::transient_failure("addr1 failed"));
         env.expect_connect_to("addr2");
         env.expect_no_events();
 
         // Past addr1's original deadline, but before addr2's: nothing fires.
-        tokio::time::sleep(CONNECTION_ATTEMPT_DELAY * 3 / 4).await;
+        env.advance_time(CONNECTION_ATTEMPT_DELAY * 3 / 4).await;
         env.expect_no_events();
 
         // addr2's timer fires, moving the pass on to addr3.
@@ -1525,7 +1537,7 @@ mod test {
     // A new pass asks a reused subchannel to connect if it last reported IDLE,
     // even though the previous pass already asked it to. Only the reported
     // state decides whether to connect.
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn test_pick_first_new_pass_reconnects_reused_idle_subchannel() {
         let mut env = new_env();
         env.simulate_connection(vec!["addr1", "addr2"], None);
@@ -1539,8 +1551,8 @@ mod test {
 
     // A failure from a subchannel the pass has not reached yet does not count
     // toward ending the pass: the subchannel may be IDLE again by the time the
-    // pass reaches it, and is then attempted.
-    #[tokio::test]
+    // pass reaches it, and is then attempted (gRFC A61).
+    #[tokio::test(start_paused = true)]
     async fn test_pick_first_failure_not_yet_reached_not_counted() {
         let mut env = new_env();
         let scs = env.simulate_connection(vec!["addr1", "addr2"], None);
@@ -1562,8 +1574,9 @@ mod test {
     }
 
     // If all addresses fail during the first pass, the LB should enter
-    // steady state and monitor for backoff expiry to retry connections.
-    #[tokio::test]
+    // steady state and monitor for backoff expiry to retry connections
+    // (gRFC A61).
+    #[tokio::test(start_paused = true)]
     async fn test_pick_first_steady_state_retries() {
         let mut env = new_env();
         let scs = env.simulate_failed_connection(vec!["addr1"], None);
@@ -1582,7 +1595,7 @@ mod test {
     // until the first pass completes; entering steady state connects it
     // immediately, retries on IDLE, and transitions to READY when a subchannel
     // becomes READY (gRFC A61).
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn test_pick_first_steady_state_multi_backend() {
         let mut env = new_env();
         let scs = env.simulate_failed_connection(vec!["addr1", "addr2"], None);
@@ -1618,8 +1631,8 @@ mod test {
     // This test is meant to validate that if a new address with different
     // attributes is sent as part of a resolver update, the policy treats it as
     // a different address and creates a new subchannel for it, rather than
-    // ignoring it as a duplicate.
-    #[tokio::test]
+    // ignoring it as a duplicate (gRFC A61).
+    #[tokio::test(start_paused = true)]
     async fn test_pick_first_address_update_with_attributes() {
         let addr = "addr1";
         let mut env = new_env();
@@ -1641,7 +1654,7 @@ mod test {
     // connecting to addresses, it should not abort the connection attempt or
     // clear the existing addresses, as long as there are still valid addresses
     // in the LB. The error is still returned, so the resolver retries.
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn test_pick_first_resolver_error_during_connecting() {
         let mut env = new_env();
         let scs = env.simulate_connection(vec!["addr1"], None);
@@ -1658,7 +1671,7 @@ mod test {
 
     // If an earlier address fails after a later address has already failed
     // during the first pass, the LB should detect that all addresses have
-    // failed and report the most recent error.
+    // failed and report the most recent error (gRFC A61).
     #[tokio::test(start_paused = true)]
     async fn test_pick_first_happy_eyeballs_out_of_order_failure() {
         let mut env = new_env();
@@ -1679,7 +1692,7 @@ mod test {
 
     // When the current connection attempt fails and no subchannel is left to
     // attempt, the pass cancels the Connection Attempt Delay timer and waits
-    // for the earlier attempts to finish.
+    // for the earlier attempts to finish (gRFC A61).
     #[tokio::test(start_paused = true)]
     async fn test_pick_first_attempt_failure_with_nothing_left_cancels_timer() {
         let mut env = new_env();
@@ -1707,7 +1720,7 @@ mod test {
     // In steady state, every N failures, where N is the number of subchannels,
     // the policy reports the latest error and requests re-resolution
     // (gRFC A61).
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn test_pick_first_steady_state_reports_every_n_failures() {
         let mut env = new_env();
         let scs = env.simulate_failed_connection(vec!["addr1", "addr2"], None);
@@ -1740,8 +1753,8 @@ mod test {
     // When the selected subchannel disconnects (transitions to Idle), the
     // policy requests re-resolution, reports Idle with a WakeUpPicker, and on
     // pick reconnects across all addresses (falling over to addr2 if addr1
-    // fails).
-    #[tokio::test]
+    // fails) (gRFC A61).
+    #[tokio::test(start_paused = true)]
     async fn test_pick_first_disconnect_to_idle_multi_address_reconnect() {
         let mut env = new_env();
         let scs = env.simulate_successful_connection(vec!["addr1", "addr2"], None);
@@ -1760,8 +1773,8 @@ mod test {
     // Tests that when a resolver update arrives while in FirstPass, any
     // subchannels that have already failed (TransientFailure) preserve their
     // state so the policy does not redundantly re-attempt them before trying
-    // remaining addresses.
-    #[tokio::test]
+    // remaining addresses (gRFC A61).
+    #[tokio::test(start_paused = true)]
     async fn test_pick_first_resolver_update_preserves_subchannel_failure_state() {
         let mut env = new_env();
 
@@ -1786,7 +1799,7 @@ mod test {
     // The initial resolver update starts connecting without waiting for
     // exit_idle (gRFC A61: pick_first "will attempt to connect as soon as it
     // receives its initial address list").
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn test_pick_first_initial_resolver_update_connects() {
         let mut env = new_env();
 
@@ -1801,7 +1814,7 @@ mod test {
     // After a disconnect, resolver updates leave the policy IDLE without
     // creating subchannels until exit_idle is called, which connects to the
     // latest address list.
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn test_pick_first_resolver_update_after_disconnect_stays_idle() {
         let mut env = new_env();
         let scs = env.simulate_successful_connection(vec!["addr1", "addr2"], None);
@@ -1823,14 +1836,14 @@ mod test {
     // Tests that when in Transient Failure, receiving a valid resolver update
     // immediately starts connecting without waiting for exit_idle, while
     // continuing to report TRANSIENT_FAILURE until a subchannel is READY
-    // (sticky-TF).
-    #[tokio::test]
+    // (sticky-TF, gRFC A62).
+    #[tokio::test(start_paused = true)]
     async fn test_pick_first_resolver_update_in_transient_failure_starts_connecting_immediately() {
         let mut env = new_env();
 
         // Initial resolution failure sets Transient Failure.
         let res = env.send_resolver_error("resolver unavailable".to_string());
-        assert!(res.is_err());
+        assert_eq!(res.unwrap_err(), "resolver unavailable");
         env.expect_failing_picker("resolver unavailable");
         env.expect_request_resolution();
 
@@ -1851,7 +1864,7 @@ mod test {
 
     // Tests that exit_idle before any resolver update is ignored, and that
     // the first resolver update then connects and reports CONNECTING.
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn test_pick_first_ignores_exit_idle_before_resolver_update() {
         let mut env = new_env();
         env.policy.exit_idle(&mut env.tcc);
@@ -1863,7 +1876,7 @@ mod test {
 
     // Tests that during the first pass, updates from subchannels whose
     // addresses were removed by a resolver update are ignored.
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn test_pick_first_ignores_removed_subchannel_updates_in_first_pass() {
         let mut env = new_env();
         let scs = env.simulate_connection(vec!["addr1", "addr2"], None);
@@ -1891,7 +1904,7 @@ mod test {
 
     // Tests that in steady state, updates from subchannels whose addresses
     // were removed by a resolver update are ignored.
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn test_pick_first_ignores_removed_subchannel_updates_in_steady_state() {
         let mut env = new_env();
         let scs = env.simulate_failed_connection(vec!["addr1"], None);
@@ -1925,7 +1938,7 @@ mod test {
     // Tests that updates from a discarded subchannel are ignored during a
     // first pass and in READY, even though its address is still in the
     // address list.
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn test_pick_first_ignores_stale_subchannel_with_current_address() {
         let mut env = new_env();
         let old = env.simulate_successful_connection(vec!["addr1", "addr2"], None);
@@ -1948,7 +1961,7 @@ mod test {
 
     // Tests that in steady state, updates from a discarded subchannel are
     // ignored, even though its address is still in the address list.
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn test_pick_first_ignores_stale_subchannel_with_current_address_in_steady_state() {
         let mut env = new_env();
         let old = env.simulate_successful_connection(vec!["addr1"], None);
@@ -1973,7 +1986,7 @@ mod test {
     // Tests that once reporting TRANSIENT_FAILURE after all addresses fail,
     // the policy keeps reporting it across resolver updates and new first
     // passes until a subchannel becomes READY (sticky-TF, gRFC A62).
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn test_pick_first_sticky_transient_failure_across_resolver_updates() {
         let mut env = new_env();
         env.simulate_failed_connection(vec!["addr1"], None);
@@ -2017,8 +2030,9 @@ mod test {
     }
 
     // Tests that a pass starting with every subchannel already in
-    // TRANSIENT_FAILURE ends at once and reports their connection error.
-    #[tokio::test]
+    // TRANSIENT_FAILURE ends at once and reports their connection error
+    // (gRFC A61).
+    #[tokio::test(start_paused = true)]
     async fn test_pick_first_pass_starting_in_transient_failure_reports_connection_error() {
         let mut env = new_env();
         env.simulate_failed_connection(vec!["addr1"], None);
@@ -2038,7 +2052,7 @@ mod test {
     // picker with the resolver error, but keeps using the current subchannels.
     // The returned error makes the resolver retry, so no re-resolution is
     // requested.
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn test_pick_first_resolver_error_in_transient_failure_keeps_subchannels() {
         let mut env = new_env();
         let scs = env.simulate_failed_connection(vec!["addr1"], None);
@@ -2046,7 +2060,7 @@ mod test {
         env.expect_request_resolution();
 
         let res = env.send_resolver_error("dns failure".to_string());
-        assert!(res.is_err());
+        assert_eq!(res.unwrap_err(), "dns failure");
         env.expect_failing_picker("dns failure");
         env.expect_no_events();
 
@@ -2060,8 +2074,8 @@ mod test {
 
     // If new_subchannel returns a subchannel that is already READY, the first
     // pass immediately selects it without connecting earlier subchannels or
-    // creating subchannels for later addresses.
-    #[tokio::test]
+    // creating subchannels for later addresses (gRFC A61).
+    #[tokio::test(start_paused = true)]
     async fn test_pick_first_new_subchannel_initially_ready() {
         let mut env = new_env();
         env.send_resolver_update_with_initial_states(
@@ -2076,8 +2090,8 @@ mod test {
     }
 
     // If new_subchannel returns a subchannel already in TRANSIENT_FAILURE, the
-    // first pass counts it as failed and skips to the next address.
-    #[tokio::test]
+    // first pass counts it as failed and skips to the next address (gRFC A61).
+    #[tokio::test(start_paused = true)]
     async fn test_pick_first_new_subchannel_initially_transient_failure() {
         let mut env = new_env();
         env.send_resolver_update_with_initial_states(
@@ -2103,7 +2117,7 @@ mod test {
 
     // If new_subchannel returns a subchannel already in CONNECTING, the first
     // pass waits on it without calling connect(), and advances when the
-    // Connection Attempt Delay timer fires.
+    // Connection Attempt Delay timer fires (gRFC A61).
     #[tokio::test(start_paused = true)]
     async fn test_pick_first_new_subchannel_initially_connecting() {
         let mut env = new_env();
