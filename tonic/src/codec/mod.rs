@@ -63,10 +63,13 @@ const DEFAULT_YIELD_THRESHOLD: usize = 32 * 1024;
 /// not affect the responsiveness of your streaming rpc (for reasonable
 /// sizes of yield threshold).
 /// Yield threshold defaults to 32 KiB.
+///
+/// See [`Self::max_encoding_buffer_retained_capacity`] to control message buffer reuse.
 #[derive(Clone, Copy, Debug)]
 pub struct BufferSettings {
     buffer_size: usize,
     yield_threshold: usize,
+    max_encoding_buffer_retained_capacity: usize,
 }
 
 impl BufferSettings {
@@ -75,16 +78,26 @@ impl BufferSettings {
         Self {
             buffer_size,
             yield_threshold,
+            max_encoding_buffer_retained_capacity: usize::MAX,
         }
+    }
+
+    /// Set the maximum capacity retained by each encoding and compression scratch buffer.
+    ///
+    /// Buffers exceeding `limit` are not reused and are released when the encoder
+    /// no longer needs them.
+    ///
+    /// Defaults to `usize::MAX` (unbounded reuse). Zero disables retention between
+    /// output batches and compression operations.
+    pub fn max_encoding_buffer_retained_capacity(mut self, limit: usize) -> Self {
+        self.max_encoding_buffer_retained_capacity = limit;
+        self
     }
 }
 
 impl Default for BufferSettings {
     fn default() -> Self {
-        Self {
-            buffer_size: DEFAULT_CODEC_BUFFER_SIZE,
-            yield_threshold: DEFAULT_YIELD_THRESHOLD,
-        }
+        Self::new(DEFAULT_CODEC_BUFFER_SIZE, DEFAULT_YIELD_THRESHOLD)
     }
 }
 
