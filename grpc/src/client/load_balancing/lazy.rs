@@ -182,7 +182,7 @@ mod tests {
     use std::sync::mpsc;
 
     use super::*;
-    use crate::call_attributes::CallAttributes;
+    use crate::client::CallOptions;
     use crate::client::load_balancing::test_utils::TestEnv;
     use crate::client::load_balancing::test_utils::new_request_headers;
     use crate::rt::default_runtime;
@@ -252,7 +252,7 @@ mod tests {
         // Call pick on the picker.
         let res = lb_state.picker.pick(PickOptions::new(
             &new_request_headers(),
-            &mut CallAttributes::new(),
+            &CallOptions::new(),
         ));
 
         // PickResult should be Queue.
@@ -286,7 +286,7 @@ mod tests {
         for _ in 0..10 {
             let res = lb_state.picker.pick(PickOptions::new(
                 &new_request_headers(),
-                &mut CallAttributes::new(),
+                &CallOptions::new(),
             ));
             assert!(matches!(res, PickResult::Queue));
         }

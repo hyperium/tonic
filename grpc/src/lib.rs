@@ -50,7 +50,6 @@
 #![allow(dead_code, unused_variables)]
 
 pub mod attributes;
-pub mod call_attributes;
 pub mod client;
 pub(crate) mod codec;
 pub mod core;

@@ -199,8 +199,8 @@ impl ClusterPicker {
 impl Picker for ClusterPicker {
     fn pick(&self, options: PickOptions<'_>) -> PickResult {
         options
-            .call_attributes
-            .get::<XdsCluster>()
+            .call_options
+            .get_option::<XdsCluster>()
             .ok_or_else(|| {
                 debug_assert!(false, "cluster manager: cluster attribute not present");
                 StatusError::new(
@@ -237,7 +237,7 @@ mod tests {
     use grpc::__unstable::client::load_balancing::subchannel::SubchannelState;
     use grpc::__unstable::client::name_resolution::Endpoint;
     use grpc::__unstable::rt::default_runtime;
-    use grpc::call_attributes::CallAttributes;
+    use grpc::client::CallOptions;
     use grpc::client::ConnectivityState;
     use grpc::client::RequestHeaders;
     use grpc::core::Address;
@@ -280,25 +280,16 @@ mod tests {
                 endpoints: Vec::new(),
             }),
         );
-        let cluster_picker = ClusterPicker { children };
+        let cluster_picker: Arc<dyn Picker> = Arc::new(ClusterPicker { children });
         let req = RequestHeaders::new();
 
-        // Known cluster -> delegates to child picker and forwards CallAttributes.
-        let mut attrs = CallAttributes::new();
-        attrs.add(XdsCluster("cluster_one".into()));
-        assert!(matches!(
-            cluster_picker.pick(PickOptions::new(&req, &mut attrs)),
-            PickResult::Queue
-        ));
-        assert_eq!(
-            attrs.get::<PickedChild>(),
-            Some(&PickedChild("child_one".into()))
-        );
+        // Known cluster -> delegates to child picker and forwards CallOptions.
+        assert_picks_child(&cluster_picker, "cluster_one", "child_one");
 
         // Unknown cluster -> debug_assert panic, or Drop(Internal) in release.
-        let mut attrs = CallAttributes::new();
-        attrs.add(XdsCluster("cluster_unknown".into()));
-        match cluster_picker.pick(PickOptions::new(&req, &mut attrs)) {
+        let mut opts = CallOptions::new();
+        opts.set_option(XdsCluster("cluster_unknown".into()));
+        match cluster_picker.pick(PickOptions::new(&req, &opts)) {
             PickResult::Drop(err) => {
                 assert_eq!(err.code(), StatusCodeError::Internal);
                 assert!(err.message().contains("unknown cluster"));
@@ -315,8 +306,8 @@ mod tests {
     fn missing_cluster_attribute_is_internal_error() {
         let cluster_picker = ClusterPicker::new(HashMap::new());
         let req = RequestHeaders::new();
-        let mut attrs = CallAttributes::new();
-        match cluster_picker.pick(PickOptions::new(&req, &mut attrs)) {
+        let opts = CallOptions::new();
+        match cluster_picker.pick(PickOptions::new(&req, &opts)) {
             PickResult::Drop(err) => {
                 assert_eq!(err.code(), StatusCodeError::Internal);
                 assert!(err.message().contains("not present"));
@@ -407,9 +398,9 @@ mod tests {
         assert_picks_child(&state.picker, "cluster_a", "child_a");
 
         let req = RequestHeaders::new();
-        let mut attrs_b = CallAttributes::new();
-        attrs_b.add(XdsCluster("cluster_b".into()));
-        match state.picker.pick(PickOptions::new(&req, &mut attrs_b)) {
+        let mut opts_b = CallOptions::new();
+        opts_b.set_option(XdsCluster("cluster_b".into()));
+        match state.picker.pick(PickOptions::new(&req, &opts_b)) {
             PickResult::Drop(err) => assert_eq!(err.code(), StatusCodeError::Internal),
             other => panic!("expected Drop for removed cluster, got {other:?}"),
         }
@@ -500,32 +491,34 @@ mod tests {
 
     fn assert_picks_child(picker: &Arc<dyn Picker>, cluster: &str, expected_tag: &str) {
         let req = RequestHeaders::new();
-        let mut attrs = CallAttributes::new();
-        attrs.add(XdsCluster(cluster.into()));
+        let picked = PickedChild::default();
+        let mut opts = CallOptions::new();
+        opts.set_option(XdsCluster(cluster.into()));
+        opts.set_option(picked.clone());
         assert!(matches!(
-            picker.pick(PickOptions::new(&req, &mut attrs)),
+            picker.pick(PickOptions::new(&req, &opts)),
             PickResult::Queue
         ));
-        assert_eq!(
-            attrs.get::<PickedChild>(),
-            Some(&PickedChild(expected_tag.into()))
-        );
+        assert_eq!(picked.0.lock().unwrap().as_deref(), Some(expected_tag));
     }
 
     // Picks `cluster` and returns the endpoints its child received.
     fn picked_endpoints(picker: &Arc<dyn Picker>, cluster: &str) -> Vec<Endpoint> {
         let req = RequestHeaders::new();
-        let mut attrs = CallAttributes::new();
-        attrs.add(XdsCluster(cluster.into()));
+        let endpoints = ChildEndpoints::default();
+        let mut opts = CallOptions::new();
+        opts.set_option(XdsCluster(cluster.into()));
+        opts.set_option(endpoints.clone());
         assert!(matches!(
-            picker.pick(PickOptions::new(&req, &mut attrs)),
+            picker.pick(PickOptions::new(&req, &opts)),
             PickResult::Queue
         ));
-        attrs
-            .get::<ChildEndpoints>()
-            .expect("child endpoints attribute")
+        endpoints
             .0
+            .lock()
+            .unwrap()
             .clone()
+            .expect("child endpoints attribute")
     }
 
     #[derive(Debug)]
@@ -537,12 +530,12 @@ mod tests {
         }
     }
 
-    #[derive(Clone, Debug, PartialEq, Eq)]
-    struct PickedChild(String);
+    #[derive(Clone, Debug, Default)]
+    struct PickedChild(Arc<std::sync::Mutex<Option<String>>>);
 
     // Endpoints the picked child received in its last resolver update.
-    #[derive(Clone, Debug, PartialEq, Eq)]
-    struct ChildEndpoints(Vec<Endpoint>);
+    #[derive(Clone, Debug, Default)]
+    struct ChildEndpoints(Arc<std::sync::Mutex<Option<Vec<Endpoint>>>>);
 
     #[derive(Debug)]
     struct TaggedPicker {
@@ -552,10 +545,12 @@ mod tests {
 
     impl Picker for TaggedPicker {
         fn pick(&self, options: PickOptions<'_>) -> PickResult {
-            options.call_attributes.add(PickedChild(self.tag.clone()));
-            options
-                .call_attributes
-                .add(ChildEndpoints(self.endpoints.clone()));
+            if let Some(picked) = options.call_options.get_option::<PickedChild>() {
+                *picked.0.lock().unwrap() = Some(self.tag.clone());
+            }
+            if let Some(endpoints) = options.call_options.get_option::<ChildEndpoints>() {
+                *endpoints.0.lock().unwrap() = Some(self.endpoints.clone());
+            }
             PickResult::Queue
         }
     }

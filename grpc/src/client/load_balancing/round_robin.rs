@@ -240,7 +240,7 @@ mod test {
 
     use super::*;
     use crate::StatusCodeError;
-    use crate::call_attributes::CallAttributes;
+    use crate::client::CallOptions;
     use crate::client::load_balancing::subchannel::Subchannel;
     use crate::client::load_balancing::subchannel::SubchannelState;
     use crate::client::load_balancing::test_utils;
@@ -330,7 +330,7 @@ mod test {
             assert!(
                 update
                     .picker
-                    .pick(PickOptions::new(&req, &mut CallAttributes::new()))
+                    .pick(PickOptions::new(&req, &CallOptions::new()))
                     == PickResult::Queue
             );
             update.picker
@@ -353,7 +353,7 @@ mod test {
             let req = test_utils::new_request_headers();
             let PickResult::Pick(pick) = update
                 .picker
-                .pick(PickOptions::new(&req, &mut CallAttributes::new()))
+                .pick(PickOptions::new(&req, &CallOptions::new()))
             else {
                 panic!("unexpected pick result");
             };
@@ -380,7 +380,7 @@ mod test {
             let req = test_utils::new_request_headers();
             let result = update
                 .picker
-                .pick(PickOptions::new(&req, &mut CallAttributes::new()));
+                .pick(PickOptions::new(&req, &CallOptions::new()));
             assert!(
                 matches!(result, PickResult::Pick(_)),
                 "unexpected pick result {result:?}"
@@ -405,7 +405,7 @@ mod test {
             let req = test_utils::new_request_headers();
             let PickResult::Fail(status) = update
                 .picker
-                .pick(PickOptions::new(&req, &mut CallAttributes::new()))
+                .pick(PickOptions::new(&req, &CallOptions::new()))
             else {
                 panic!("unexpected pick result");
             };
@@ -451,7 +451,7 @@ mod test {
         env.expect_no_events();
 
         let req = test_utils::new_request_headers();
-        match picker.pick(PickOptions::new(&req, &mut CallAttributes::new())) {
+        match picker.pick(PickOptions::new(&req, &CallOptions::new())) {
             PickResult::Pick(pick) => {
                 assert!(pick.subchannel == subchannels[0].clone());
             }
@@ -478,7 +478,7 @@ mod test {
         env.expect_no_events();
 
         let req = test_utils::new_request_headers();
-        match picker.pick(PickOptions::new(&req, &mut CallAttributes::new())) {
+        match picker.pick(PickOptions::new(&req, &CallOptions::new())) {
             PickResult::Queue => {}
             other => panic!("unexpected pick result {}", other),
         }
@@ -520,7 +520,7 @@ mod test {
         let req = test_utils::new_request_headers();
         let mut picked = Vec::new();
         for _ in 0..4 {
-            match picker.pick(PickOptions::new(&req, &mut CallAttributes::new())) {
+            match picker.pick(PickOptions::new(&req, &CallOptions::new())) {
                 PickResult::Pick(pick) => {
                     println!("picked subchannel is {}", pick.subchannel);
                     picked.push(pick.subchannel.clone());
@@ -572,7 +572,7 @@ mod test {
         let req = test_utils::new_request_headers();
         let mut picked = Vec::new();
         for _ in 0..4 {
-            match picker.pick(PickOptions::new(&req, &mut CallAttributes::new())) {
+            match picker.pick(PickOptions::new(&req, &CallOptions::new())) {
                 PickResult::Pick(pick) => {
                     println!("picked subchannel is {}", pick.subchannel);
                     picked.push(pick.subchannel.clone());
@@ -598,7 +598,7 @@ mod test {
         let req = test_utils::new_request_headers();
         let mut picked = Vec::new();
         for _ in 0..4 {
-            match new_picker.pick(PickOptions::new(&req, &mut CallAttributes::new())) {
+            match new_picker.pick(PickOptions::new(&req, &CallOptions::new())) {
                 PickResult::Pick(pick) => {
                     println!("picked subchannel is {}", pick.subchannel);
                     picked.push(pick.subchannel.clone());
@@ -662,7 +662,7 @@ mod test {
         let req = test_utils::new_request_headers();
         let mut picked = Vec::new();
         for _ in 0..4 {
-            match picker.pick(PickOptions::new(&req, &mut CallAttributes::new())) {
+            match picker.pick(PickOptions::new(&req, &CallOptions::new())) {
                 PickResult::Pick(pick) => picked.push(pick.subchannel.clone()),
                 other => panic!("unexpected pick result {}", other),
             }
@@ -699,7 +699,7 @@ mod test {
         let req = test_utils::new_request_headers();
         let mut picked = Vec::new();
         for _ in 0..4 {
-            match new_picker.pick(PickOptions::new(&req, &mut CallAttributes::new())) {
+            match new_picker.pick(PickOptions::new(&req, &CallOptions::new())) {
                 PickResult::Pick(pick) => picked.push(pick.subchannel.clone()),
                 other => panic!("unexpected pick result {}", other),
             }
@@ -780,13 +780,13 @@ mod test {
 
         let req = test_utils::new_request_headers();
         // First pick determines the only subchannel the picker should yield
-        let first_sc = match picker.pick(PickOptions::new(&req, &mut CallAttributes::new())) {
+        let first_sc = match picker.pick(PickOptions::new(&req, &CallOptions::new())) {
             PickResult::Pick(p) => p.subchannel.clone(),
             other => panic!("unexpected pick result {}", other),
         };
 
         for _ in 0..7 {
-            match picker.pick(PickOptions::new(&req, &mut CallAttributes::new())) {
+            match picker.pick(PickOptions::new(&req, &CallOptions::new())) {
                 PickResult::Pick(p) => {
                     assert!(
                         Arc::ptr_eq(&first_sc, &p.subchannel),

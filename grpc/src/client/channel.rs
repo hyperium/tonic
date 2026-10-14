@@ -353,7 +353,7 @@ impl Invoke for Arc<ActiveChannel> {
     async fn invoke(
         &self,
         headers: RequestHeaders,
-        mut options: CallOptions,
+        options: CallOptions,
     ) -> (Self::SendStream, Self::RecvStream) {
         let mut i = self.lb_watcher.iter();
         loop {
@@ -363,9 +363,7 @@ impl Invoke for Arc<ActiveChannel> {
                     None,
                 );
             };
-            let result = state
-                .picker
-                .pick(PickOptions::new(&headers, options.attributes_mut()));
+            let result = state.picker.pick(PickOptions::new(&headers, &options));
             match result {
                 PickResult::Pick(pr) => {
                     if let Some(sc) = pr.subchannel.downcast_ref::<InternalSubchannel>() {

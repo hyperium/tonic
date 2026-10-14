@@ -212,7 +212,7 @@ mod test {
     use std::sync::Mutex;
     use std::sync::mpsc;
 
-    use crate::call_attributes::CallAttributes;
+    use crate::client::CallOptions;
     use crate::client::load_balancing::ChannelController;
     use crate::client::load_balancing::GLOBAL_LB_REGISTRY;
     use crate::client::load_balancing::LbPolicy;
@@ -373,7 +373,7 @@ mod test {
 
             let pick = update
                 .picker
-                .pick(PickOptions::new(&req, &mut CallAttributes::new()));
+                .pick(PickOptions::new(&req, &CallOptions::new()));
             let PickResult::Pick(pick) = pick else {
                 panic!("unexpected pick result: {:?}", pick);
             };
