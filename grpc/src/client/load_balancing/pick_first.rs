@@ -33,6 +33,7 @@ use std::time::Duration;
 use rand::seq::SliceRandom;
 
 use crate::client::ConnectivityState;
+use crate::client::RequestHeaders;
 use crate::client::load_balancing::ChannelController;
 use crate::client::load_balancing::FailingPicker;
 use crate::client::load_balancing::LbConfigJson;
@@ -40,10 +41,10 @@ use crate::client::load_balancing::LbPolicy;
 use crate::client::load_balancing::LbPolicyBuilder;
 use crate::client::load_balancing::LbPolicyOptions;
 use crate::client::load_balancing::LbState;
-use crate::client::load_balancing::OneSubchannelPicker;
+use crate::client::load_balancing::Pick;
+use crate::client::load_balancing::PickResult;
 use crate::client::load_balancing::Picker;
 use crate::client::load_balancing::QueuingPicker;
-use crate::client::load_balancing::WakeUpPicker;
 use crate::client::load_balancing::WorkData;
 use crate::client::load_balancing::WorkScheduler;
 use crate::client::load_balancing::subchannel::Subchannel;
@@ -53,6 +54,7 @@ use crate::client::name_resolution::Endpoint;
 use crate::client::name_resolution::ResolverUpdate;
 use crate::client::name_resolution::TCP_IP_NETWORK_TYPE;
 use crate::core::Address;
+use crate::metadata::MetadataMap;
 use crate::rt::BoxedTaskHandle;
 use crate::rt::GrpcRuntime;
 
@@ -288,9 +290,8 @@ impl LbPolicy for PickFirstPolicy {
     }
 
     fn work(&mut self, data: Option<WorkData>, controller: &mut dyn ChannelController) {
-        // No data: a WakeUpPicker pick requested a connection.
         let Some(data) = data else {
-            self.exit_idle(controller);
+            debug_assert!(false, "PickFirstPolicy::work called with None value");
             return;
         };
         let data = match data.downcast::<SubchannelUpdate>() {
@@ -300,10 +301,14 @@ impl LbPolicy for PickFirstPolicy {
             }
             Err(data) => data,
         };
+        if data.downcast_ref::<LeaveIdle>().is_some() {
+            self.exit_idle(controller);
+            return;
+        }
         if data.downcast_ref::<TimerExpired>().is_none() {
             debug_assert!(
                 false,
-                "work called with {data:?}; expected a SubchannelUpdate or TimerExpired"
+                "work called with {data:?}; expected SubchannelUpdate, LeaveIdle, or TimerExpired"
             );
             return;
         }
@@ -383,7 +388,7 @@ struct IdleState {
 
 impl IdleState {
     fn enter(ctx: &mut PickFirstContext<'_>, addresses: Vec<Address>) -> PickFirstState {
-        let picker = Arc::new(WakeUpPicker::new(ctx.work_scheduler.clone()));
+        let picker = Arc::new(IdlePicker::new(ctx.work_scheduler.clone()));
         ctx.update_picker(ConnectivityState::Idle, picker);
         PickFirstState::Idle(IdleState { addresses })
     }
@@ -862,8 +867,7 @@ impl PickFirstState {
     }
 }
 
-// Work data sent when the Connection Attempt Delay timer fires. Distinguishes
-// timer wakeups from WakeUpPicker connection requests, which carry no data.
+// Work data sent when the Connection Attempt Delay timer fires.
 #[derive(Debug)]
 struct TimerExpired;
 
@@ -907,6 +911,49 @@ impl Drop for Timer {
     }
 }
 
+#[derive(Debug)]
+struct OneSubchannelPicker {
+    sc: Arc<dyn Subchannel>,
+}
+
+impl Picker for OneSubchannelPicker {
+    fn pick(&self, _: &RequestHeaders) -> PickResult {
+        PickResult::Pick(Pick {
+            subchannel: self.sc.clone(),
+            metadata: MetadataMap::new(),
+            on_complete: None,
+        })
+    }
+}
+
+// Work data sent by `IdlePicker` on its first pick to exit IDLE.
+#[derive(Debug)]
+struct LeaveIdle;
+
+#[derive(Debug)]
+struct IdlePicker {
+    triggered_work: AtomicBool,
+    work_scheduler: Arc<dyn WorkScheduler>,
+}
+
+impl IdlePicker {
+    fn new(work_scheduler: Arc<dyn WorkScheduler>) -> Self {
+        Self {
+            triggered_work: AtomicBool::new(false),
+            work_scheduler,
+        }
+    }
+}
+
+impl Picker for IdlePicker {
+    fn pick(&self, _: &RequestHeaders) -> PickResult {
+        if !self.triggered_work.swap(true, Ordering::Relaxed) {
+            self.work_scheduler.schedule_work(Some(Box::new(LeaveIdle)));
+        }
+        PickResult::Queue
+    }
+}
+
 fn build_shuffler() -> Arc<ShufflerFn> {
     Arc::new(|endpoints| {
         let mut rng = rand::rng();
@@ -920,7 +967,6 @@ mod test {
     use std::time::Duration;
 
     use super::*;
-    use crate::client::load_balancing::PickResult;
     use crate::client::load_balancing::test_utils;
     use crate::client::load_balancing::test_utils::TestChannelController;
     use crate::client::load_balancing::test_utils::TestEnv;
@@ -1083,7 +1129,11 @@ mod test {
                 PickResult::Queue
             );
             let data = self.expect_schedule_work();
-            assert!(data.is_none());
+            assert!(
+                data.as_ref()
+                    .is_some_and(|d| d.downcast_ref::<LeaveIdle>().is_some()),
+                "expected LeaveIdle work, got {data:?}"
+            );
             self.policy.work(data, &mut self.tcc);
             let subchannels = self.expect_new_subchannels(addrs);
             self.expect_connect_to(addrs[0]);
@@ -1764,7 +1814,7 @@ mod test {
     }
 
     // When the selected subchannel disconnects (transitions to Idle), the
-    // policy requests re-resolution, reports Idle with a WakeUpPicker, and on
+    // policy requests re-resolution, reports Idle with an IdlePicker, and on
     // pick reconnects across all addresses (falling over to addr2 if addr1
     // fails) (gRFC A61).
     #[tokio::test(start_paused = true)]
