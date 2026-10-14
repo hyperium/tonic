@@ -44,44 +44,55 @@ mod sealed {
 /// - Mock transport for testing
 /// - Other custom transports
 pub trait Transport: Send + Sync + 'static {
-    /// The stream type produced by this transport.
-    type Stream: TransportStream;
+    /// The sending half produced by this transport.
+    type Sender: TransportSender;
+    /// The receiving half produced by this transport.
+    type Receiver: TransportReceiver;
 
-    /// Creates a new bidirectional ADS stream to the xDS server.
-    ///
-    /// # Arguments
-    ///
-    /// * `initial_requests` - Requests to send immediately when establishing the stream.
-    ///   This is critical for xDS servers that don't send response headers until
-    ///   they receive the first request (prevents deadlock).
+    /// Creates a new bidirectional ADS stream to the xDS server,
+    /// returning separate sending and receiving halves.
     ///
     /// This may be called multiple times for reconnection.
-    fn new_stream(
-        &self,
-        initial_requests: Vec<Bytes>,
-    ) -> impl Future<Output = Result<Self::Stream>> + Send;
+    fn new_stream(&self) -> impl Future<Output = Result<(Self::Sender, Self::Receiver)>> + Send;
 }
 
-/// A bidirectional byte stream for xDS ADS communication.
+/// Sending half of a bidirectional xDS ADS stream.
 ///
-/// Raw byte transport where the bytes are serialized DiscoveryRequest/DiscoveryResponse
-/// (de)serialization is handled at the xDS client worker layer.
-// Sealed for now to limit API surface.
-pub trait TransportStream: sealed::Sealed + Send + 'static {
+/// Sealed for now to limit API surface.
+pub trait TransportSender: sealed::Sealed + Send + 'static {
     /// Send serialized DiscoveryRequest bytes to the server.
+    ///
+    /// # Cancel safety
+    ///
+    /// This method is not intended to be cancellation safe.  If the returned
+    /// future is not polled to completion, the behavior of any subsequent calls
+    /// to the TransportSender are undefined and data may be lost.
     fn send(&mut self, request: Bytes) -> impl Future<Output = Result<()>> + Send;
+}
 
+/// Receiving half of a bidirectional xDS ADS stream.
+///
+/// Sealed for now to limit API surface.
+pub trait TransportReceiver: sealed::Sealed + Send + 'static {
     /// Receive serialized DiscoveryResponse bytes from the server.
     ///
     /// Returns:
     /// - `Ok(Some(bytes))` - Received a response.
     /// - `Ok(None)` - Stream closed normally.
     /// - `Err(_)` - Stream error (connection dropped, etc.)
+    ///
+    /// # Cancel safety
+    ///
+    /// This method is not intended to be cancellation safe.  If the returned
+    /// future is not polled to completion, the behavior of any subsequent calls
+    /// to the TransportReceiver are undefined and data may be lost.
     fn recv(&mut self) -> impl Future<Output = Result<Option<Bytes>>> + Send;
 }
 
 #[cfg(feature = "transport-tonic")]
-impl sealed::Sealed for tonic::TonicAdsStream {}
+impl sealed::Sealed for tonic::TonicAdsSender {}
+#[cfg(feature = "transport-tonic")]
+impl sealed::Sealed for tonic::TonicAdsReceiver {}
 
 /// Factory for creating transports to xDS servers.
 ///
@@ -125,11 +136,11 @@ pub trait TransportBuilder: Send + Sync + 'static {
 
 /// In-crate mock transport for worker tests.
 ///
-/// Lives here because [`TransportStream`] is sealed: test code outside this
-/// module cannot implement it.
+/// Lives here because [`Transport`], [`TransportSender`], and [`TransportReceiver`]
+/// are sealed: test code outside this module cannot implement them.
 #[cfg(test)]
 pub(crate) mod mock {
-    use super::{Transport, TransportBuilder, TransportStream, sealed};
+    use super::{Transport, TransportBuilder, TransportReceiver, TransportSender, sealed};
     use crate::client::config::ServerConfig;
     use crate::error::{Error, Result};
     use bytes::Bytes;
@@ -174,39 +185,44 @@ pub(crate) mod mock {
     }
 
     impl Transport for MockTransport {
-        type Stream = MockStream;
+        type Sender = MockSender;
+        type Receiver = MockReceiver;
 
-        async fn new_stream(&self, initial_requests: Vec<Bytes>) -> Result<Self::Stream> {
+        async fn new_stream(&self) -> Result<(Self::Sender, Self::Receiver)> {
             let (req_tx, req_rx) = mpsc::unbounded_channel();
             let (resp_tx, resp_rx) = mpsc::unbounded_channel();
-            for request in initial_requests {
-                let _ = req_tx.send(request);
-            }
             let _ = self.servers.send(MockServer {
                 requests: req_rx,
                 responses: resp_tx,
             });
-            Ok(MockStream {
-                requests: req_tx,
-                responses: resp_rx,
-            })
+            Ok((
+                MockSender { requests: req_tx },
+                MockReceiver { responses: resp_rx },
+            ))
         }
     }
 
-    pub(crate) struct MockStream {
+    pub(crate) struct MockSender {
         requests: mpsc::UnboundedSender<Bytes>,
-        responses: mpsc::UnboundedReceiver<Result<Option<Bytes>>>,
     }
 
-    impl sealed::Sealed for MockStream {}
+    impl sealed::Sealed for MockSender {}
 
-    impl TransportStream for MockStream {
+    impl TransportSender for MockSender {
         async fn send(&mut self, request: Bytes) -> Result<()> {
             self.requests
                 .send(request)
                 .map_err(|_| Error::Connection("mock stream closed".into()))
         }
+    }
 
+    pub(crate) struct MockReceiver {
+        responses: mpsc::UnboundedReceiver<Result<Option<Bytes>>>,
+    }
+
+    impl sealed::Sealed for MockReceiver {}
+
+    impl TransportReceiver for MockReceiver {
         async fn recv(&mut self) -> Result<Option<Bytes>> {
             match self.responses.recv().await {
                 Some(result) => result,

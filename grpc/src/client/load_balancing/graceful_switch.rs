@@ -29,11 +29,11 @@ use crate::client::load_balancing::ChannelController;
 use crate::client::load_balancing::DynLbConfig;
 use crate::client::load_balancing::DynLbPolicyBuilder;
 use crate::client::load_balancing::LbPolicy;
-use crate::client::load_balancing::LbState;
+use crate::client::load_balancing::LbPolicyBuilder;
+use crate::client::load_balancing::LbPolicyOptions;
 use crate::client::load_balancing::WorkData;
 use crate::client::load_balancing::WorkScheduler;
-use crate::client::load_balancing::child_manager::ChildManager;
-use crate::client::load_balancing::child_manager::ChildUpdate;
+use crate::client::load_balancing::child_manager::Child;
 use crate::client::name_resolution::ResolverUpdate;
 use crate::rt::GrpcRuntime;
 
@@ -54,17 +54,20 @@ impl GracefulSwitchLbConfig {
 }
 
 /// A graceful switching load balancing policy.  In graceful switch, there is
-/// always either one or two child policies.  When there is one policy, all
-/// operations are delegated to it.  When the child policy type needs to change,
-/// graceful switch creates a "pending" child policy alongside the "active"
-/// policy.  When the pending policy leaves the CONNECTING state, or when the
-/// active policy is not READY, graceful switch will promote the pending policy
-/// to active and tear down the previously active policy.
+/// always either one or two child policies, once the first resolver update is
+/// received.  When there is one policy, all operations are delegated to it.
+/// When the child policy type needs to change, graceful switch creates a
+/// "pending" child policy alongside the "active" policy.  When the pending
+/// policy leaves the CONNECTING state, or when the active policy is not READY,
+/// graceful switch will promote the pending policy to active and tear down the
+/// previously active policy.
 #[derive(Debug)]
 pub struct GracefulSwitchPolicy {
-    child_manager: ChildManager<()>, // Child ID empty - only the name of the child LB policy matters.
-    last_update: Option<LbState>, // Saves the last output LbState to determine if an update is needed.
-    active_child_builder: Option<Arc<DynLbPolicyBuilder>>,
+    /// None until the first resolver update is received.
+    active: Option<Child>,
+    pending: Option<Child>,
+    runtime: GrpcRuntime,
+    work_scheduler: Arc<dyn WorkScheduler>,
 }
 
 impl LbPolicy for GracefulSwitchPolicy {
@@ -76,129 +79,129 @@ impl LbPolicy for GracefulSwitchPolicy {
         config: &Self::LbConfig,
         channel_controller: &mut dyn ChannelController,
     ) -> Result<(), String> {
-        if self.active_child_builder.is_none() {
-            // When there are no children yet, the current update immediately
-            // becomes the active child.
-            self.active_child_builder = Some(config.child_builder.clone());
-        }
-        let active_child_builder = self.active_child_builder.as_ref().unwrap();
-
-        let mut children = Vec::with_capacity(2);
-
-        // Always include the incoming update.
-        children.push(ChildUpdate {
-            child_policy_builder: config.child_builder.clone(),
-            child_identifier: (),
-            child_update: Some((update, &config.child_config)),
-        });
-
-        // Include the active child if it does not match the updated child so
-        // that the child manager will not delete it.
-        if config.child_builder.name() != active_child_builder.name() {
-            children.push(ChildUpdate {
-                child_policy_builder: active_child_builder.clone(),
-                child_identifier: (),
-                child_update: None,
-            });
+        let new_name = config.child_builder.name();
+        match &mut self.active {
+            // The first config always becomes the active policy.
+            None => {
+                self.active = Some(self.create_child(&config.child_builder));
+            }
+            // The config names the active policy; abandon any pending policy.
+            Some(active) if active.name() == new_name => {
+                active.set_suppress_resolution(false);
+                self.pending = None;
+            }
+            // The config names the pending policy; reuse it.
+            Some(_) if self.pending.as_ref().is_some_and(|p| p.name() == new_name) => {}
+            // The config names a new policy, which becomes the pending policy.
+            // The active policy no longer receives resolver updates, so it must
+            // not be able to request new ones.
+            Some(active) => {
+                active.set_suppress_resolution(true);
+                self.pending = Some(self.create_child(&config.child_builder));
+            }
         }
 
-        let res = self.child_manager.update(children, channel_controller);
-        self.update_picker(channel_controller);
-        res
+        // The update always goes to the most recent policy.
+        let child = self.latest_child().unwrap();
+        let result = child.resolver_update(update, &config.child_config, channel_controller);
+        self.reconcile(channel_controller);
+        result
     }
 
     fn work(&mut self, data: Option<WorkData>, channel_controller: &mut dyn ChannelController) {
-        self.child_manager.work(data, channel_controller);
-        self.update_picker(channel_controller);
+        let Some(data) = data else {
+            debug_assert!(false, "GracefulSwitch::work called with None value");
+            return;
+        };
+
+        // Try sending the work item to the pending child if there is one.
+        let data = match &mut self.pending {
+            None => data,
+            Some(pending) => {
+                match pending.try_work(data, channel_controller) {
+                    // Work item was consumed; reconcile children and return.
+                    Ok(()) => return self.reconcile(channel_controller),
+                    // Work item was not consumed; keep trying.
+                    Err(data) => data,
+                }
+            }
+        };
+
+        // Now try sending it to the active policy, or drop it.
+        let Some(active) = &mut self.active else {
+            debug_assert!(false, "work called before resolver_update");
+            return;
+        };
+        let _ = active.try_work(data, channel_controller);
+        self.reconcile(channel_controller);
     }
 
     fn exit_idle(&mut self, channel_controller: &mut dyn ChannelController) {
-        self.child_manager.exit_idle(channel_controller);
-        self.update_picker(channel_controller);
+        // Only the most recent policy is asked to exit idle.
+        let Some(child) = self.latest_child() else {
+            return;
+        };
+        child.exit_idle(channel_controller);
+        self.reconcile(channel_controller);
     }
-}
-
-#[derive(Debug, PartialEq, Eq, Clone)]
-enum ChildKind {
-    Current,
-    Pending,
 }
 
 impl GracefulSwitchPolicy {
     /// Creates a new Graceful Switch policy.
     pub fn new(runtime: GrpcRuntime, work_scheduler: Arc<dyn WorkScheduler>) -> Self {
         GracefulSwitchPolicy {
-            child_manager: ChildManager::new(runtime, work_scheduler),
-            last_update: None,
-            active_child_builder: None,
+            active: None,
+            pending: None,
+            runtime,
+            work_scheduler,
         }
     }
 
-    fn update_picker(&mut self, channel_controller: &mut dyn ChannelController) {
-        // If maybe_swap returns a None, then no update needs to happen.
-        let Some(update) = self.maybe_swap(channel_controller) else {
-            return;
-        };
-        // If the current update is the same as the last update, skip it.
-        if self.last_update.as_ref().is_some_and(|lu| lu == &update) {
-            return;
-        }
-        channel_controller.update_picker(update.clone());
-        self.last_update = Some(update);
+    /// Returns the most recently created child policy (pending if present,
+    /// otherwise active).
+    fn latest_child(&mut self) -> Option<&mut Child> {
+        self.pending.as_mut().or(self.active.as_mut())
     }
 
-    // Determines the appropriate state to output
-    fn maybe_swap(&mut self, channel_controller: &mut dyn ChannelController) -> Option<LbState> {
-        // If no child updated itself, there is nothing we can do.
-        if !self.child_manager.child_updated() {
-            return None;
-        }
-
-        // If resolver_update has never been called, we have no children, so
-        // there's nothing we can do.
-        let Some(active_child_builder) = &self.active_child_builder else {
-            return None;
+    /// Constructs a new child policy and returns it.
+    fn create_child(&self, builder: &DynLbPolicyBuilder) -> Child {
+        let options = LbPolicyOptions {
+            work_scheduler: self.work_scheduler.clone(),
+            runtime: self.runtime.clone(),
         };
-        let active_name = active_child_builder.name();
+        Child::new(builder, options)
+    }
 
-        // Scan through the child manager's children for the active and
-        // (optional) pending child.
-        let mut active_child = None;
-        let mut pending_child = None;
-        for child in self.child_manager.children() {
-            if child.builder.name() == active_name {
-                active_child = Some(child);
-            } else {
-                pending_child = Some(child);
-            }
-        }
-        let active_child = active_child.expect("There should always be an active child policy");
-
-        // If no pending child exists, we will update the active child's state.
-        let Some(pending_child) = pending_child else {
-            return Some(active_child.state.clone());
-        };
-
-        // If the active child is still reading and the pending child is still
-        // connecting, keep using the active child's state.
-        if active_child.state.connectivity_state == ConnectivityState::Ready
-            && pending_child.state.connectivity_state == ConnectivityState::Connecting
-        {
-            return Some(active_child.state.clone());
+    /// Called after every call into a child.
+    ///
+    /// Promotes pending to active and/or reports a picker update to the channel
+    /// as appropriate.
+    fn reconcile(&mut self, channel_controller: &mut dyn ChannelController) {
+        // Both flags should be cleared, so avoid short-circuiting.
+        let pending_updated = self.pending.as_mut().is_some_and(Child::take_updated);
+        let active_updated = self.active.as_mut().is_some_and(Child::take_updated);
+        if !pending_updated && !active_updated {
+            return;
         }
 
-        // Transition to the pending child and remove the active child.
+        // The pending policy is promoted once it has left CONNECTING, or as
+        // soon as the active policy stops being READY.
+        let swap = self.pending.as_ref().is_some_and(|pending| {
+            pending.state().connectivity_state != ConnectivityState::Connecting
+                || self.active.as_ref().unwrap().state().connectivity_state
+                    != ConnectivityState::Ready
+        });
+        if swap {
+            self.active = self.pending.take();
+        }
 
-        // Clone some things from child_manager.children to release the
-        // child_manager reference.
-        let pending_child_builder = pending_child.builder.clone();
-        let pending_state = pending_child.state.clone();
-
-        self.active_child_builder = Some(pending_child_builder.clone());
-        self.child_manager
-            .retain_children([((), pending_child_builder)]);
-
-        Some(pending_state)
+        // If we swapped then we need to produce the previously-pending policy's
+        // picker.  Or if we did not swap, but the active policy updated itself,
+        // we should forward its update.
+        if swap || active_updated {
+            let active = self.active.as_ref().unwrap();
+            channel_controller.update_picker(active.state().clone());
+        }
     }
 }
 
@@ -206,6 +209,7 @@ impl GracefulSwitchPolicy {
 mod test {
     use std::panic;
     use std::sync::Arc;
+    use std::sync::Mutex;
     use std::sync::mpsc;
 
     use crate::call_attributes::CallAttributes;
@@ -378,12 +382,16 @@ mod test {
         }
     }
 
-    fn create_endpoint_with_one_address(addr: String) -> Endpoint {
-        Endpoint {
-            addresses: vec![Address {
-                address: addr.into(),
+    // Returns a resolver update containing a single endpoint with one address.
+    fn update_with_address(addr: &str) -> ResolverUpdate {
+        ResolverUpdate {
+            endpoints: Ok(vec![Endpoint {
+                addresses: vec![Address {
+                    address: addr.to_string().into(),
+                    ..Default::default()
+                }],
                 ..Default::default()
-            }],
+            }]),
             ..Default::default()
         }
     }
@@ -408,11 +416,7 @@ mod test {
         let mut env = new_env();
         let parsed_config = stub_lb_config("stub-gracefulswitch_successful_first_update-one");
 
-        let endpoint = create_endpoint_with_one_address("127.0.0.1:1234".to_string());
-        let update = ResolverUpdate {
-            endpoints: Ok(vec![endpoint.clone()]),
-            ..Default::default()
-        };
+        let update = update_with_address("127.0.0.1:1234");
         env.policy
             .resolver_update(update.clone(), &parsed_config, &mut env.tcc)
             .unwrap();
@@ -442,11 +446,7 @@ mod test {
 
         let parsed_config = stub_lb_config("stub-gracefulswitch_switching_to_resolver_update-one");
 
-        let endpoint = create_endpoint_with_one_address("127.0.0.1:1234".to_string());
-        let update = ResolverUpdate {
-            endpoints: Ok(vec![endpoint.clone()]),
-            ..Default::default()
-        };
+        let update = update_with_address("127.0.0.1:1234");
 
         env.policy
             .resolver_update(update.clone(), &parsed_config, &mut env.tcc)
@@ -484,11 +484,7 @@ mod test {
             create_funcs_for_gracefulswitch_tests("stub-gracefulswitch_two_policies_same_type-one"),
         );
         let parsed_config = stub_lb_config("stub-gracefulswitch_two_policies_same_type-one");
-        let endpoint = create_endpoint_with_one_address("127.0.0.1:1234".to_string());
-        let update = ResolverUpdate {
-            endpoints: Ok(vec![endpoint.clone()]),
-            ..Default::default()
-        };
+        let update = update_with_address("127.0.0.1:1234");
         env.policy
             .resolver_update(update.clone(), &parsed_config, &mut env.tcc)
             .unwrap();
@@ -526,12 +522,7 @@ mod test {
         let parsed_config =
             stub_lb_config("stub-gracefulswitch_current_not_ready_pending_update-one");
 
-        let endpoint = create_endpoint_with_one_address("127.0.0.1:1234".to_string());
-        let second_endpoint = create_endpoint_with_one_address("0.0.0.0.0".to_string());
-        let update = ResolverUpdate {
-            endpoints: Ok(vec![endpoint.clone()]),
-            ..Default::default()
-        };
+        let update = update_with_address("127.0.0.1:1234");
 
         // Switch to first one (current)
         env.policy
@@ -541,10 +532,7 @@ mod test {
         env.expect_new_subchannel();
         env.expect_no_events();
 
-        let second_update = ResolverUpdate {
-            endpoints: Ok(vec![second_endpoint.clone()]),
-            ..Default::default()
-        };
+        let second_update = update_with_address("0.0.0.0.0");
         let new_parsed_config =
             stub_lb_config("stub-gracefulswitch_current_not_ready_pending_update-two");
         env.policy
@@ -574,12 +562,7 @@ mod test {
         );
         let parsed_config = stub_lb_config("stub-gracefulswitch_current_leaving_ready-one");
 
-        let endpoint = create_endpoint_with_one_address("127.0.0.1:1234".to_string());
-        let endpoint2 = create_endpoint_with_one_address("127.0.0.1:1235".to_string());
-        let update = ResolverUpdate {
-            endpoints: Ok(vec![endpoint.clone()]),
-            ..Default::default()
-        };
+        let update = update_with_address("127.0.0.1:1234");
 
         // Switch to first one (current)
         env.policy
@@ -589,10 +572,7 @@ mod test {
         let current_subchannel = env.expect_new_subchannel();
         env.send_subchannel_update(&current_subchannel, &SubchannelState::ready());
         env.verify_correct_picker("stub-gracefulswitch_current_leaving_ready-one");
-        let new_update = ResolverUpdate {
-            endpoints: Ok(vec![endpoint2.clone()]),
-            ..Default::default()
-        };
+        let new_update = update_with_address("127.0.0.1:1235");
         let new_parsed_config = stub_lb_config("stub-gracefulswitch_current_leaving_ready-two");
         env.policy
             .resolver_update(new_update.clone(), &new_parsed_config, &mut env.tcc)
@@ -621,12 +601,7 @@ mod test {
             create_funcs_for_gracefulswitch_tests("stub-gracefulswitch_current_leaving_ready-two"),
         );
         let parsed_config = stub_lb_config("stub-gracefulswitch_current_leaving_ready-one");
-        let endpoint = create_endpoint_with_one_address("127.0.0.1:1234".to_string());
-        let endpoint2 = create_endpoint_with_one_address("127.0.0.1:1235".to_string());
-        let update = ResolverUpdate {
-            endpoints: Ok(vec![endpoint.clone()]),
-            ..Default::default()
-        };
+        let update = update_with_address("127.0.0.1:1234");
 
         // Switch to first one (current)
         env.policy
@@ -636,10 +611,7 @@ mod test {
         let current_subchannel = env.expect_new_subchannel();
         env.send_subchannel_update(&current_subchannel, &SubchannelState::ready());
         env.verify_correct_picker("stub-gracefulswitch_current_leaving_ready-one");
-        let new_update = ResolverUpdate {
-            endpoints: Ok(vec![endpoint2.clone()]),
-            ..Default::default()
-        };
+        let new_update = update_with_address("127.0.0.1:1235");
         let new_parsed_config = stub_lb_config("stub-gracefulswitch_current_leaving_ready-two");
 
         env.policy
@@ -677,11 +649,7 @@ mod test {
         let parsed_config = stub_lb_config(
             "stub-gracefulswitch_subchannels_removed_after_current_child_swapped-one",
         );
-        let endpoint = create_endpoint_with_one_address("127.0.0.1:1234".to_string());
-        let update = ResolverUpdate {
-            endpoints: Ok(vec![endpoint.clone()]),
-            ..Default::default()
-        };
+        let update = update_with_address("127.0.0.1:1234");
         env.policy
             .resolver_update(update.clone(), &parsed_config, &mut env.tcc)
             .unwrap();
@@ -691,11 +659,7 @@ mod test {
         env.verify_correct_picker(
             "stub-gracefulswitch_subchannels_removed_after_current_child_swapped-one",
         );
-        let second_endpoint = create_endpoint_with_one_address("127.0.0.1:1235".to_string());
-        let second_update = ResolverUpdate {
-            endpoints: Ok(vec![second_endpoint.clone()]),
-            ..Default::default()
-        };
+        let second_update = update_with_address("127.0.0.1:1235");
         let new_parsed_config = stub_lb_config(
             "stub-gracefulswitch_subchannels_removed_after_current_child_swapped-two",
         );
@@ -709,5 +673,225 @@ mod test {
             "stub-gracefulswitch_subchannels_removed_after_current_child_swapped-two",
         );
         assert!(Arc::strong_count(&current_subchannel) == 1);
+    }
+
+    // Defines stub functions that create a subchannel per address in
+    // resolver_update, and request re-resolution before producing a picker in
+    // work.
+    fn create_funcs_requesting_resolution(name: &'static str) -> StubPolicyFuncs {
+        StubPolicyFuncs {
+            resolver_update: Some(Arc::new(
+                move |data: &mut StubPolicyData, update: ResolverUpdate, _, channel_controller| {
+                    let addresses: Vec<_> = update
+                        .endpoints
+                        .unwrap()
+                        .iter()
+                        .flat_map(|ep| ep.addresses.clone())
+                        .collect();
+                    TestSubchannelList::new(
+                        &addresses,
+                        channel_controller,
+                        data.lb_policy_options.work_scheduler.clone(),
+                    );
+                    Ok(())
+                },
+            )),
+            work: Some(Arc::new(move |_data, work_data, channel_controller| {
+                let update = work_data
+                    .expect("expected work data")
+                    .downcast::<SubchannelUpdate>()
+                    .expect("expected SubchannelUpdate");
+                channel_controller.request_resolution();
+                channel_controller.update_picker(LbState {
+                    connectivity_state: update.state.connectivity_state,
+                    picker: Arc::new(TestPicker { name }),
+                });
+            })),
+            ..Default::default()
+        }
+    }
+
+    // Tests that re-resolution requests from the active child are dropped while
+    // a pending child exists, since the active child no longer receives
+    // resolver updates.  Requests from the child whose updates are being used
+    // are forwarded to the channel.
+    #[test]
+    fn gracefulswitch_active_resolution_request_ignored_with_pending() {
+        let name_one = "stub-gracefulswitch_active_resolution_request-one";
+        let name_two = "stub-gracefulswitch_active_resolution_request-two";
+        reg_stub_policy(name_one, create_funcs_requesting_resolution(name_one));
+        reg_stub_policy(name_two, create_funcs_requesting_resolution(name_two));
+
+        let mut env = new_env();
+        let update = update_with_address("127.0.0.1:1234");
+        env.policy
+            .resolver_update(update.clone(), &stub_lb_config(name_one), &mut env.tcc)
+            .unwrap();
+        let active_subchannel = env.expect_new_subchannel();
+
+        // With no pending child, the active child's request is forwarded.
+        env.send_subchannel_update(&active_subchannel, &SubchannelState::ready());
+        env.expect_request_resolution();
+        env.verify_correct_picker(name_one);
+
+        // Create a pending child.
+        let second_update = update_with_address("127.0.0.1:1235");
+        env.policy
+            .resolver_update(second_update, &stub_lb_config(name_two), &mut env.tcc)
+            .unwrap();
+        let pending_subchannel = env.expect_new_subchannel();
+        env.expect_no_events();
+
+        // The active child's request is dropped now that a pending child
+        // exists.  Its picker is still used, as it remains READY.
+        env.send_subchannel_update(&active_subchannel, &SubchannelState::ready());
+        env.verify_correct_picker(name_one);
+        env.expect_no_events();
+
+        // The pending child's requests are forwarded.
+        env.send_subchannel_update(&pending_subchannel, &SubchannelState::ready());
+        env.expect_request_resolution();
+        env.verify_correct_picker(name_two);
+        env.expect_no_events();
+    }
+
+    // Defines stub functions that record the name of the policy whenever its
+    // exit_idle method is called.
+    fn create_funcs_recording_exit_idle(
+        name: &'static str,
+        exit_idle_calls: Arc<Mutex<Vec<&'static str>>>,
+    ) -> StubPolicyFuncs {
+        StubPolicyFuncs {
+            exit_idle: Some(Arc::new(move |_data, _channel_controller| {
+                exit_idle_calls.lock().unwrap().push(name);
+            })),
+            ..Default::default()
+        }
+    }
+
+    // Tests that exit_idle is delivered to the pending child if one exists, and
+    // to the active child otherwise.  The pending child is the one whose picker
+    // will be used once it connects, so it is the one that needs to wake up.
+    #[test]
+    fn gracefulswitch_exit_idle_wakes_latest_child() {
+        let name_one = "stub-gracefulswitch_exit_idle_wakes_latest_child-one";
+        let name_two = "stub-gracefulswitch_exit_idle_wakes_latest_child-two";
+        let calls: Arc<Mutex<Vec<&'static str>>> = Arc::new(Mutex::new(Vec::new()));
+        reg_stub_policy(
+            name_one,
+            create_funcs_recording_exit_idle(name_one, calls.clone()),
+        );
+        reg_stub_policy(
+            name_two,
+            create_funcs_recording_exit_idle(name_two, calls.clone()),
+        );
+
+        let mut env = new_env();
+        let update = update_with_address("127.0.0.1:1234");
+
+        // Before any config is received, exit_idle does nothing.
+        env.policy.exit_idle(&mut env.tcc);
+        assert!(calls.lock().unwrap().is_empty());
+
+        // With only an active child, the active child is woken.
+        env.policy
+            .resolver_update(update.clone(), &stub_lb_config(name_one), &mut env.tcc)
+            .unwrap();
+        env.policy.exit_idle(&mut env.tcc);
+        assert_eq!(*calls.lock().unwrap(), vec![name_one]);
+        calls.lock().unwrap().clear();
+
+        // With a pending child, only the pending child is woken.
+        env.policy
+            .resolver_update(update, &stub_lb_config(name_two), &mut env.tcc)
+            .unwrap();
+        env.policy.exit_idle(&mut env.tcc);
+        assert_eq!(*calls.lock().unwrap(), vec![name_two]);
+
+        env.expect_no_events();
+    }
+
+    // Tests that the first config received becomes the active child
+    // immediately, so that a second config of a different type becomes a
+    // pending child instead of replacing the first one.
+    #[test]
+    fn gracefulswitch_first_config_becomes_active() {
+        let name_one = "stub-gracefulswitch_first_config_becomes_active-one";
+        let name_two = "stub-gracefulswitch_first_config_becomes_active-two";
+        reg_stub_policy(name_one, create_funcs_for_gracefulswitch_tests(name_one));
+        reg_stub_policy(name_two, create_funcs_for_gracefulswitch_tests(name_two));
+
+        let mut env = new_env();
+        let update = update_with_address("127.0.0.1:1234");
+        env.policy
+            .resolver_update(update.clone(), &stub_lb_config(name_one), &mut env.tcc)
+            .unwrap();
+        let active_subchannel = env.expect_new_subchannel();
+
+        // The first child has not produced a picker yet, but it is already the
+        // active child, so this config becomes a pending child.
+        let second_update = update_with_address("127.0.0.1:1235");
+        env.policy
+            .resolver_update(second_update, &stub_lb_config(name_two), &mut env.tcc)
+            .unwrap();
+        let pending_subchannel = env.expect_new_subchannel();
+        env.expect_no_events();
+
+        // The first child still exists and is still the active child, so its
+        // picker is used when it becomes READY.
+        env.send_subchannel_update(&active_subchannel, &SubchannelState::ready());
+        env.verify_correct_picker(name_one);
+        env.expect_no_events();
+
+        // Once the pending child is READY, it is swapped in.
+        env.send_subchannel_update(&pending_subchannel, &SubchannelState::ready());
+        env.verify_correct_picker(name_two);
+        env.expect_no_events();
+    }
+
+    // Tests that a config naming the active policy abandons an existing pending
+    // child, after which updates for the pending child's subchannels are
+    // ignored.
+    #[test]
+    fn gracefulswitch_same_type_config_drops_pending() {
+        let name_one = "stub-gracefulswitch_same_type_config_drops_pending-one";
+        let name_two = "stub-gracefulswitch_same_type_config_drops_pending-two";
+        reg_stub_policy(name_one, create_funcs_for_gracefulswitch_tests(name_one));
+        reg_stub_policy(name_two, create_funcs_for_gracefulswitch_tests(name_two));
+
+        let mut env = new_env();
+        let update = update_with_address("127.0.0.1:1234");
+        env.policy
+            .resolver_update(update.clone(), &stub_lb_config(name_one), &mut env.tcc)
+            .unwrap();
+        let active_subchannel = env.expect_new_subchannel();
+        env.send_subchannel_update(&active_subchannel, &SubchannelState::ready());
+        env.verify_correct_picker(name_one);
+
+        // Create a pending child.
+        let second_update = update_with_address("127.0.0.1:1235");
+        env.policy
+            .resolver_update(second_update, &stub_lb_config(name_two), &mut env.tcc)
+            .unwrap();
+        let pending_subchannel = env.expect_new_subchannel();
+        env.expect_no_events();
+
+        // Switch back to the active policy's type, which drops the pending
+        // child.  The active child receives the update.
+        env.policy
+            .resolver_update(update, &stub_lb_config(name_one), &mut env.tcc)
+            .unwrap();
+        let active_subchannel = env.expect_new_subchannel();
+        env.expect_no_events();
+
+        // Updates for the dropped child's subchannel are ignored, even one
+        // that would otherwise have triggered a swap.
+        env.send_subchannel_update(&pending_subchannel, &SubchannelState::ready());
+        env.expect_no_events();
+
+        // The active child continues to be used.
+        env.send_subchannel_update(&active_subchannel, &SubchannelState::ready());
+        env.verify_correct_picker(name_one);
+        env.expect_no_events();
     }
 }

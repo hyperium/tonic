@@ -48,7 +48,7 @@ use crate::message::{DiscoveryRequest, DiscoveryResponse, ErrorDetail, Node};
 use crate::metrics::{self, KeyValue, MetricsRecorder};
 use crate::resource::{DecodedResource, DecoderFn};
 use crate::runtime::Runtime;
-use crate::transport::{Transport, TransportBuilder, TransportStream};
+use crate::transport::{Transport, TransportBuilder, TransportReceiver, TransportSender};
 
 /// Per-client A78 metric attributes (`grpc.target` + `grpc.xds.server`).
 ///
@@ -665,7 +665,7 @@ where
                 }
             };
 
-            let stream = match transport.new_stream(self.build_initial_requests()).await {
+            let (tx, rx) = match transport.new_stream().await {
                 Ok(s) => s,
                 Err(_) => {
                     self.record_unhealthy(&mut healthy);
@@ -677,7 +677,7 @@ where
                 }
             };
 
-            match self.run_connected(stream, &mut healthy).await {
+            match self.run_connected(tx, rx, &mut healthy).await {
                 ConnectedOutcome::Shutdown => break,
                 ConnectedOutcome::Failed { saw_response } => {
                     // gRFC A78: a server goes unhealthy (one `server_failure`) on
@@ -726,13 +726,8 @@ where
         }
     }
 
-    /// Build initial DiscoveryRequests for all active subscriptions.
-    ///
-    /// These are sent when establishing the stream to prevent deadlock with
-    /// servers that don't send response headers until they receive a request.
-    fn build_initial_requests(&self) -> Vec<Bytes> {
-        let mut requests = Vec::new();
-
+    /// Send initial DiscoveryRequests for all active subscriptions.
+    fn send_initial_requests(&self, sender: &mpsc::UnboundedSender<Bytes>) -> Result<()> {
         for (type_url, type_state) in &self.type_states {
             if type_state.watchers.is_empty() {
                 continue;
@@ -749,12 +744,11 @@ where
                 error_detail: None,
             };
 
-            if let Ok(bytes) = self.codec.encode_request(&request) {
-                requests.push(bytes);
-            }
+            let bytes = self.codec.encode_request(&request)?;
+            sender.send(bytes).map_err(|_| Error::StreamClosed)?;
         }
 
-        requests
+        Ok(())
     }
 
     /// Run the main event loop while connected.
@@ -763,15 +757,23 @@ where
     /// (command channel closed), or [`ConnectedOutcome::Failed`] if the stream
     /// failed and the worker should reconnect (carrying whether a response was
     /// seen, per gRFC A78).
-    async fn run_connected<S: TransportStream>(
+    async fn run_connected(
         &mut self,
-        stream: S,
+        tx: <TB::Transport as Transport>::Sender,
+        rx: <TB::Transport as Transport>::Receiver,
         healthy: &mut bool,
     ) -> ConnectedOutcome {
         let (write_tx, write_rx) = mpsc::unbounded_channel::<Bytes>();
         let (read_tx, mut read_rx) = mpsc::channel(1);
         self.runtime
-            .spawn(Self::run_stream_task(stream, write_rx, read_tx));
+            .spawn(Self::run_stream_task(tx, rx, write_rx, read_tx));
+
+        // Send initial DiscoveryRequests for all active subscriptions on this new stream:
+        if self.send_initial_requests(&write_tx).is_err() {
+            return ConnectedOutcome::Failed {
+                saw_response: false,
+            };
+        }
 
         // Whether at least one response was received on this stream. Per gRFC
         // A78 a stream that fails *after* receiving a response is not counted as
@@ -782,9 +784,15 @@ where
                 res = read_rx.recv() => {
                     match res {
                         Some((bytes, done)) => {
+                            let response = match self.codec.decode_response(bytes) {
+                                Ok(response) => response,
+                                Err(_) => return ConnectedOutcome::Failed { saw_response },
+                            };
                             saw_response = true;
                             self.record_healthy(healthy);
-                            if self.handle_response(&write_tx, bytes, done).await.is_err() {
+                            if self.handle_response(&write_tx, response, done).await.is_err() {
+                                // All errors are related to sending a request, not `response` whose
+                                // problems are handled by notifying the server.
                                 return ConnectedOutcome::Failed { saw_response };
                             }
                         }
@@ -813,46 +821,31 @@ where
     /// and blocks reading from the stream until the token and all shares are
     /// dropped (ADS flow control). Writes from the unbounded channel continue while
     /// waiting for `done`.
-    async fn run_stream_task<S: TransportStream>(
-        mut stream: S,
+    async fn run_stream_task(
+        mut tx: <TB::Transport as Transport>::Sender,
+        mut rx: <TB::Transport as Transport>::Receiver,
         mut write_rx: mpsc::UnboundedReceiver<Bytes>,
         read_tx: mpsc::Sender<(Bytes, ProcessingDone)>,
     ) {
-        let mut reading_done: Option<oneshot::Receiver<()>> = None;
-        loop {
-            tokio::select! {
-                req = write_rx.recv() => {
-                    match req {
-                        Some(bytes) => {
-                            if stream.send(bytes).await.is_err() {
-                                break;
-                            }
-                        }
-                        None => break,
-                    }
-                }
-
-                result = stream.recv(), if reading_done.is_none() => {
-                    match result {
-                        Ok(Some(bytes)) => {
-                            let (done, done_rx) = ProcessingDone::channel();
-                            if read_tx.send((bytes, done)).await.is_err() {
-                                break;
-                            }
-                            reading_done = Some(done_rx);
-                        }
-                        Ok(None) | Err(_) => break,
-                    }
-                }
-
-                _ = async {
-                    if let Some(rx) = &mut reading_done {
-                        let _ = rx.await;
-                    }
-                }, if reading_done.is_some() => {
-                    reading_done = None;
+        let write_loop = async {
+            while let Some(bytes) = write_rx.recv().await {
+                if tx.send(bytes).await.is_err() {
+                    break;
                 }
             }
+        };
+        let read_loop = async {
+            while let Ok(Some(bytes)) = rx.recv().await {
+                let (done, done_rx) = ProcessingDone::channel();
+                if read_tx.send((bytes, done)).await.is_err() {
+                    break;
+                }
+                let _ = done_rx.await;
+            }
+        };
+        tokio::select! {
+            _ = write_loop => {}
+            _ = read_loop => {}
         }
     }
 
@@ -1077,7 +1070,8 @@ where
         Ok(())
     }
 
-    /// Handle a response from the server.
+    /// Handle a response from the server. Problems with `response` will be handled directly, and
+    /// not cause an `Err` return.
     ///
     /// Implements partial success per gRFC A46: valid resources are accepted even
     /// if some resources in the response fail validation. Each resource is processed
@@ -1095,10 +1089,9 @@ where
     async fn handle_response(
         &mut self,
         sender: &mpsc::UnboundedSender<Bytes>,
-        bytes: Bytes,
+        response: DiscoveryResponse,
         done: ProcessingDone,
     ) -> Result<()> {
-        let response = self.codec.decode_response(bytes)?;
         let type_url = response.type_url.clone();
 
         let (type_url_arc, decoder) = match self.type_states.get(&type_url) {

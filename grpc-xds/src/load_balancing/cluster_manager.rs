@@ -131,7 +131,7 @@ impl ClusterManagerPolicy {
         let pickers = self
             .child_manager
             .children()
-            .map(|c| (c.identifier.clone(), c.state.picker.clone()))
+            .map(|(id, child)| (id.clone(), child.state().picker.clone()))
             .collect::<HashMap<_, _>>();
 
         channel_controller.update_picker(LbState {
@@ -370,7 +370,7 @@ mod tests {
         assert_picks_child(&state.picker, "cluster_a", "child_a");
         assert_eq!(
             err,
-            "failed to update xds_cluster_manager children: child_b failed"
+            "failed to update xds_cluster_manager children: child \"cluster_b\": child_b failed"
         );
     }
 

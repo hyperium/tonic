@@ -35,6 +35,7 @@ use crate::client::load_balancing::LbState;
 use crate::client::load_balancing::QueuingPicker;
 use crate::client::load_balancing::SubchannelState;
 use crate::client::load_balancing::endpoint_filtering;
+use crate::client::load_balancing::pick_first::PickFirstConfig;
 use crate::client::load_balancing::subchannel::SubchannelUpdate;
 use crate::client::load_balancing::test_utils;
 use crate::client::load_balancing::test_utils::StubPolicyFuncs;
@@ -98,6 +99,55 @@ fn parse_config_success() {
     let mut child_names: Vec<&String> = got.children.keys().collect();
     child_names.sort();
     assert_eq!(child_names, vec!["child-1", "child-2", "child-3"]);
+}
+
+#[test]
+fn parse_child_config_empty_policy_fails() {
+    let json = r#"{
+        "config": [],
+        "ignoreReresolutionRequests": false
+    }"#;
+    let res: Result<PriorityChildConfig, _> = serde_json::from_str(json);
+    assert!(res.is_err());
+}
+
+/// Verifies that a child config without `ignoreReresolutionRequests`
+/// defaults the flag to `false`, and that a child policy without its own
+/// configuration parses into a builder with no config.
+#[test]
+fn parse_child_config_defaults() {
+    let json = r#"{"config": [{"round_robin": {}}]}"#;
+    let cfg: PriorityChildConfig = serde_json::from_str(json).unwrap();
+
+    assert!(!cfg.ignore_reresolution_requests);
+    assert_eq!(cfg.config.builder.name(), "round_robin");
+}
+
+/// Verifies that `ignoreReresolutionRequests` and the policy-specific
+/// configuration of the child policy are parsed.
+#[test]
+fn parse_child_config_with_policy_config() {
+    let json = r#"{
+        "config": [{"pick_first": {"shuffleAddressList": true}}],
+        "ignoreReresolutionRequests": true
+    }"#;
+    let cfg: PriorityChildConfig = serde_json::from_str(json).unwrap();
+
+    assert!(cfg.ignore_reresolution_requests);
+    assert_eq!(cfg.config.builder.name(), "pick_first");
+    assert!(cfg.config.config.as_ref().is::<PickFirstConfig>());
+}
+
+/// Verifies that the first supported policy in the list is selected, as
+/// specified in gRFC A24 (Section Service Config Changes).
+#[test]
+fn parse_child_config_picks_first_supported_policy() {
+    let json = r#"{
+        "config": [{"unsupported_policy": {}}, {"round_robin": {}}]
+    }"#;
+    let cfg: PriorityChildConfig = serde_json::from_str(json).unwrap();
+
+    assert_eq!(cfg.config.builder.name(), "round_robin");
 }
 
 fn setup_test_env() -> TestEnv<PriorityPolicy> {
@@ -351,8 +401,8 @@ async fn switch_priority_failover_and_failback() {
 
     // child-1 is deactivated with a 15-minute timer.
     assert!(matches!(
-        env.policy.child("child-1").unwrap().state,
-        ChildState::Deactivated(_, _)
+        env.policy.child("child-1").unwrap().state(),
+        Some(ChildState::Deactivated(_))
     ));
 }
 
@@ -399,8 +449,8 @@ async fn init_timeout_failover() {
 
     assert!(
         matches!(
-            env.policy.child("child-0").unwrap().state,
-            ChildState::Connecting(_, _)
+            env.policy.child("child-0").unwrap().state(),
+            Some(ChildState::Connecting(_))
         ),
         "child-0 should still be in Connecting state after 5 seconds"
     );
@@ -413,8 +463,8 @@ async fn init_timeout_failover() {
 
     // child-0 should now be ConnectingExpired.
     assert!(matches!(
-        env.policy.child("child-0").unwrap().state,
-        ChildState::ConnectingExpired(_)
+        env.policy.child("child-0").unwrap().state(),
+        Some(ChildState::ConnectingExpired)
     ));
 
     // child-1 should have been lazily initialized and selected.
@@ -477,8 +527,8 @@ async fn connecting_to_connecting_does_not_restart_timer() {
     // The timer should have expired based on original start time
     // (11s > 10s).
     assert!(matches!(
-        env.policy.child("child-0").unwrap().state,
-        ChildState::ConnectingExpired(_)
+        env.policy.child("child-0").unwrap().state(),
+        Some(ChildState::ConnectingExpired)
     ));
 
     // Failover: child-1 is lazily created and selected.
@@ -542,8 +592,8 @@ async fn transient_failure_to_connecting_enters_connecting_expired() {
 
     // Per gRFC A56, child-0 enters ConnectingExpired (no new 10s timer).
     assert!(matches!(
-        env.policy.child("child-0").unwrap().state,
-        ChildState::ConnectingExpired(_)
+        env.policy.child("child-0").unwrap().state(),
+        Some(ChildState::ConnectingExpired)
     ));
 
     // And child-1 (which is Ready) remains the chosen active child, so no new
@@ -605,8 +655,8 @@ async fn deactivation_and_reactivation() {
 
     // child-1 is deactivated with a 15-minute timer.
     assert!(matches!(
-        env.policy.child("child-1").unwrap().state,
-        ChildState::Deactivated(_, _)
+        env.policy.child("child-1").unwrap().state(),
+        Some(ChildState::Deactivated(_))
     ));
 
     // While deactivated, background updates to child-1 do NOT cancel
@@ -614,8 +664,8 @@ async fn deactivation_and_reactivation() {
     env.send_subchannel_update(&sc1, &SubchannelState::connecting());
     env.expect_no_events();
     assert!(matches!(
-        env.policy.child("child-1").unwrap().state,
-        ChildState::Deactivated(_, _)
+        env.policy.child("child-1").unwrap().state(),
+        Some(ChildState::Deactivated(_))
     ));
     // Advance time past 15 minutes (901 seconds).
     advance_time(Duration::from_secs(15 * 60 + 1)).await;
@@ -624,15 +674,11 @@ async fn deactivation_and_reactivation() {
     env.policy.work(data, &mut env.tcc);
     env.expect_no_events();
 
-    // child-1 should now be Uninitialized in the child list, and pruned from
-    // child_mgr.
-    assert!(matches!(
-        env.policy.child("child-1").unwrap().state,
-        ChildState::Uninitialized
-    ));
+    // child-1 should now have had its child policy deleted, but remain in the
+    // child list.
+    assert!(env.policy.child("child-1").unwrap().state().is_none());
 
-    // Now child-0 fails again. child-1 should be re-created from
-    // Uninitialized.
+    // Now child-0 fails again. child-1 should be re-created.
     env.send_subchannel_update(&sc0, &SubchannelState::transient_failure("fail again"));
     env.expect_request_resolution();
     env.expect_new_subchannel();
@@ -697,7 +743,7 @@ async fn ignore_reresolution_requests_configuration() {
 }
 
 /// Verifies that removing a child from the configuration immediately deletes
-/// it from the child list and child_mgr.
+/// it from the child list, deleting its child policy.
 #[tokio::test]
 async fn remove_child_from_config_deletes_immediately() {
     reg_stub("stub_rc_0");
@@ -772,8 +818,8 @@ async fn remove_child_from_config_deletes_immediately() {
 }
 
 /// Verifies that PriorityPolicy::work drops its own PriorityTimerWork (without
-/// forwarding to ChildManager) and correctly forwards child balancer work items
-/// to ChildManager.
+/// forwarding to a child policy) and correctly forwards child balancer work
+/// items to the child policy that scheduled them.
 #[tokio::test]
 async fn work_item_filtering_drops_timer_work_and_forwards_child_work() {
     let child_work_called = Arc::new(Mutex::new(false));
@@ -826,7 +872,7 @@ async fn work_item_filtering_drops_timer_work_and_forwards_child_work() {
     expect_picker_state(&mut env, ConnectivityState::Connecting);
 
     // Deliver a PriorityTimerWork item: it should be consumed by PriorityPolicy
-    // and NOT forwarded to child_mgr.
+    // and NOT forwarded to the child policy.
     let timer_work: WorkData = Box::new(PriorityTimerWork);
     env.policy.work(Some(timer_work), &mut env.tcc);
     assert!(
@@ -835,7 +881,7 @@ async fn work_item_filtering_drops_timer_work_and_forwards_child_work() {
     );
 
     // Deliver the work item that the child scheduled in its resolver_update:
-    // It should be forwarded to ChildManager and invoke the child's work fn.
+    // It should be forwarded to the child and invoke the child's work fn.
     let child_work = env.expect_schedule_work();
     env.expect_no_events();
     env.policy.work(child_work, &mut env.tcc);
@@ -891,5 +937,115 @@ async fn picker_updates_are_debounced_for_inactive_child_events() {
     // An event that reconciles without altering the active child's picker
     // (such as exit_idle) does not re-emit an UpdatePicker event.
     env.policy.exit_idle(&mut env.tcc);
+    env.expect_no_events();
+}
+
+/// Verifies that `PriorityPolicy::exit_idle` only wakes the currently selected
+/// priority child (and not failed higher-priority children or deactivated
+/// lower-priority children) and reconciles any picker update it produces.
+#[tokio::test]
+async fn exit_idle_wakes_only_current_priority() {
+    let calls: Arc<Mutex<Vec<&'static str>>> = Arc::new(Mutex::new(Vec::new()));
+    let reg_exit_idle_stub = |policy_name: &'static str, child_name: &'static str| {
+        let calls = calls.clone();
+        let funcs = StubPolicyFuncs {
+            resolver_update: Some(Arc::new(|data, update, _cfg, controller| {
+                let addr = update
+                    .endpoints
+                    .as_ref()
+                    .ok()
+                    .and_then(|e| e.first())
+                    .and_then(|e| e.addresses.first())
+                    .cloned()
+                    .unwrap_or_default();
+                controller.new_subchannel(&addr, data.lb_policy_options.work_scheduler.clone());
+                Ok(())
+            })),
+            work: Some(Arc::new(|_data, work_data, controller| {
+                let update = work_data
+                    .expect("expected work data")
+                    .downcast::<SubchannelUpdate>()
+                    .expect("expected SubchannelUpdate");
+                controller.update_picker(LbState {
+                    connectivity_state: update.state.connectivity_state,
+                    picker: Arc::new(QueuingPicker {}),
+                });
+            })),
+            exit_idle: Some(Arc::new(move |_data, controller| {
+                calls.lock().unwrap().push(child_name);
+                controller.update_picker(LbState {
+                    connectivity_state: ConnectivityState::Connecting,
+                    picker: Arc::new(QueuingPicker {}),
+                });
+            })),
+        };
+        test_utils::reg_stub_policy(policy_name, funcs);
+    };
+    reg_exit_idle_stub("stub_exit_idle_0", "child-0");
+    reg_exit_idle_stub("stub_exit_idle_1", "child-1");
+
+    let mut env = setup_test_env();
+
+    // Before any config is received, exit_idle is a no-op.
+    env.policy.exit_idle(&mut env.tcc);
+    assert!(calls.lock().unwrap().is_empty());
+
+    let js = r#"{
+  "priorities": ["child-0", "child-1"],
+  "children": {
+    "child-0": {"config": [{"stub_exit_idle_0": {}}]},
+    "child-1": {"config": [{"stub_exit_idle_1": {}}]}
+  }
+}"#;
+    let cfg = Builder {}
+        .parse_config(&LbConfigJson::new(js).unwrap())
+        .unwrap();
+    let update = ResolverUpdate {
+        attributes: Default::default(),
+        endpoints: Ok(vec![
+            new_test_endpoint("child-0", "127.0.0.1:8000"),
+            new_test_endpoint("child-1", "127.0.0.1:8001"),
+        ]),
+        service_config: Ok(None),
+        resolution_note: None,
+    };
+    env.policy
+        .resolver_update(update, &cfg, &mut env.tcc)
+        .unwrap();
+
+    let sc0 = env.expect_new_subchannel();
+    expect_picker_state(&mut env, ConnectivityState::Connecting);
+    env.expect_no_events();
+
+    // Transition child-0 to Idle and call exit_idle: child-0 is woken and its
+    // new Connecting picker is published.
+    env.send_subchannel_update(&sc0, &SubchannelState::idle());
+    expect_picker_state(&mut env, ConnectivityState::Idle);
+    env.policy.exit_idle(&mut env.tcc);
+    assert_eq!(*calls.lock().unwrap(), vec!["child-0"]);
+    calls.lock().unwrap().clear();
+    expect_picker_state(&mut env, ConnectivityState::Connecting);
+    env.expect_no_events();
+
+    // Fail child-0 so priority fails over to child-1, then transition child-1
+    // to Idle. Calling exit_idle wakes only child-1, not child-0.
+    env.send_subchannel_update(&sc0, &SubchannelState::transient_failure("fail"));
+    let sc1 = env.expect_new_subchannel();
+    expect_picker_state(&mut env, ConnectivityState::Connecting);
+    env.send_subchannel_update(&sc1, &SubchannelState::idle());
+    expect_picker_state(&mut env, ConnectivityState::Idle);
+    env.policy.exit_idle(&mut env.tcc);
+    assert_eq!(*calls.lock().unwrap(), vec!["child-1"]);
+    calls.lock().unwrap().clear();
+    expect_picker_state(&mut env, ConnectivityState::Connecting);
+    env.expect_no_events();
+
+    // Recover child-0 to Idle so priority fails back to child-0 and deactivates
+    // child-1. Calling exit_idle wakes only child-0, not deactivated child-1.
+    env.send_subchannel_update(&sc0, &SubchannelState::idle());
+    expect_picker_state(&mut env, ConnectivityState::Idle);
+    env.policy.exit_idle(&mut env.tcc);
+    assert_eq!(*calls.lock().unwrap(), vec!["child-0"]);
+    expect_picker_state(&mut env, ConnectivityState::Connecting);
     env.expect_no_events();
 }
