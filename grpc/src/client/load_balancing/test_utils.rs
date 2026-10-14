@@ -298,7 +298,7 @@ impl<P> TestEnv<P> {
     ///
     /// Prefer the state-specific helpers ([`Self::expect_queuing_picker`],
     /// [`Self::expect_ready_picker`], [`Self::expect_failing_picker`]) when
-    /// testing real pickers. Use this directly when:
+    /// testing pickers without side effects. Use this directly when:
     /// - `want` is [`ConnectivityState::Idle`], where calling [`Picker::pick`]
     ///   has the side effect of initiating connection attempts;
     /// - `want` is [`ConnectivityState::Ready`] with multiple subchannels and
