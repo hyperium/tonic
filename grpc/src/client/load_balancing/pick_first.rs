@@ -51,6 +51,7 @@ use crate::client::load_balancing::subchannel::SubchannelState;
 use crate::client::load_balancing::subchannel::SubchannelUpdate;
 use crate::client::name_resolution::Endpoint;
 use crate::client::name_resolution::ResolverUpdate;
+use crate::client::name_resolution::TCP_IP_NETWORK_TYPE;
 use crate::core::Address;
 use crate::rt::BoxedTaskHandle;
 use crate::rt::GrpcRuntime;
@@ -135,7 +136,24 @@ enum AddressFamily {
     Ipv4,
     Ipv6,
     // Not an IP address and port, e.g. a hostname or a Unix socket path.
+    // Neither gRFC A61 nor RFC 8305 specifies how to handle non-IP addresses;
+    // grouping them into a third family that participates in interleaving is
+    // intentional and matches Go.
     Unknown,
+}
+
+impl From<&Address> for AddressFamily {
+    fn from(addr: &Address) -> Self {
+        if addr.network_type != TCP_IP_NETWORK_TYPE {
+            return Self::Unknown;
+        }
+        // An IPv4-mapped IPv6 address counts as IPv4, as in Go and Java.
+        match addr.address.parse::<SocketAddr>() {
+            Ok(sa) if sa.ip().to_canonical().is_ipv4() => Self::Ipv4,
+            Ok(_) => Self::Ipv6,
+            Err(_) => Self::Unknown,
+        }
+    }
 }
 
 impl PickFirstPolicy {
@@ -160,12 +178,7 @@ impl PickFirstPolicy {
             if !seen.insert(addr.clone()) {
                 continue;
             }
-            // An IPv4-mapped IPv6 address counts as IPv4, as in Go and Java.
-            let family = match addr.address.parse::<SocketAddr>() {
-                Ok(sa) if sa.ip().to_canonical().is_ipv4() => AddressFamily::Ipv4,
-                Ok(_) => AddressFamily::Ipv6,
-                Err(_) => AddressFamily::Unknown,
-            };
+            let family = AddressFamily::from(&addr);
             match families.iter_mut().find(|(f, _)| *f == family) {
                 Some((_, addrs)) => addrs.push(addr),
                 None => families.push((family, vec![addr])),
