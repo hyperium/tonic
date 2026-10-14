@@ -301,22 +301,18 @@ mod test {
             );
         }
 
-        // Verifies that a subchannel is created and connected for the first
-        // address of each endpoint in `endpoints`, in order, and returns the
-        // created subchannels.
+        // Verifies that the expected number of subchannels is created. Returns
+        // the subchannels created.
         fn verify_subchannel_creation(
             &mut self,
-            endpoints: &[Endpoint],
+            number_of_subchannels: usize,
         ) -> Vec<Arc<dyn Subchannel>> {
-            endpoints
-                .iter()
-                .map(|ep| {
-                    let addr = &ep.addresses[0].address;
-                    let sc = self.expect_new_subchannel_for(addr);
-                    self.expect_connect_to(addr);
-                    sc
-                })
-                .collect()
+            let mut subchannels = Vec::new();
+            for _ in 0..number_of_subchannels {
+                subchannels.push(self.expect_new_subchannel());
+                self.expect_connect();
+            }
+            subchannels
         }
 
         // Returns the picker for when there are multiple pickers in the ready
@@ -349,9 +345,9 @@ mod test {
     #[tokio::test]
     async fn roundrobin_resolver_error_after_a_valid_update_in_ready() {
         let mut env = new_env();
-        let endpoints = vec![create_endpoint(1)];
-        env.send_resolver_update(endpoints.clone()).unwrap();
-        let subchannels = env.verify_subchannel_creation(&endpoints);
+        let endpoint = create_endpoint(1);
+        env.send_resolver_update(vec![endpoint]).unwrap();
+        let subchannels = env.verify_subchannel_creation(1);
         env.expect_queuing_picker();
 
         env.send_subchannel_update(&subchannels[0], &SubchannelState::ready());
@@ -376,9 +372,9 @@ mod test {
     async fn roundrobin_resolver_error_after_a_valid_update_in_connecting() {
         let mut env = new_env();
 
-        let endpoints = vec![create_endpoint(1)];
-        env.send_resolver_update(endpoints.clone()).unwrap();
-        env.verify_subchannel_creation(&endpoints);
+        let endpoint = create_endpoint(1);
+        env.send_resolver_update(vec![endpoint]).unwrap();
+        env.verify_subchannel_creation(1);
         let picker = env.expect_queuing_picker();
 
         let resolver_error = String::from("resolver error");
@@ -401,9 +397,9 @@ mod test {
     #[tokio::test]
     async fn roundrobin_resolver_error_after_a_valid_update_in_tf() {
         let mut env = new_env();
-        let endpoints = vec![create_endpoint(1)];
-        env.send_resolver_update(endpoints.clone()).unwrap();
-        let subchannels = env.verify_subchannel_creation(&endpoints);
+        let endpoint = create_endpoint(1);
+        env.send_resolver_update(vec![endpoint]).unwrap();
+        let subchannels = env.verify_subchannel_creation(1);
         env.expect_queuing_picker();
         let connection_error = String::from("test connection error");
         env.move_subchannel_to_transient_failure(&subchannels[0], &connection_error);
@@ -419,8 +415,8 @@ mod test {
     async fn roundrobin_picks_are_round_robin() {
         let mut env = new_env();
         let endpoints = create_endpoints(2);
-        env.send_resolver_update(endpoints.clone()).unwrap();
-        let subchannels = env.verify_subchannel_creation(&endpoints);
+        env.send_resolver_update(endpoints).unwrap();
+        let subchannels = env.verify_subchannel_creation(2);
         env.expect_queuing_picker();
         env.send_subchannel_update(&subchannels[0], &SubchannelState::ready());
         env.expect_ready_picker(&subchannels[0]);
@@ -454,8 +450,8 @@ mod test {
         let mut env = new_env();
 
         let endpoints = create_endpoints(2);
-        env.send_resolver_update(endpoints.clone()).unwrap();
-        let _subchannels = env.verify_subchannel_creation(&endpoints);
+        env.send_resolver_update(endpoints).unwrap();
+        let _subchannels = env.verify_subchannel_creation(2);
         env.expect_queuing_picker();
 
         assert!(env.send_resolver_update(vec![]).is_err());
@@ -471,8 +467,8 @@ mod test {
     async fn roundrobin_one_endpoint_down() {
         let mut env = new_env();
         let endpoints = create_endpoints(2);
-        env.send_resolver_update(endpoints.clone()).unwrap();
-        let subchannels = env.verify_subchannel_creation(&endpoints);
+        env.send_resolver_update(endpoints).unwrap();
+        let subchannels = env.verify_subchannel_creation(2);
         env.expect_queuing_picker();
         env.send_subchannel_update(&subchannels[0], &SubchannelState::ready());
         let _picker = env.expect_ready_picker(&subchannels[0]);
@@ -501,8 +497,7 @@ mod test {
         let subchannel_being_removed = subchannels[1].clone();
         let error = "endpoint down";
         env.move_subchannel_to_transient_failure(&subchannels[1], error);
-        // The endpoint's pick_first child lost its connection, so it requests
-        // re-resolution.
+        // The endpoint's pick_first child lost its connection, so it requests re-resolution.
         env.expect_request_resolution();
 
         let new_picker = env.verify_roundrobin_ready_picker();
@@ -551,14 +546,20 @@ mod test {
             ..Default::default()
         };
 
-        let initial_endpoints = vec![endpoint_one, endpoint_two.clone()];
-        env.send_resolver_update(initial_endpoints.clone()).unwrap();
+        env.send_resolver_update(vec![endpoint_one, endpoint_two.clone()])
+            .unwrap();
 
         // Start with two subchannels created
-        let all_subchannels = env.verify_subchannel_creation(&initial_endpoints);
+        let all_subchannels = env.verify_subchannel_creation(2);
         env.expect_queuing_picker();
-        let subchannel_one = &all_subchannels[0];
-        let subchannel_two = &all_subchannels[1];
+        let subchannel_one = all_subchannels
+            .iter()
+            .find(|sc| sc.address().address == "subchannel_one".to_string().into())
+            .unwrap();
+        let subchannel_two = all_subchannels
+            .iter()
+            .find(|sc| sc.address().address == "subchannel_two".to_string().into())
+            .unwrap();
 
         env.send_subchannel_update(subchannel_one, &SubchannelState::ready());
         env.expect_ready_picker(subchannel_one);
@@ -586,12 +587,12 @@ mod test {
             ..Default::default()
         };
 
-        env.send_resolver_update(vec![endpoint_two, new_endpoint.clone()])
+        env.send_resolver_update(vec![endpoint_two, new_endpoint])
             .unwrap();
 
         // Only 1 new subchannel is created for new_endpoint; endpoint_two is
         // retained.
-        let new_subchannels = env.verify_subchannel_creation(&[new_endpoint]);
+        let new_subchannels = env.verify_subchannel_creation(1);
         let new_sc = &new_subchannels[0];
         let old_sc = subchannel_two;
 
@@ -620,8 +621,8 @@ mod test {
     async fn roundrobin_stay_transient_failure_until_ready() {
         let mut env = new_env();
         let endpoints = create_endpoints(2);
-        env.send_resolver_update(endpoints.clone()).unwrap();
-        let subchannels = env.verify_subchannel_creation(&endpoints);
+        env.send_resolver_update(endpoints).unwrap();
+        let subchannels = env.verify_subchannel_creation(2);
         env.expect_queuing_picker();
 
         let first_error = String::from("test connection error 1");
@@ -652,9 +653,9 @@ mod test {
     async fn roundrobin_zero_endpoints_from_resolver_after_valid_update() {
         let mut env = new_env();
 
-        let endpoints = vec![create_endpoint(1)];
-        env.send_resolver_update(endpoints.clone()).unwrap();
-        let subchannels = env.verify_subchannel_creation(&endpoints);
+        let endpoint = create_endpoint(1);
+        env.send_resolver_update(vec![endpoint]).unwrap();
+        let subchannels = env.verify_subchannel_creation(1);
         env.expect_queuing_picker();
         env.send_subchannel_update(&subchannels[0], &SubchannelState::ready());
         env.expect_ready_picker(&subchannels[0]);
@@ -671,9 +672,9 @@ mod test {
     async fn roundrobin_with_multiple_backends_first_backend_is_ready() {
         let mut env = new_env();
 
-        let endpoints = create_endpoints(2);
-        env.send_resolver_update(endpoints.clone()).unwrap();
-        let subchannels = env.verify_subchannel_creation(&endpoints);
+        let endpoint = create_endpoints(2);
+        env.send_resolver_update(endpoint).unwrap();
+        let subchannels = env.verify_subchannel_creation(2);
         env.expect_queuing_picker();
 
         env.send_subchannel_update(&subchannels[0], &SubchannelState::ready());
@@ -712,21 +713,22 @@ mod test {
         let mut env = new_env();
 
         let endpoints = create_endpoints(2);
-        env.send_resolver_update(endpoints.clone()).unwrap();
-        let subchannels = env.verify_subchannel_creation(&endpoints);
+        env.send_resolver_update(endpoints).unwrap();
+        let subchannels = env.verify_subchannel_creation(2);
         env.expect_queuing_picker();
         env.send_subchannel_update(&subchannels[0], &SubchannelState::ready());
         env.expect_ready_picker(&subchannels[0]);
 
         let mut endpoints = create_endpoints(4);
         endpoints.reverse();
-        env.send_resolver_update(endpoints.clone()).unwrap();
+        env.send_resolver_update(endpoints).unwrap();
         // subchannel 0 (1.1.1.1:1) and subchannel 1 (2.2.2.2:1) are retained.
-        // Two new subchannels are created (4.4.4.4:1 and 3.3.3.3:1).
-        let _new_subchannels = env.verify_subchannel_creation(&endpoints[..2]);
+        // Two new subchannels are created (3.3.3.3:1 and 4.4.4.4:1).
+        let _new_subchannels = env.verify_subchannel_creation(2);
         // Subchannel 1 (2.2.2.2:1) is retained but still idle, so it is asked
         // to connect again.  Subchannel 0 is already ready and is left alone.
-        env.expect_connect_to(&subchannels[1].address().address);
+        let connected = env.expect_connect();
+        assert_eq!(connected, subchannels[1].address());
         // RoundRobin sends a new ready picker containing the currently ready
         // subchannel 0.
         env.expect_ready_picker(&subchannels[0]);

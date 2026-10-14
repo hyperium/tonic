@@ -277,7 +277,7 @@ impl<P> TestEnv<P> {
     /// subchannel's address equals `addr`, and returns the subchannel.
     pub(crate) fn expect_new_subchannel_for(&mut self, addr: &str) -> Arc<dyn Subchannel> {
         let sc = self.expect_new_subchannel();
-        assert_eq!(sc.address().address.to_string(), addr);
+        assert_eq!(&*sc.address().address, addr);
         sc
     }
 
@@ -293,8 +293,8 @@ impl<P> TestEnv<P> {
     /// Calls [`Self::expect_connect`] and verifies that the connected
     /// subchannel's address equals `addr`.
     pub(crate) fn expect_connect_to(&mut self, addr: &str) {
-        let connected = self.expect_connect();
-        assert_eq!(connected.address.to_string(), addr);
+        let got = self.expect_connect();
+        assert_eq!(&*got.address, addr);
     }
 
     /// Verifies that the policy produced a new picker, and returns the
@@ -313,7 +313,7 @@ impl<P> TestEnv<P> {
     ///
     /// Prefer the state-specific helpers ([`Self::expect_queuing_picker`],
     /// [`Self::expect_ready_picker`], [`Self::expect_failing_picker`]) when
-    /// testing real pickers. Use this directly when:
+    /// testing pickers without side effects. Use this directly when:
     /// - `want` is [`ConnectivityState::Idle`], where calling [`Picker::pick`]
     ///   has the side effect of initiating connection attempts;
     /// - `want` is [`ConnectivityState::Ready`] with multiple subchannels and
