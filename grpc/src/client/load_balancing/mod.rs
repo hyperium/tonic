@@ -28,6 +28,8 @@ use std::error::Error;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 
 use crate::StatusCodeError;
 use crate::StatusError;
@@ -503,6 +505,32 @@ pub(crate) struct QueuingPicker;
 
 impl Picker for QueuingPicker {
     fn pick(&self, _request: &RequestHeaders) -> PickResult {
+        PickResult::Queue
+    }
+}
+
+// A picker that queues every pick. The first pick also schedules work (with no
+// data) for the policy that published the picker, to wake it up.
+#[derive(Debug)]
+pub(crate) struct WakeUpPicker {
+    work_scheduler: Arc<dyn WorkScheduler>,
+    triggered_work: AtomicBool,
+}
+
+impl WakeUpPicker {
+    pub(crate) fn new(work_scheduler: Arc<dyn WorkScheduler>) -> Self {
+        Self {
+            work_scheduler,
+            triggered_work: AtomicBool::new(false),
+        }
+    }
+}
+
+impl Picker for WakeUpPicker {
+    fn pick(&self, _request: &RequestHeaders) -> PickResult {
+        if !self.triggered_work.swap(true, Ordering::Relaxed) {
+            self.work_scheduler.schedule_work(None);
+        }
         PickResult::Queue
     }
 }
