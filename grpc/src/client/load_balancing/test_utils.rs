@@ -273,6 +273,14 @@ impl<P> TestEnv<P> {
         }
     }
 
+    /// Calls [`Self::expect_new_subchannel`], verifies that the created
+    /// subchannel's address equals `addr`, and returns the subchannel.
+    pub(crate) fn expect_new_subchannel_for(&mut self, addr: &str) -> Arc<dyn Subchannel> {
+        let sc = self.expect_new_subchannel();
+        assert_eq!(&*sc.address().address, addr);
+        sc
+    }
+
     /// Verifies that the policy asked a subchannel to connect, and returns that
     /// subchannel's address.
     pub(crate) fn expect_connect(&mut self) -> Address {
@@ -280,6 +288,13 @@ impl<P> TestEnv<P> {
             TestEvent::Connect(addr) => addr,
             other => panic!("expected Connect event, got {other:?}"),
         }
+    }
+
+    /// Calls [`Self::expect_connect`] and verifies that the connected address
+    /// equals `addr`.
+    pub(crate) fn expect_connect_to(&mut self, addr: &str) {
+        let got = self.expect_connect();
+        assert_eq!(&*got.address, addr);
     }
 
     /// Verifies that the policy produced a new picker, and returns the
