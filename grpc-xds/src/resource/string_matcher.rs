@@ -30,12 +30,17 @@ use super::safe_regex::SafeRegex;
 use crate::generated::envoy::r#type::matcher::v3::StringMatcherView;
 use crate::generated::envoy::r#type::matcher::v3::string_matcher::MatchPatternOneof;
 
-/// An owned `envoy.type.matcher.v3.StringMatcher`.
+/// An owned, validated `envoy.type.matcher.v3.StringMatcher`.
 ///
-/// Constructors reject non-Envoy-spec-compliant values, including
-/// empty prefix, suffix, and contains values.
+/// Opaque so it can only be built through the constructors below, which
+/// reject non-Envoy-spec-compliant values (e.g. empty prefix, suffix, and
+/// contains values). When `ignore_case` is set, literal values are stored
+/// ASCII-lowercased.
 #[derive(Debug, Clone)]
-pub(crate) enum StringMatcher {
+pub(crate) struct StringMatcher(Kind);
+
+#[derive(Debug, Clone)]
+enum Kind {
     Exact { value: String, ignore_case: bool },
     Prefix { value: String, ignore_case: bool },
     Suffix { value: String, ignore_case: bool },
@@ -46,46 +51,51 @@ pub(crate) enum StringMatcher {
 impl StringMatcher {
     /// Matches inputs equal to `value`, ignoring ASCII case if `ignore_case`.
     pub(crate) fn exact(value: impl Into<String>, ignore_case: bool) -> Self {
-        Self::Exact {
-            value: value.into(),
+        Self(Kind::Exact {
+            value: fold_case(value.into(), ignore_case),
             ignore_case,
-        }
+        })
     }
 
     /// Matches inputs starting with `value`, ignoring ASCII case if `ignore_case`.
     ///
     /// Returns a validation error if `value` is empty.
     pub(crate) fn prefix(value: impl Into<String>, ignore_case: bool) -> xds_client::Result<Self> {
-        Ok(Self::Prefix {
-            value: non_empty_match_value(value.into(), "prefix")?,
+        let value = non_empty_match_value(value.into(), "prefix")?;
+        Ok(Self(Kind::Prefix {
+            value: fold_case(value, ignore_case),
             ignore_case,
-        })
+        }))
     }
 
     /// Matches inputs ending with `value`, ignoring ASCII case if `ignore_case`.
     ///
     /// Returns a validation error if `value` is empty.
     pub(crate) fn suffix(value: impl Into<String>, ignore_case: bool) -> xds_client::Result<Self> {
-        Ok(Self::Suffix {
-            value: non_empty_match_value(value.into(), "suffix")?,
+        let value = non_empty_match_value(value.into(), "suffix")?;
+        Ok(Self(Kind::Suffix {
+            value: fold_case(value, ignore_case),
             ignore_case,
-        })
+        }))
     }
 
-    /// Matches inputs containing `value`, ignoring ASCII case if `ignore_case`
-    /// (`value` is then stored ASCII-lowercased).
+    /// Matches inputs containing `value`, ignoring ASCII case if `ignore_case`.
     ///
     /// Returns a validation error if `value` is empty.
     pub(crate) fn contains(
         value: impl Into<String>,
         ignore_case: bool,
     ) -> xds_client::Result<Self> {
-        let mut value = non_empty_match_value(value.into(), "contains")?;
-        if ignore_case {
-            // Folded once here so matching is a linear search over the folded input.
-            value.make_ascii_lowercase();
-        }
-        Ok(Self::Contains { value, ignore_case })
+        let value = non_empty_match_value(value.into(), "contains")?;
+        Ok(Self(Kind::Contains {
+            value: fold_case(value, ignore_case),
+            ignore_case,
+        }))
+    }
+
+    /// Matches inputs that `regex` matches in full.
+    pub(crate) fn safe_regex(regex: SafeRegex) -> Self {
+        Self(Kind::SafeRegex(regex))
     }
 
     /// Parses and validates an `envoy.type.matcher.v3.StringMatcher`.
@@ -134,7 +144,7 @@ impl StringMatcher {
                 let pattern = pattern
                     .to_str()
                     .expect("string matcher regex should be valid UTF-8");
-                Ok(Self::SafeRegex(pattern.parse().map_err(|e| {
+                Ok(Self::safe_regex(pattern.parse().map_err(|e| {
                     Error::Validation(format!("invalid string matcher regex '{pattern}': {e}"))
                 })?))
             }
@@ -150,38 +160,47 @@ impl StringMatcher {
     /// Returns whether `input` matches. Literal values are compared verbatim
     /// (`*` is not a wildcard); regexes must match the entire input.
     pub(crate) fn is_match(&self, input: &str) -> bool {
-        match self {
-            Self::Exact { value, ignore_case } => {
+        match &self.0 {
+            Kind::Exact { value, ignore_case } => {
                 if *ignore_case {
                     input.eq_ignore_ascii_case(value)
                 } else {
                     input == value
                 }
             }
-            Self::Prefix { value, ignore_case } => {
+            Kind::Prefix { value, ignore_case } => {
                 if *ignore_case {
                     starts_with_ignore_ascii_case(input, value)
                 } else {
                     input.starts_with(value)
                 }
             }
-            Self::Suffix { value, ignore_case } => {
+            Kind::Suffix { value, ignore_case } => {
                 if *ignore_case {
                     ends_with_ignore_ascii_case(input, value)
                 } else {
                     input.ends_with(value)
                 }
             }
-            Self::Contains { value, ignore_case } => {
+            Kind::Contains { value, ignore_case } => {
                 if *ignore_case {
+                    // `value` is already folded, so a linear search over the
+                    // folded input suffices.
                     input.to_ascii_lowercase().contains(value.as_str())
                 } else {
                     input.contains(value.as_str())
                 }
             }
-            Self::SafeRegex(regex) => regex.is_match(input),
+            Kind::SafeRegex(regex) => regex.is_match(input),
         }
     }
+}
+
+fn fold_case(mut value: String, ignore_case: bool) -> String {
+    if ignore_case {
+        value.make_ascii_lowercase();
+    }
+    value
 }
 
 fn non_empty_match_value(value: String, kind: &str) -> xds_client::Result<String> {
@@ -371,6 +390,37 @@ mod tests {
                         "{kind}"
                     );
                 }
+            }
+        }
+    }
+
+    #[test]
+    fn literal_values_are_stored_folded_only_when_ignoring_case() {
+        for ignore_case in [false, true] {
+            let expected = if ignore_case { "f\u{c9}o" } else { "F\u{c9}o" };
+            for (kind, matcher) in [
+                ("exact", StringMatcher::exact("F\u{c9}o", ignore_case)),
+                (
+                    "prefix",
+                    StringMatcher::prefix("F\u{c9}o", ignore_case).unwrap(),
+                ),
+                (
+                    "suffix",
+                    StringMatcher::suffix("F\u{c9}o", ignore_case).unwrap(),
+                ),
+                (
+                    "contains",
+                    StringMatcher::contains("F\u{c9}o", ignore_case).unwrap(),
+                ),
+            ] {
+                let (Kind::Exact { value, .. }
+                | Kind::Prefix { value, .. }
+                | Kind::Suffix { value, .. }
+                | Kind::Contains { value, .. }) = &matcher.0
+                else {
+                    panic!("{kind}: expected a literal matcher");
+                };
+                assert_eq!(value, expected, "{kind}");
             }
         }
     }

@@ -378,7 +378,7 @@ fn validate_header_matcher(hm: HeaderMatcherView<'_>) -> xds_client::Result<Head
             let pattern = pattern
                 .to_str()
                 .expect("header regex should be valid UTF-8");
-            HeaderMatchSpecifier::String(StringMatcher::SafeRegex(pattern.parse().map_err(
+            HeaderMatchSpecifier::String(StringMatcher::safe_regex(pattern.parse().map_err(
                 |e| Error::Validation(format!("invalid header regex '{pattern}': {e}")),
             )?))
         }
@@ -1000,13 +1000,12 @@ mod tests {
         header.set_name("x-tenant");
         header.set_prefix_match("prod-");
 
-        assert!(matches!(
-            validate_header(header),
-            HeaderMatchSpecifier::String(StringMatcher::Prefix {
-                value,
-                ignore_case: false,
-            }) if value == "prod-"
-        ));
+        let HeaderMatchSpecifier::String(matcher) = validate_header(header) else {
+            panic!("expected a string matcher");
+        };
+        assert!(matcher.is_match("prod-east"));
+        assert!(!matcher.is_match("PROD-east"));
+        assert!(!matcher.is_match("east-prod-"));
     }
 
     #[test]
@@ -1015,13 +1014,12 @@ mod tests {
         header.set_name("x-tenant");
         header.set_suffix_match("-canary");
 
-        assert!(matches!(
-            validate_header(header),
-            HeaderMatchSpecifier::String(StringMatcher::Suffix {
-                value,
-                ignore_case: false,
-            }) if value == "-canary"
-        ));
+        let HeaderMatchSpecifier::String(matcher) = validate_header(header) else {
+            panic!("expected a string matcher");
+        };
+        assert!(matcher.is_match("east-canary"));
+        assert!(!matcher.is_match("east-CANARY"));
+        assert!(!matcher.is_match("-canary-east"));
     }
 
     #[test]
@@ -1030,13 +1028,12 @@ mod tests {
         header.set_name("x-tenant");
         header.set_contains_match("staging");
 
-        assert!(matches!(
-            validate_header(header),
-            HeaderMatchSpecifier::String(StringMatcher::Contains {
-                value,
-                ignore_case: false,
-            }) if value == "staging"
-        ));
+        let HeaderMatchSpecifier::String(matcher) = validate_header(header) else {
+            panic!("expected a string matcher");
+        };
+        assert!(matcher.is_match("east-staging-1"));
+        assert!(!matcher.is_match("east-STAGING-1"));
+        assert!(!matcher.is_match("east-stag"));
     }
 
     #[test]
