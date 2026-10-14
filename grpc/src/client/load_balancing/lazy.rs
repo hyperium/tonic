@@ -24,15 +24,20 @@
 
 use std::mem::replace;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 
 use crate::client::ConnectivityState;
+use crate::client::RequestHeaders;
 use crate::client::load_balancing::ChannelController;
 use crate::client::load_balancing::LbPolicy;
 use crate::client::load_balancing::LbPolicyBuilder;
 use crate::client::load_balancing::LbPolicyOptions;
 use crate::client::load_balancing::LbState;
-use crate::client::load_balancing::WakeUpPicker;
+use crate::client::load_balancing::PickResult;
+use crate::client::load_balancing::Picker;
 use crate::client::load_balancing::WorkData;
+use crate::client::load_balancing::WorkScheduler;
 use crate::client::name_resolution::ResolverUpdate;
 
 /// Implements a "lazy" [`LbPolicy`].  Normally LB policies begin in a
@@ -147,12 +152,36 @@ where
     }
 }
 
+/// Implements a [`Picker`] that schedules work for the current policy (intended
+/// to wake up the wrapped delegate policy) and queues every RPC.
+#[derive(Debug)]
+pub struct WakeUpPicker {
+    work_scheduler: Arc<dyn WorkScheduler>,
+    triggered_work: AtomicBool,
+}
+
+impl WakeUpPicker {
+    fn new(work_scheduler: Arc<dyn WorkScheduler>) -> Self {
+        Self {
+            work_scheduler,
+            triggered_work: AtomicBool::new(false),
+        }
+    }
+}
+
+impl Picker for WakeUpPicker {
+    fn pick(&self, request: &RequestHeaders) -> PickResult {
+        if !self.triggered_work.swap(true, Ordering::Relaxed) {
+            self.work_scheduler.schedule_work(None);
+        }
+        PickResult::Queue
+    }
+}
 #[cfg(test)]
 mod tests {
     use std::sync::mpsc;
 
     use super::*;
-    use crate::client::load_balancing::PickResult;
     use crate::client::load_balancing::test_utils::TestEnv;
     use crate::client::load_balancing::test_utils::new_request_headers;
     use crate::rt::default_runtime;

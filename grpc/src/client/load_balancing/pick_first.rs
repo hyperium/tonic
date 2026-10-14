@@ -44,7 +44,6 @@ use crate::client::load_balancing::Pick;
 use crate::client::load_balancing::PickResult;
 use crate::client::load_balancing::Picker;
 use crate::client::load_balancing::QueuingPicker;
-use crate::client::load_balancing::WakeUpPicker;
 use crate::client::load_balancing::WorkData;
 use crate::client::load_balancing::WorkScheduler;
 use crate::client::load_balancing::subchannel::Subchannel;
@@ -202,7 +201,7 @@ impl PickFirstPolicy {
         self.selected = None;
         self.update_picker(
             ConnectivityState::Idle,
-            Arc::new(WakeUpPicker::new(self.work_scheduler.clone())),
+            Arc::new(IdlePicker::new(self.work_scheduler.clone())),
             channel_controller,
         );
     }
@@ -587,23 +586,26 @@ impl LbPolicy for PickFirstPolicy {
 
     fn work(&mut self, data: Option<WorkData>, channel_controller: &mut dyn ChannelController) {
         if let Some(data) = data {
-            // If data is set, it should be a subchannel update.
-            match data.downcast::<SubchannelUpdate>() {
+            let data = match data.downcast::<SubchannelUpdate>() {
                 Ok(update) => {
                     self.subchannel_update(update.subchannel, &update.state, channel_controller);
+                    return;
                 }
-                Err(data) => debug_assert!(
-                    false,
-                    "work called with {data:?}; expected a SubchannelUpdate"
-                ),
+                Err(data) => data,
+            };
+            if data.downcast_ref::<LeaveIdle>().is_some() {
+                if self.connectivity_state == ConnectivityState::Idle {
+                    self.exit_idle(channel_controller);
+                }
+                return;
             }
+            debug_assert!(
+                false,
+                "work called with {data:?}; expected a SubchannelUpdate or LeaveIdle"
+            );
             return;
         }
-        if self.connectivity_state == ConnectivityState::Idle {
-            // TODO: is it safe to assume any call to work() while idle means we
-            // should connect?
-            self.exit_idle(channel_controller);
-        } else if self.timer.as_ref().is_some_and(|t| t.expired()) {
+        if self.timer.as_ref().is_some_and(|t| t.expired()) {
             // Advance frontier and trigger next connection.
             if let Some(next_sc) = self.advance_frontier(false) {
                 self.trigger_subchannel_connection(next_sc, channel_controller);
@@ -660,6 +662,34 @@ impl Picker for OneSubchannelPicker {
             metadata: MetadataMap::new(),
             on_complete: None,
         })
+    }
+}
+
+// Work data sent by `IdlePicker` on its first pick to exit IDLE.
+#[derive(Debug)]
+struct LeaveIdle;
+
+#[derive(Debug)]
+struct IdlePicker {
+    triggered_work: AtomicBool,
+    work_scheduler: Arc<dyn WorkScheduler>,
+}
+
+impl IdlePicker {
+    fn new(work_scheduler: Arc<dyn WorkScheduler>) -> Self {
+        Self {
+            triggered_work: AtomicBool::new(false),
+            work_scheduler,
+        }
+    }
+}
+
+impl Picker for IdlePicker {
+    fn pick(&self, _: &RequestHeaders) -> PickResult {
+        if !self.triggered_work.swap(true, Ordering::Relaxed) {
+            self.work_scheduler.schedule_work(Some(Box::new(LeaveIdle)));
+        }
+        PickResult::Queue
     }
 }
 
@@ -1430,8 +1460,8 @@ mod test {
     }
 
     // Tests that when a selected subchannel disconnects (transitions to Idle),
-    // the policy reports an Idle state and uses a WakeUpPicker.
-    // When an RPC occurs, the WakeUpPicker schedules work, and the policy
+    // the policy reports an Idle state and uses an IdlePicker.
+    // When an RPC occurs, the IdlePicker schedules work, and the policy
     // reconnects when the work scheduler runs.
     #[tokio::test]
     async fn test_pick_first_disconnect_to_idle_and_reconnect() {
