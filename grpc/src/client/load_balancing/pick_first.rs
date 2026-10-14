@@ -745,7 +745,7 @@ impl SteadyState {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::call_attributes::CallAttributes;
+    use crate::client::CallOptions;
     use crate::client::RequestHeaders;
     use crate::client::load_balancing::test_utils::TestEnv;
     use crate::client::load_balancing::test_utils::TestEvent;
@@ -862,7 +862,7 @@ mod test {
         assert_eq!(state.connectivity_state, ConnectivityState::Ready);
         let res = state.picker.pick(PickOptions::new(
             &RequestHeaders::default(),
-            &CallAttributes::new(),
+            &CallOptions::new(),
         ));
         match res {
             PickResult::Pick(pick) => {
@@ -1253,7 +1253,7 @@ mod test {
         assert_eq!(state.connectivity_state, ConnectivityState::Ready);
         let res = state.picker.pick(PickOptions::new(
             &RequestHeaders::default(),
-            &CallAttributes::new(),
+            &CallOptions::new(),
         ));
         match res {
             PickResult::Pick(pick) => {
@@ -1474,7 +1474,7 @@ mod test {
         assert_eq!(state.connectivity_state, ConnectivityState::Ready);
         let res = state.picker.pick(PickOptions::new(
             &RequestHeaders::default(),
-            &CallAttributes::new(),
+            &CallOptions::new(),
         ));
         let sc1 = match res {
             PickResult::Pick(pick) => {
@@ -1504,7 +1504,7 @@ mod test {
         // 4. Simulate an RPC (pick) happening.
         let pick_result = idle_picker.pick(PickOptions::new(
             &RequestHeaders::default(),
-            &CallAttributes::new(),
+            &CallOptions::new(),
         ));
         assert!(matches!(pick_result, PickResult::Queue));
 

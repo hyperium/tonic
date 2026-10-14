@@ -123,5 +123,5 @@ name = "metadata"
 harness = false
 
 [[bench]]
-name = "call_attributes"
+name = "call_options"
 harness = false

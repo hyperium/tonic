@@ -49,14 +49,15 @@
 //!   trailers received from the server during its response.
 
 use std::fmt::Display;
-use std::time::Instant;
 
 use crate::async_trait;
-use crate::call_attributes::CallAttributes;
 use crate::core::ConnectionInfo;
 use crate::core::RecvMessage;
 use crate::core::SendMessage;
 use crate::metadata::MetadataMap;
+
+mod call_options;
+pub use call_options::CallOptions;
 
 mod channel;
 pub use channel::Channel;
@@ -108,41 +109,6 @@ impl Display for ConnectivityState {
             ConnectivityState::Ready => write!(f, "Ready"),
             ConnectivityState::TransientFailure => write!(f, "TransientFailure"),
         }
-    }
-}
-
-/// Settings to configure RPCs sent using the [`Invoke`] trait.
-///
-/// Most applications will not need this type, and will set options via the
-/// generated (e.g. protobuf) APIs instead.
-#[derive(Default, Clone)]
-#[non_exhaustive]
-pub struct CallOptions {
-    /// The deadline for the call.  If unset, the call may run indefinitely.
-    deadline: Option<Instant>,
-    attributes: CallAttributes,
-}
-
-impl CallOptions {
-    /// Constructs a new [`CallOptions`] with the default settings.
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Applies a deadline to the call; when the deadline is reached, the call
-    /// is cancelled.
-    pub fn set_deadline(&mut self, deadline: Instant) {
-        self.deadline = Some(deadline);
-    }
-
-    /// Reads the deadline currently set in the [`CallOptions`].
-    pub fn deadline(&self) -> Option<Instant> {
-        self.deadline
-    }
-
-    /// Returns a reference to the attributes of the call.
-    pub(crate) fn attributes(&self) -> &CallAttributes {
-        &self.attributes
     }
 }
 

@@ -363,9 +363,7 @@ impl Invoke for Arc<ActiveChannel> {
                     None,
                 );
             };
-            let result = state
-                .picker
-                .pick(PickOptions::new(&headers, options.attributes()));
+            let result = state.picker.pick(PickOptions::new(&headers, &options));
             match result {
                 PickResult::Pick(pr) => {
                     if let Some(sc) = pr.subchannel.downcast_ref::<InternalSubchannel>() {
