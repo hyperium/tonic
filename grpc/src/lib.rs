@@ -103,6 +103,23 @@ pub mod __unstable {
     }
 }
 
+/// Implementation details shared with other grpc crates.
+///
+/// Unlike `__unstable`, which holds APIs intended to become public eventually,
+/// everything here is permanently internal: it is not part of the public API,
+/// has no semver guarantees, and may change or be removed at any time.
+#[cfg(feature = "__internal")]
+#[doc(hidden)]
+pub mod __internal {
+    pub mod client {
+        pub mod name_resolution {
+            pub mod config_selector {
+                pub use crate::client::name_resolution::config_selector::*;
+            }
+        }
+    }
+}
+
 mod private {
     /// A zero-sized type used to seal methods on a public trait.
     ///

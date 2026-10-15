@@ -53,6 +53,9 @@ tls-rustls = [
     "dep:rustls-webpki",
 ]
 __unstable = []
+# Exposes implementation details shared with other grpc crates under
+# `grpc::__internal`. Not public API: no semver guarantees.
+__internal = []
 gzip = ["dep:flate2"]
 
 [dependencies]

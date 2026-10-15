@@ -47,11 +47,9 @@ pub struct RpcConfig {}
 pub struct SelectConfigOptions<'a> {
     /// The headers of the request.
     pub request_headers: &'a RequestHeaders,
-    /// The options of the call.  Unlike
-    /// [`PickOptions`](crate::client::load_balancing::PickOptions), config
-    /// selectors may modify them, e.g. to attach per-RPC state via
-    /// [`CallOptions::set_option`] for later stages (such as the picker) to
-    /// read.
+    /// The options of the call.  Config selectors may modify them, e.g. to
+    /// attach per-RPC state via [`CallOptions::set_option`] for later stages
+    /// (such as the picker) to read.
     pub call_options: &'a mut CallOptions,
 }
 
@@ -68,7 +66,7 @@ impl<'a> SelectConfigOptions<'a> {
 /// Controls what configuration to use for every RPC.
 ///
 /// A `ConfigSelector` is supplied by a name resolver through the attributes of
-/// a [`ResolverUpdate`] and is consulted by the channel once per RPC.
+/// a `ResolverUpdate` and is consulted by the channel once per RPC.
 pub trait ConfigSelector: Send + Sync + Debug {
     /// Selects the configuration for the RPC, or terminates it with the
     /// returned error.

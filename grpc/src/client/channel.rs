@@ -366,18 +366,10 @@ impl Invoke for Arc<ActiveChannel> {
         headers: RequestHeaders,
         mut options: CallOptions,
     ) -> (Self::SendStream, Self::RecvStream) {
-        let config = match self
+        let config = self
             .config_selector
-            .try_select_config(&headers, &mut options)
-        {
-            Some(config) => config,
-            // Only until the resolver produces its first result.
-            None => {
-                self.config_selector
-                    .wait_and_select_config(&headers, &mut options)
-                    .await
-            }
-        };
+            .select_config(SelectConfigOptions::new(&headers, &mut options))
+            .await;
         if let Err(status) = config {
             return FailingRecvStream::new_stream_pair(status, None);
         }
@@ -669,42 +661,19 @@ impl SharedConfigSelector {
         }
     }
 
-    /// Selects the configuration for an RPC, or returns `None` if the resolver
-    /// has not produced a result yet.
-    fn try_select_config(
+    /// Waits for the resolver's first result, then selects the configuration
+    /// for an RPC using `current`.
+    async fn select_config(
         &self,
-        headers: &RequestHeaders,
-        call_opts: &mut CallOptions,
-    ) -> Option<Result<RpcConfig, StatusError>> {
-        if !self.inner.resolved.initialized() {
-            return None;
-        }
-        Some(self.select_config(headers, call_opts))
-    }
-
-    /// Waits for the resolver's first result, then selects the configuration.
-    async fn wait_and_select_config(
-        &self,
-        headers: &RequestHeaders,
-        call_opts: &mut CallOptions,
+        options: SelectConfigOptions<'_>,
     ) -> Result<RpcConfig, StatusError> {
         // Returns immediately if `resolved` is already set. `SetOnce` stays
         // set, so an `update` that races with this call can't be missed.
         self.inner.resolved.wait().await;
-        self.select_config(headers, call_opts)
-    }
-
-    /// Selects the configuration using `current`. Callers must first check
-    /// that the resolver has produced a result.
-    fn select_config(
-        &self,
-        headers: &RequestHeaders,
-        attributes: &mut CallOptions,
-    ) -> Result<RpcConfig, StatusError> {
         self.inner
             .current
             .load()
-            .select_config(SelectConfigOptions::new(headers, attributes))
+            .select_config(options)
             .map_err(sanitize_config_selector_status)
     }
 
