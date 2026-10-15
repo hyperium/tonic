@@ -434,8 +434,19 @@ where
 
     /// Calls exit_idle on all children.
     pub fn exit_idle(&mut self, channel_controller: &mut dyn ChannelController) {
+        self.exit_idle_filtered(channel_controller, |_| true);
+    }
+
+    /// Calls exit_idle on the children for which `filter` returns true.
+    pub fn exit_idle_filtered(
+        &mut self,
+        channel_controller: &mut dyn ChannelController,
+        mut filter: impl FnMut(&Child<B::LbPolicy>) -> bool,
+    ) {
         for (_, child) in &mut self.children {
-            child.exit_idle(channel_controller);
+            if filter(child) {
+                child.exit_idle(channel_controller);
+            }
         }
     }
 }
@@ -774,6 +785,55 @@ mod test {
             env.policy.aggregate_states(),
             ConnectivityState::TransientFailure
         );
+    }
+
+    // Tests that exit_idle_filtered calls exit_idle only on the children for
+    // which the filter returns true, and that exit_idle calls it on all
+    // children.
+    #[test]
+    fn childmanager_exit_idle_filtered_calls_only_matching_children() {
+        let test_name = "stub-childmanager_exit_idle_filtered_calls_only_matching_children";
+        let exit_idle_calls = Arc::new(Mutex::new(Vec::<Endpoint>::new()));
+        let calls = exit_idle_calls.clone();
+        let funcs = StubPolicyFuncs {
+            // Creates one subchannel for the child's only endpoint and
+            // remembers the endpoint so exit_idle can report which child it is.
+            resolver_update: Some(Arc::new(
+                move |data, update: ResolverUpdate, _, controller| {
+                    let endpoint = update.endpoints.unwrap().pop().unwrap();
+                    controller.new_subchannel(
+                        &endpoint.addresses[0],
+                        data.lb_policy_options.work_scheduler.clone(),
+                    );
+                    data.test_data = Some(Box::new(endpoint));
+                    Ok(())
+                },
+            )),
+            exit_idle: Some(Arc::new(move |data, _controller| {
+                let endpoint = data.test_data.as_ref().unwrap().downcast_ref::<Endpoint>();
+                calls.lock().unwrap().push(endpoint.unwrap().clone());
+            })),
+            work: create_verifying_funcs_for_aggregate_tests().work,
+        };
+        let mut env = new_env(funcs, test_name);
+        let builder: Arc<DynLbPolicyBuilder> = GLOBAL_LB_REGISTRY.get_policy(test_name).unwrap();
+
+        let endpoints = create_n_endpoints_with_k_addresses(3, 1);
+        env.send_resolver_update(endpoints.clone(), builder)
+            .unwrap();
+        let subchannels = env.verify_subchannel_creation(endpoints.len());
+        env.send_subchannel_update(&subchannels[0], &SubchannelState::ready());
+        env.send_subchannel_update(&subchannels[1], &SubchannelState::idle());
+        env.send_subchannel_update(&subchannels[2], &SubchannelState::transient_failure("n/a"));
+
+        env.policy.exit_idle_filtered(&mut env.tcc, |child| {
+            child.state().connectivity_state == ConnectivityState::Idle
+        });
+        assert_eq!(*exit_idle_calls.lock().unwrap(), [endpoints[1].clone()]);
+
+        exit_idle_calls.lock().unwrap().clear();
+        env.policy.exit_idle(&mut env.tcc);
+        assert_eq!(*exit_idle_calls.lock().unwrap(), endpoints);
     }
 
     struct ScheduleWorkStubData {
