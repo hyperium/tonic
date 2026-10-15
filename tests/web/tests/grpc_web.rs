@@ -40,7 +40,6 @@ use tonic::transport::Server;
 
 use test_web::pb::{test_server::TestServer, Input, Output};
 use test_web::Svc;
-use tonic::Status;
 use tonic_web::GrpcWebLayer;
 
 #[tokio::test]
@@ -153,9 +152,7 @@ fn build_request(base_uri: String, content_type: &str, accept: &str) -> Request<
         .header(ORIGIN, "http://example.com")
         .header(ACCEPT, format!("application/{accept}"))
         .uri(request_uri)
-        .body(Body::new(
-            Full::new(bytes).map_err(|err| Status::internal(err.to_string())),
-        ))
+        .body(Body::new(Full::new(bytes)))
         .unwrap()
 }
 

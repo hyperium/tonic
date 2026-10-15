@@ -29,7 +29,6 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 
 use crate::client::ConnectivityState;
-use crate::client::RequestHeaders;
 use crate::client::load_balancing::ChannelController;
 use crate::client::load_balancing::FailingPicker;
 use crate::client::load_balancing::GLOBAL_LB_REGISTRY;
@@ -37,6 +36,7 @@ use crate::client::load_balancing::LbPolicy;
 use crate::client::load_balancing::LbPolicyBuilder;
 use crate::client::load_balancing::LbPolicyOptions;
 use crate::client::load_balancing::LbState;
+use crate::client::load_balancing::PickOptions;
 use crate::client::load_balancing::PickResult;
 use crate::client::load_balancing::Picker;
 use crate::client::load_balancing::WorkData;
@@ -112,8 +112,9 @@ impl RoundRobinPolicy {
         let pickers = self
             .child_manager
             .children()
-            .filter(|cs| cs.state.connectivity_state == aggregate_state)
-            .map(|cs| cs.state.picker.clone())
+            .map(|(_, child)| child.state())
+            .filter(|state| state.connectivity_state == aggregate_state)
+            .map(|state| state.picker.clone())
             .collect();
         let picker_update = LbState {
             connectivity_state: aggregate_state,
@@ -226,10 +227,10 @@ impl RoundRobinPicker {
 }
 
 impl Picker for RoundRobinPicker {
-    fn pick(&self, request_headers: &RequestHeaders) -> PickResult {
+    fn pick(&self, options: PickOptions<'_>) -> PickResult {
         let len = self.pickers.len();
         let idx = self.next.fetch_add(1, Ordering::Relaxed) % len;
-        self.pickers[idx].pick(request_headers)
+        self.pickers[idx].pick(options)
     }
 }
 
@@ -238,7 +239,7 @@ mod test {
     use std::panic;
 
     use super::*;
-    use crate::StatusCodeError;
+    use crate::client::CallOptions;
     use crate::client::load_balancing::subchannel::Subchannel;
     use crate::client::load_balancing::subchannel::SubchannelState;
     use crate::client::load_balancing::test_utils;
@@ -315,95 +316,19 @@ mod test {
             subchannels
         }
 
-        // Verifies that the channel moves to CONNECTING state with a queuing
-        // picker.
-        //
-        // Returns the picker for tests to make more picks, if required.
-        fn verify_connecting_picker(&mut self) -> Arc<dyn Picker> {
-            println!("verify connecting picker");
-            let update = self.expect_picker_update();
-            println!("connectivity state is {}", update.connectivity_state);
-            assert!(update.connectivity_state == ConnectivityState::Connecting);
-            let req = test_utils::new_request_headers();
-            assert!(update.picker.pick(&req) == PickResult::Queue);
-            update.picker
-        }
-
-        // Verifies that the channel moves to READY state with a picker that
-        // returns the given subchannel.
-        //
-        // Returns the picker for tests to make more picks, if required.
-        fn verify_ready_picker(&mut self, subchannel: Arc<dyn Subchannel>) -> Arc<dyn Picker> {
-            println!("verify ready picker");
-            let update = self.expect_picker_update();
-
-            println!(
-                "connectivity state for ready picker is {}",
-                update.connectivity_state
-            );
-            assert_eq!(update.connectivity_state, ConnectivityState::Ready);
-
-            let req = test_utils::new_request_headers();
-            let PickResult::Pick(pick) = update.picker.pick(&req) else {
-                panic!("unexpected pick result");
-            };
-
-            println!("selected subchannel is {}", pick.subchannel);
-            println!("should've been selected subchannel is {}", subchannel);
-            assert_eq!(&pick.subchannel, &subchannel);
-
-            update.picker
-        }
-
         // Returns the picker for when there are multiple pickers in the ready
         // picker.
         fn verify_roundrobin_ready_picker(&mut self) -> Arc<dyn Picker> {
-            println!("verify ready picker");
-            let update = self.expect_picker_update();
-
-            println!(
-                "connectivity state for ready picker is {}",
-                update.connectivity_state
-            );
-            assert_eq!(update.connectivity_state, ConnectivityState::Ready);
-
-            let req = test_utils::new_request_headers();
-            let result = update.picker.pick(&req);
+            let picker = self.expect_picker_state(ConnectivityState::Ready);
+            let result = picker.pick(PickOptions::new(
+                &test_utils::new_request_headers(),
+                &CallOptions::new(),
+            ));
             assert!(
                 matches!(result, PickResult::Pick(_)),
                 "unexpected pick result {result:?}"
             );
-
-            update.picker
-        }
-
-        // Verifies that the channel moves to TRANSIENT_FAILURE state with a
-        // picker that returns an error with the given message. The error code
-        // should be UNAVAILABLE..
-        //
-        // Returns the picker for tests to make more picks, if required.
-        fn verify_transient_failure_picker(&mut self, want_error: String) -> Arc<dyn Picker> {
-            let update = self.expect_picker_update();
-
-            assert_eq!(
-                update.connectivity_state,
-                ConnectivityState::TransientFailure
-            );
-
-            let req = test_utils::new_request_headers();
-            let PickResult::Fail(status) = update.picker.pick(&req) else {
-                panic!("unexpected pick result");
-            };
-
-            assert_eq!(status.code(), StatusCodeError::Unavailable);
-            assert!(
-                status.message().contains(&want_error),
-                "expected error message to contain {:?}, got {:?}",
-                want_error,
-                status.message()
-            );
-
-            update.picker
+            picker
         }
     }
 
@@ -414,8 +339,8 @@ mod test {
     async fn roundrobin_resolver_error_before_a_valid_update() {
         let mut env = new_env();
         let resolver_error = String::from("resolver error");
-        assert!(env.send_resolver_error(resolver_error.clone()).is_err());
-        env.verify_transient_failure_picker(resolver_error);
+        assert!(env.send_resolver_error(resolver_error).is_err());
+        env.expect_failing_picker("Received error from name resolver: resolver error");
     }
 
     // Tests the scenario where the resolver returns an error after a valid update
@@ -427,16 +352,16 @@ mod test {
         let endpoint = create_endpoint(1);
         env.send_resolver_update(vec![endpoint]).unwrap();
         let subchannels = env.verify_subchannel_creation(1);
-        env.verify_connecting_picker();
+        env.expect_queuing_picker();
 
         env.send_subchannel_update(&subchannels[0], &SubchannelState::ready());
-        let picker = env.verify_ready_picker(subchannels[0].clone());
+        let picker = env.expect_ready_picker(&subchannels[0]);
         let resolver_error = String::from("resolver error");
         assert!(env.send_resolver_error(resolver_error.clone()).is_err());
         env.expect_no_events();
 
         let req = test_utils::new_request_headers();
-        match picker.pick(&req) {
+        match picker.pick(PickOptions::new(&req, &CallOptions::new())) {
             PickResult::Pick(pick) => {
                 assert!(pick.subchannel == subchannels[0].clone());
             }
@@ -454,7 +379,7 @@ mod test {
         let endpoint = create_endpoint(1);
         env.send_resolver_update(vec![endpoint]).unwrap();
         env.verify_subchannel_creation(1);
-        let picker = env.verify_connecting_picker();
+        let picker = env.expect_queuing_picker();
 
         let resolver_error = String::from("resolver error");
 
@@ -463,7 +388,7 @@ mod test {
         env.expect_no_events();
 
         let req = test_utils::new_request_headers();
-        match picker.pick(&req) {
+        match picker.pick(PickOptions::new(&req, &CallOptions::new())) {
             PickResult::Queue => {}
             other => panic!("unexpected pick result {}", other),
         }
@@ -479,15 +404,15 @@ mod test {
         let endpoint = create_endpoint(1);
         env.send_resolver_update(vec![endpoint]).unwrap();
         let subchannels = env.verify_subchannel_creation(1);
-        env.verify_connecting_picker();
+        env.expect_queuing_picker();
         let connection_error = String::from("test connection error");
         env.move_subchannel_to_transient_failure(&subchannels[0], &connection_error);
         env.expect_request_resolution();
-        env.verify_transient_failure_picker(connection_error);
+        env.expect_failing_picker(&connection_error);
         let resolver_error = String::from("resolver error");
         assert!(env.send_resolver_error(resolver_error.clone()).is_err());
         env.expect_request_resolution();
-        env.verify_transient_failure_picker(resolver_error);
+        env.expect_failing_picker(&resolver_error);
     }
 
     // Round Robin should round robin across endpoints.
@@ -497,15 +422,15 @@ mod test {
         let endpoints = create_endpoints(2);
         env.send_resolver_update(endpoints).unwrap();
         let subchannels = env.verify_subchannel_creation(2);
-        env.verify_connecting_picker();
+        env.expect_queuing_picker();
         env.send_subchannel_update(&subchannels[0], &SubchannelState::ready());
-        env.verify_ready_picker(subchannels[0].clone());
+        env.expect_ready_picker(&subchannels[0]);
         env.send_subchannel_update(&subchannels[1], &SubchannelState::ready());
         let picker = env.verify_roundrobin_ready_picker();
         let req = test_utils::new_request_headers();
         let mut picked = Vec::new();
         for _ in 0..4 {
-            match picker.pick(&req) {
+            match picker.pick(PickOptions::new(&req, &CallOptions::new())) {
                 PickResult::Pick(pick) => {
                     println!("picked subchannel is {}", pick.subchannel);
                     picked.push(pick.subchannel.clone());
@@ -532,11 +457,11 @@ mod test {
         let endpoints = create_endpoints(2);
         env.send_resolver_update(endpoints).unwrap();
         let _subchannels = env.verify_subchannel_creation(2);
-        env.verify_connecting_picker();
+        env.expect_queuing_picker();
 
         assert!(env.send_resolver_update(vec![]).is_err());
         let want_error = "Received empty address list from the name resolver";
-        env.verify_transient_failure_picker(want_error.to_string());
+        env.expect_failing_picker(want_error);
         env.expect_request_resolution();
     }
 
@@ -549,15 +474,15 @@ mod test {
         let endpoints = create_endpoints(2);
         env.send_resolver_update(endpoints).unwrap();
         let subchannels = env.verify_subchannel_creation(2);
-        env.verify_connecting_picker();
+        env.expect_queuing_picker();
         env.send_subchannel_update(&subchannels[0], &SubchannelState::ready());
-        let _picker = env.verify_ready_picker(subchannels[0].clone());
+        let _picker = env.expect_ready_picker(&subchannels[0]);
         env.send_subchannel_update(&subchannels[1], &SubchannelState::ready());
         let picker = env.verify_roundrobin_ready_picker();
         let req = test_utils::new_request_headers();
         let mut picked = Vec::new();
         for _ in 0..4 {
-            match picker.pick(&req) {
+            match picker.pick(PickOptions::new(&req, &CallOptions::new())) {
                 PickResult::Pick(pick) => {
                     println!("picked subchannel is {}", pick.subchannel);
                     picked.push(pick.subchannel.clone());
@@ -583,7 +508,7 @@ mod test {
         let req = test_utils::new_request_headers();
         let mut picked = Vec::new();
         for _ in 0..4 {
-            match new_picker.pick(&req) {
+            match new_picker.pick(PickOptions::new(&req, &CallOptions::new())) {
                 PickResult::Pick(pick) => {
                     println!("picked subchannel is {}", pick.subchannel);
                     picked.push(pick.subchannel.clone());
@@ -629,7 +554,7 @@ mod test {
 
         // Start with two subchannels created
         let all_subchannels = env.verify_subchannel_creation(2);
-        env.verify_connecting_picker();
+        env.expect_queuing_picker();
         let subchannel_one = all_subchannels
             .iter()
             .find(|sc| sc.address().address == "subchannel_one".to_string().into())
@@ -640,14 +565,14 @@ mod test {
             .unwrap();
 
         env.send_subchannel_update(subchannel_one, &SubchannelState::ready());
-        env.verify_ready_picker(subchannel_one.clone());
+        env.expect_ready_picker(subchannel_one);
         env.send_subchannel_update(subchannel_two, &SubchannelState::ready());
         let picker = env.verify_roundrobin_ready_picker();
 
         let req = test_utils::new_request_headers();
         let mut picked = Vec::new();
         for _ in 0..4 {
-            match picker.pick(&req) {
+            match picker.pick(PickOptions::new(&req, &CallOptions::new())) {
                 PickResult::Pick(pick) => picked.push(pick.subchannel.clone()),
                 other => panic!("unexpected pick result {}", other),
             }
@@ -676,7 +601,7 @@ mod test {
 
         // Round Robin sends a picker update with the currently ready retained
         // subchannel.
-        let _ = env.verify_ready_picker(old_sc.clone());
+        let _ = env.expect_ready_picker(old_sc);
 
         env.send_subchannel_update(new_sc, &SubchannelState::ready());
         let new_picker = env.verify_roundrobin_ready_picker();
@@ -684,7 +609,7 @@ mod test {
         let req = test_utils::new_request_headers();
         let mut picked = Vec::new();
         for _ in 0..4 {
-            match new_picker.pick(&req) {
+            match new_picker.pick(PickOptions::new(&req, &CallOptions::new())) {
                 PickResult::Pick(pick) => picked.push(pick.subchannel.clone()),
                 other => panic!("unexpected pick result {}", other),
             }
@@ -701,17 +626,17 @@ mod test {
         let endpoints = create_endpoints(2);
         env.send_resolver_update(endpoints).unwrap();
         let subchannels = env.verify_subchannel_creation(2);
-        env.verify_connecting_picker();
+        env.expect_queuing_picker();
 
         let first_error = String::from("test connection error 1");
         env.move_subchannel_to_transient_failure(&subchannels[0], &first_error);
         env.expect_request_resolution();
-        env.verify_connecting_picker();
+        env.expect_queuing_picker();
         env.move_subchannel_to_transient_failure(&subchannels[1], &first_error);
         env.expect_request_resolution();
-        env.verify_transient_failure_picker(first_error);
+        env.expect_failing_picker(&first_error);
         env.send_subchannel_update(&subchannels[0], &SubchannelState::ready());
-        env.verify_ready_picker(subchannels[0].clone());
+        env.expect_ready_picker(&subchannels[0]);
     }
 
     // Tests the scenario where the resolver returns an update with no endpoints
@@ -721,9 +646,7 @@ mod test {
     async fn roundrobin_zero_endpoints_from_resolver_before_valid_update() {
         let mut env = new_env();
         assert!(env.send_resolver_update(vec![]).is_err());
-        env.verify_transient_failure_picker(
-            "Received empty address list from the name resolver".to_string(),
-        );
+        env.expect_failing_picker("Received empty address list from the name resolver");
     }
 
     // Tests the scenario where the resolver returns an update with no endpoints
@@ -736,13 +659,11 @@ mod test {
         let endpoint = create_endpoint(1);
         env.send_resolver_update(vec![endpoint]).unwrap();
         let subchannels = env.verify_subchannel_creation(1);
-        env.verify_connecting_picker();
+        env.expect_queuing_picker();
         env.send_subchannel_update(&subchannels[0], &SubchannelState::ready());
-        env.verify_ready_picker(subchannels[0].clone());
+        env.expect_ready_picker(&subchannels[0]);
         assert!(env.send_resolver_update(vec![]).is_err());
-        env.verify_transient_failure_picker(
-            "Received empty address list from the name resolver".to_string(),
-        );
+        env.expect_failing_picker("Received empty address list from the name resolver");
         env.expect_request_resolution();
     }
 
@@ -757,21 +678,21 @@ mod test {
         let endpoint = create_endpoints(2);
         env.send_resolver_update(endpoint).unwrap();
         let subchannels = env.verify_subchannel_creation(2);
-        env.verify_connecting_picker();
+        env.expect_queuing_picker();
 
         env.send_subchannel_update(&subchannels[0], &SubchannelState::ready());
 
-        let picker = env.verify_ready_picker(subchannels[0].clone());
+        let picker = env.expect_ready_picker(&subchannels[0]);
 
         let req = test_utils::new_request_headers();
         // First pick determines the only subchannel the picker should yield
-        let first_sc = match picker.pick(&req) {
+        let first_sc = match picker.pick(PickOptions::new(&req, &CallOptions::new())) {
             PickResult::Pick(p) => p.subchannel.clone(),
             other => panic!("unexpected pick result {}", other),
         };
 
         for _ in 0..7 {
-            match picker.pick(&req) {
+            match picker.pick(PickOptions::new(&req, &CallOptions::new())) {
                 PickResult::Pick(p) => {
                     assert!(
                         Arc::ptr_eq(&first_sc, &p.subchannel),
@@ -797,9 +718,9 @@ mod test {
         let endpoints = create_endpoints(2);
         env.send_resolver_update(endpoints).unwrap();
         let subchannels = env.verify_subchannel_creation(2);
-        env.verify_connecting_picker();
+        env.expect_queuing_picker();
         env.send_subchannel_update(&subchannels[0], &SubchannelState::ready());
-        env.verify_ready_picker(subchannels[0].clone());
+        env.expect_ready_picker(&subchannels[0]);
 
         let mut endpoints = create_endpoints(4);
         endpoints.reverse();
@@ -809,9 +730,10 @@ mod test {
         let _new_subchannels = env.verify_subchannel_creation(2);
         // Subchannel 1 (2.2.2.2:1) is retained but still idle, so it is asked
         // to connect again.  Subchannel 0 is already ready and is left alone.
-        assert_eq!(env.expect_connect(), subchannels[1].address());
+        let connected = env.expect_connect();
+        assert_eq!(connected, subchannels[1].address());
         // RoundRobin sends a new ready picker containing the currently ready
         // subchannel 0.
-        env.verify_ready_picker(subchannels[0].clone());
+        env.expect_ready_picker(&subchannels[0]);
     }
 }
