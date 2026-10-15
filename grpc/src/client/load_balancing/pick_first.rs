@@ -33,7 +33,6 @@ use std::time::Duration;
 use rand::seq::SliceRandom;
 
 use crate::client::ConnectivityState;
-use crate::client::RequestHeaders;
 use crate::client::load_balancing::ChannelController;
 use crate::client::load_balancing::FailingPicker;
 use crate::client::load_balancing::LbConfigJson;
@@ -42,6 +41,7 @@ use crate::client::load_balancing::LbPolicyBuilder;
 use crate::client::load_balancing::LbPolicyOptions;
 use crate::client::load_balancing::LbState;
 use crate::client::load_balancing::Pick;
+use crate::client::load_balancing::PickOptions;
 use crate::client::load_balancing::PickResult;
 use crate::client::load_balancing::Picker;
 use crate::client::load_balancing::QueuingPicker;
@@ -917,7 +917,7 @@ struct OneSubchannelPicker {
 }
 
 impl Picker for OneSubchannelPicker {
-    fn pick(&self, _: &RequestHeaders) -> PickResult {
+    fn pick(&self, _: PickOptions<'_>) -> PickResult {
         PickResult::Pick(Pick {
             subchannel: self.sc.clone(),
             metadata: MetadataMap::new(),
@@ -946,7 +946,7 @@ impl IdlePicker {
 }
 
 impl Picker for IdlePicker {
-    fn pick(&self, _: &RequestHeaders) -> PickResult {
+    fn pick(&self, _: PickOptions<'_>) -> PickResult {
         if !self.triggered_work.swap(true, Ordering::Relaxed) {
             self.work_scheduler.schedule_work(Some(Box::new(LeaveIdle)));
         }
@@ -967,6 +967,7 @@ mod test {
     use std::time::Duration;
 
     use super::*;
+    use crate::client::CallOptions;
     use crate::client::load_balancing::test_utils;
     use crate::client::load_balancing::test_utils::TestChannelController;
     use crate::client::load_balancing::test_utils::TestEnv;
@@ -1125,7 +1126,10 @@ mod test {
             let picker = self.expect_picker_state(ConnectivityState::Idle);
             self.expect_no_events();
             assert_eq!(
-                picker.pick(&test_utils::new_request_headers()),
+                picker.pick(PickOptions::new(
+                    &test_utils::new_request_headers(),
+                    &CallOptions::new(),
+                )),
                 PickResult::Queue
             );
             let data = self.expect_schedule_work();

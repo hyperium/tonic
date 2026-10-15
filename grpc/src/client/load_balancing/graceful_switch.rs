@@ -212,12 +212,13 @@ mod test {
     use std::sync::Mutex;
     use std::sync::mpsc;
 
-    use crate::client::RequestHeaders;
+    use crate::client::CallOptions;
     use crate::client::load_balancing::ChannelController;
     use crate::client::load_balancing::GLOBAL_LB_REGISTRY;
     use crate::client::load_balancing::LbPolicy;
     use crate::client::load_balancing::LbState;
     use crate::client::load_balancing::Pick;
+    use crate::client::load_balancing::PickOptions;
     use crate::client::load_balancing::PickResult;
     use crate::client::load_balancing::Picker;
     use crate::client::load_balancing::Subchannel;
@@ -280,7 +281,7 @@ mod test {
         }
     }
     impl Picker for TestPicker {
-        fn pick(&self, _req: &RequestHeaders) -> PickResult {
+        fn pick(&self, _options: PickOptions<'_>) -> PickResult {
             PickResult::Pick(Pick {
                 subchannel: Arc::new(TestSubchannel::new(
                     Address {
@@ -370,7 +371,9 @@ mod test {
             let req = test_utils::new_request_headers();
             println!("{:?}", update.connectivity_state);
 
-            let pick = update.picker.pick(&req);
+            let pick = update
+                .picker
+                .pick(PickOptions::new(&req, &CallOptions::new()));
             let PickResult::Pick(pick) = pick else {
                 panic!("unexpected pick result: {:?}", pick);
             };

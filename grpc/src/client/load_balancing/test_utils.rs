@@ -31,6 +31,7 @@ use std::sync::mpsc;
 use serde::Deserialize;
 use serde::Serialize;
 
+use crate::client::CallOptions;
 use crate::client::ConnectivityState;
 use crate::client::RequestHeaders;
 use crate::client::load_balancing::ChannelController;
@@ -41,6 +42,7 @@ use crate::client::load_balancing::LbPolicy;
 use crate::client::load_balancing::LbPolicyBuilder;
 use crate::client::load_balancing::LbPolicyOptions;
 use crate::client::load_balancing::LbState;
+use crate::client::load_balancing::PickOptions;
 use crate::client::load_balancing::PickResult;
 use crate::client::load_balancing::Picker;
 use crate::client::load_balancing::Subchannel;
@@ -331,7 +333,12 @@ impl<P> TestEnv<P> {
     /// `CONNECTING`, and returns the picker.
     pub(crate) fn expect_queuing_picker(&mut self) -> Arc<dyn Picker> {
         let picker = self.expect_picker_state(ConnectivityState::Connecting);
-        assert_eq!(picker.pick(&new_request_headers()), PickResult::Queue);
+        let res = picker.pick(PickOptions::new(
+            &new_request_headers(),
+            &CallOptions::new(),
+        ));
+
+        assert_eq!(res, PickResult::Queue);
         picker
     }
 
@@ -343,7 +350,11 @@ impl<P> TestEnv<P> {
         subchannel: &Arc<dyn Subchannel>,
     ) -> Arc<dyn Picker> {
         let picker = self.expect_picker_state(ConnectivityState::Ready);
-        let PickResult::Pick(pick) = picker.pick(&new_request_headers()) else {
+
+        let PickResult::Pick(pick) = picker.pick(PickOptions::new(
+            &new_request_headers(),
+            &CallOptions::new(),
+        )) else {
             panic!("expected Pick result");
         };
         assert_eq!(&pick.subchannel, subchannel);
@@ -356,7 +367,10 @@ impl<P> TestEnv<P> {
     /// exact message `error`, and returns the picker.
     pub(crate) fn expect_failing_picker(&mut self, error: &str) -> Arc<dyn Picker> {
         let picker = self.expect_picker_state(ConnectivityState::TransientFailure);
-        let PickResult::Fail(status) = picker.pick(&new_request_headers()) else {
+        let PickResult::Fail(status) = picker.pick(PickOptions::new(
+            &new_request_headers(),
+            &CallOptions::new(),
+        )) else {
             panic!("expected Fail result");
         };
         assert_eq!(status.code(), StatusCodeError::Unavailable);
