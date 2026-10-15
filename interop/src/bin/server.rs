@@ -23,12 +23,21 @@
  */
 
 use std::str::FromStr;
+use std::sync::Arc;
 
+use grpc::credentials::LocalServerCredentials;
+use grpc::credentials::ServerCredentials;
+use grpc::credentials::rustls::Identity as GrpcIdentity;
+use grpc::credentials::rustls::StaticProvider;
+use grpc::credentials::rustls::server::RustlsServerCredentials;
+use grpc::credentials::rustls::server::ServerTlsConfig as GrpcServerTlsConfig;
+use grpc::server::Http2Config;
+use grpc::server::Server as GrpcServer;
 use interop::server_prost;
 use interop::server_protobuf;
-use tonic::transport::Identity;
-use tonic::transport::Server;
-use tonic::transport::ServerTlsConfig;
+use tonic::transport::Identity as TonicIdentity;
+use tonic::transport::Server as TonicServer;
+use tonic::transport::ServerTlsConfig as TonicServerTlsConfig;
 
 #[derive(Debug)]
 struct Opts {
@@ -72,18 +81,18 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
     let addr = "127.0.0.1:10000".parse().unwrap();
 
-    let mut builder = Server::builder();
-
-    if matches.use_tls {
-        let cert = std::fs::read_to_string("interop/data/server1.pem")?;
-        let key = std::fs::read_to_string("interop/data/server1.key")?;
-        let identity = Identity::from_pem(cert, key);
-
-        builder = builder.tls_config(ServerTlsConfig::new().identity(identity))?;
-    }
-
     match matches.codec {
         Codec::Prost => {
+            let mut builder = TonicServer::builder();
+
+            if matches.use_tls {
+                let cert = std::fs::read_to_string("interop/data/server1.pem")?;
+                let key = std::fs::read_to_string("interop/data/server1.key")?;
+                let identity = TonicIdentity::from_pem(cert, key);
+
+                builder = builder.tls_config(TonicServerTlsConfig::new().identity(identity))?;
+            }
+
             let test_service =
                 server_prost::TestServiceServer::new(server_prost::TestService::default());
             let unimplemented_service = server_prost::UnimplementedServiceServer::new(
@@ -107,13 +116,26 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                 server_protobuf::UnimplementedInteropService::default(),
             );
 
-            let _server = grpc::server::Server::builder()
+            let server = GrpcServer::builder()
                 .interceptor(server_protobuf::EchoHeaders::new())
                 .add_service(test_service)
                 .add_service(unimplemented_service)
                 .build();
 
-            unimplemented!("gRPC server transport is not implemented yet");
+            let creds: Arc<dyn ServerCredentials> = if matches.use_tls {
+                let _ = rustls::crypto::ring::default_provider().install_default();
+                let cert = std::fs::read("interop/data/server1.pem")?;
+                let key = std::fs::read("interop/data/server1.key")?;
+                let identity = GrpcIdentity::from_pem(cert, key);
+                let provider = StaticProvider::new(vec![identity]);
+                let tls_config = GrpcServerTlsConfig::new(provider);
+                Arc::new(RustlsServerCredentials::new(tls_config)?)
+            } else {
+                Arc::new(LocalServerCredentials::new())
+            };
+
+            let listener = GrpcServer::tcp_listener(addr, creds, Http2Config::default()).await?;
+            server.serve(listener).await?;
         }
     };
 

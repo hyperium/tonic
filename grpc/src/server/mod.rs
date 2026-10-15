@@ -72,6 +72,7 @@ pub(crate) mod transport;
 
 use builder::ServerBuilder;
 use interceptor::Identity;
+pub use http2_config::Http2Config;
 
 /// Settings to configure RPCs sent using the [`Handle`] trait.
 ///
@@ -214,6 +215,24 @@ impl Server {
     /// Creates a new [`ServerBuilder`] with a no-op interceptor.
     pub fn builder() -> ServerBuilder<Identity> {
         ServerBuilder::new()
+    }
+
+    /// Binds a TCP listener to `addr` with the given server credentials and HTTP/2 configuration.
+    // TODO: Consider making this a builder to allow adding additional listener
+    // configuration without breaking changes.
+    #[cfg(feature = "_runtime-tokio")]
+    pub async fn tcp_listener(
+        addr: std::net::SocketAddr,
+        creds: Arc<dyn crate::credentials::ServerCredentials>,
+        config: Http2Config,
+    ) -> Result<impl Listener, String> {
+        let listener = transport::hyper::HyperListener::new_tcp_listener(
+            addr,
+            creds,
+            &crate::rt::default_runtime(),
+        )
+        .await?;
+        Ok(listener.with_config(config))
     }
 
     /// Creates a new server with the given handler and runtime.
@@ -678,6 +697,7 @@ impl Trailers {
 
 #[cfg(test)]
 mod tests {
+    use std::any::Any;
     use std::sync::Arc;
     use std::sync::atomic::AtomicBool;
     use std::sync::atomic::Ordering;
@@ -690,6 +710,9 @@ mod tests {
 
     use super::*;
     use crate::core::test_connection_info;
+    use crate::credentials::LocalServerCredentials;
+    use crate::credentials::ServerCredentials;
+    use crate::rt::address::TcpAddress;
     /// A mock connection with one RPC in flight. It finishes only when the test
     /// sends on its finish sender, even after [`graceful_shutdown`], which it
     /// reports on its shutdown receiver.
@@ -1219,5 +1242,21 @@ mod tests {
             Err("simulated listener accept error".to_string()),
             "server::serve must propagate accept error to the caller"
         );
+    }
+
+    #[tokio::test]
+    async fn tcp_listener_binds_and_returns_local_tcp_address() {
+        let creds: Arc<dyn ServerCredentials> = Arc::new(LocalServerCredentials::new());
+        let config = Http2Config::new().with_max_recv_message_size(1024);
+
+        let listener = Server::tcp_listener("127.0.0.1:0".parse().unwrap(), creds, config)
+            .await
+            .unwrap();
+
+        let local_addr = listener.local_addr();
+        let tcp_addr = (&*local_addr as &dyn Any)
+            .downcast_ref::<TcpAddress>()
+            .expect("expected TcpAddress");
+        assert!(tcp_addr.0.port() > 0);
     }
 }
