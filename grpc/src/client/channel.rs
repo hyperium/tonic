@@ -33,8 +33,8 @@ use std::time::Instant;
 use arc_swap::ArcSwap;
 use arc_swap::ArcSwapOption;
 use parking_lot::Mutex;
+use tokio::sync::Notify;
 use tokio::sync::mpsc;
-use tokio::sync::watch;
 
 use crate::client::CallOptions;
 use crate::client::ConnectivityState;
@@ -539,14 +539,14 @@ pub(crate) struct Watcher<T> {
     current: ArcSwap<T>,
     // Signalled after every update to wake consumers waiting in
     // [`Snapshot::expired`].
-    updated: watch::Sender<()>,
+    updated: Notify,
 }
 
 impl<T> Watcher<T> {
     fn new(initial: T) -> Self {
         Self {
             current: ArcSwap::from_pointee(initial),
-            updated: watch::Sender::new(()),
+            updated: Notify::new(),
         }
     }
 
@@ -564,7 +564,7 @@ impl<T> Watcher<T> {
         // Publish the new value before signalling so that woken waiters
         // always observe it.
         self.current.store(Arc::new(item));
-        self.updated.send_replace(());
+        self.updated.notify_waiters();
     }
 }
 
@@ -585,13 +585,20 @@ impl<T> Snapshot<'_, T> {
     /// Resolves once the [`Watcher`] holds a different value than this
     /// snapshot. Returns immediately if that is already the case.
     pub(crate) async fn expired(&self) {
-        let mut rx = self.watcher.updated.subscribe();
-        // wait_for checks the predicate before waiting, so an update that
-        // landed before subscribe() is not missed. It cannot fail: the borrowed
-        // Watcher keeps the sender alive.
-        let _ = rx
-            .wait_for(|_| !Arc::ptr_eq(&self.watcher.current.load(), &self.value))
-            .await;
+        loop {
+            // Register before checking: a `Notified` receives every
+            // `notify_waiters()` call made after it is created, and update()
+            // stores before notifying, so an update that the check misses
+            // still wakes this waiter.
+            let notified = self.watcher.updated.notified();
+            if !Arc::ptr_eq(&self.watcher.current.load(), &self.value) {
+                return;
+            }
+            // The waking update may be one this snapshot already holds (if it
+            // was taken between that update's store and notify), so check
+            // again.
+            notified.await;
+        }
     }
 }
 
