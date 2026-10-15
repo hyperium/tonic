@@ -290,36 +290,34 @@ impl LbPolicy for PickFirstPolicy {
     }
 
     fn work(&mut self, data: Option<WorkData>, controller: &mut dyn ChannelController) {
-        let Some(data) = data else {
-            debug_assert!(false, "PickFirstPolicy::work called with None value");
-            return;
-        };
-        let data = match data.downcast::<SubchannelUpdate>() {
-            Ok(update) => {
-                self.subchannel_update(update.subchannel, &update.state, controller);
+        let work = match PickFirstWork::try_from(data) {
+            Ok(work) => work,
+            Err(data) => {
+                debug_assert!(
+                    false,
+                    "work called with {data:?}; expected SubchannelUpdate or PickFirstWork"
+                );
                 return;
             }
-            Err(data) => data,
         };
-        if data.downcast_ref::<LeaveIdle>().is_some() {
-            self.exit_idle(controller);
-            return;
+        match work {
+            PickFirstWork::Subchannel(update) => {
+                self.subchannel_update(update.subchannel, &update.state, controller);
+            }
+            PickFirstWork::LeaveIdle => {
+                self.exit_idle(controller);
+            }
+            PickFirstWork::TimerExpired => {
+                let mut ctx = PickFirstContext {
+                    runtime: &self.runtime,
+                    work_scheduler: &self.work_scheduler,
+                    connectivity_state: &mut self.connectivity_state,
+                    controller,
+                };
+                let current = std::mem::take(&mut self.state);
+                self.state = current.timer_expired(&mut ctx);
+            }
         }
-        if data.downcast_ref::<TimerExpired>().is_none() {
-            debug_assert!(
-                false,
-                "work called with {data:?}; expected SubchannelUpdate, LeaveIdle, or TimerExpired"
-            );
-            return;
-        }
-        let mut ctx = PickFirstContext {
-            runtime: &self.runtime,
-            work_scheduler: &self.work_scheduler,
-            connectivity_state: &mut self.connectivity_state,
-            controller,
-        };
-        let current = std::mem::take(&mut self.state);
-        self.state = current.timer_expired(&mut ctx);
     }
 
     fn exit_idle(&mut self, controller: &mut dyn ChannelController) {
@@ -867,9 +865,31 @@ impl PickFirstState {
     }
 }
 
-// Work data sent when the Connection Attempt Delay timer fires.
 #[derive(Debug)]
-struct TimerExpired;
+enum PickFirstWork {
+    Subchannel(SubchannelUpdate),
+    TimerExpired,
+    LeaveIdle,
+}
+
+impl From<PickFirstWork> for Option<WorkData> {
+    fn from(work: PickFirstWork) -> Self {
+        Some(Box::new(work))
+    }
+}
+
+impl TryFrom<Option<WorkData>> for PickFirstWork {
+    type Error = Option<WorkData>;
+
+    fn try_from(data: Option<WorkData>) -> Result<Self, Self::Error> {
+        let data = data.ok_or(None)?;
+        let data = match data.downcast::<SubchannelUpdate>() {
+            Ok(update) => return Ok(Self::Subchannel(*update)),
+            Err(data) => data,
+        };
+        data.downcast::<Self>().map(|w| *w).map_err(Some)
+    }
+}
 
 // The Connection Attempt Delay timer (gRFC A61). `expired` becomes set when
 // it fires. When dropped, the timer is cancelled.
@@ -886,7 +906,7 @@ impl Timer {
         let handle = runtime.clone().spawn(Box::pin(async move {
             runtime.sleep(CONNECTION_ATTEMPT_DELAY).await;
             expired_clone.store(true, Ordering::SeqCst);
-            work_scheduler.schedule_work(Some(Box::new(TimerExpired)));
+            work_scheduler.schedule_work(PickFirstWork::TimerExpired.into());
         }));
         Self { expired, handle }
     }
@@ -926,10 +946,6 @@ impl Picker for OneSubchannelPicker {
     }
 }
 
-// Work data sent by `IdlePicker` on its first pick to exit IDLE.
-#[derive(Debug)]
-struct LeaveIdle;
-
 #[derive(Debug)]
 struct IdlePicker {
     triggered_work: AtomicBool,
@@ -948,7 +964,8 @@ impl IdlePicker {
 impl Picker for IdlePicker {
     fn pick(&self, _: PickOptions<'_>) -> PickResult {
         if !self.triggered_work.swap(true, Ordering::Relaxed) {
-            self.work_scheduler.schedule_work(Some(Box::new(LeaveIdle)));
+            self.work_scheduler
+                .schedule_work(PickFirstWork::LeaveIdle.into());
         }
         PickResult::Queue
     }
@@ -1134,8 +1151,11 @@ mod test {
             );
             let data = self.expect_schedule_work();
             assert!(
-                data.as_ref()
-                    .is_some_and(|d| d.downcast_ref::<LeaveIdle>().is_some()),
+                matches!(
+                    data.as_ref()
+                        .and_then(|d| d.downcast_ref::<PickFirstWork>()),
+                    Some(PickFirstWork::LeaveIdle)
+                ),
                 "expected LeaveIdle work, got {data:?}"
             );
             self.policy.work(data, &mut self.tcc);
@@ -1176,8 +1196,11 @@ mod test {
             self.advance_past_timer().await;
             let data = self.expect_schedule_work();
             assert!(
-                data.as_ref()
-                    .is_some_and(|d| d.downcast_ref::<TimerExpired>().is_some()),
+                matches!(
+                    data.as_ref()
+                        .and_then(|d| d.downcast_ref::<PickFirstWork>()),
+                    Some(PickFirstWork::TimerExpired)
+                ),
                 "expected TimerExpired work, got {data:?}"
             );
             data
