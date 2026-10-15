@@ -48,6 +48,10 @@ pub(crate) mod generated {
 /// A37 aggregate clusters).
 pub(crate) mod resource;
 
+/// xDS load balancing policies (gRFC A31 and friends), plus
+/// [`load_balancing::register`] to install them in the gRPC LB registry.
+mod load_balancing;
+
 /// [`xds_config::XdsConfig`]: the atomic xDS configuration snapshot assembled
 /// from a channel's Listener/RouteConfiguration/Cluster/Endpoints resources.
 pub(crate) mod xds_config;
