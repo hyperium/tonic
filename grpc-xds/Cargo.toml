@@ -21,8 +21,13 @@ allowed_external_types = []
 protobuf = "4.35.1-release"
 protobuf-well-known-types = "4.35.1-release"
 bytes = "1.11.0"
+grpc = { version = "0.10.0", path = "../grpc", default-features = false, features = ["__unstable"] }
+serde = { version = "1.0", default-features = false, features = ["derive", "std"] }
 xds-client = { version = "0.1.0-alpha.4", path = "../xds-client", default-features = false }
 regex = "1"
+
+[dev-dependencies]
+serde_json = "1.0"
 
 [build-dependencies]
 protobuf-codegen = "4.35.1-release"

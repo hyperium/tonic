@@ -45,6 +45,7 @@ use crate::client::Invoke;
 use crate::client::RequestHeaders;
 use crate::client::load_balancing::LbPolicy as _;
 use crate::client::load_balancing::LbState;
+use crate::client::load_balancing::PickOptions;
 use crate::client::load_balancing::PickResult;
 use crate::client::load_balancing::Picker;
 use crate::client::load_balancing::QueuingPicker;
@@ -362,7 +363,7 @@ impl Invoke for Arc<ActiveChannel> {
                     None,
                 );
             };
-            let result = &state.picker.pick(&headers);
+            let result = state.picker.pick(PickOptions::new(&headers, &options));
             match result {
                 PickResult::Pick(pr) => {
                     if let Some(sc) = pr.subchannel.downcast_ref::<InternalSubchannel>() {
@@ -377,7 +378,7 @@ impl Invoke for Arc<ActiveChannel> {
                     // Continue and retry the RPC with the next picker.
                 }
                 PickResult::Fail(status) => {
-                    return FailingRecvStream::new_stream_pair(status.clone(), None);
+                    return FailingRecvStream::new_stream_pair(status, None);
                 }
                 PickResult::Drop(status) => {
                     todo!("dropped pick: {:?}", status);
