@@ -68,6 +68,7 @@ use crate::client::name_resolution::config_selector;
 use crate::client::name_resolution::config_selector::ConfigSelector;
 use crate::client::name_resolution::config_selector::DefaultConfigSelector;
 use crate::client::name_resolution::config_selector::RpcConfig;
+use crate::client::name_resolution::config_selector::SelectConfigOptions;
 use crate::client::name_resolution::dns;
 use crate::client::name_resolution::global_registry;
 use crate::client::name_resolution::proxy_resolver;
@@ -703,7 +704,7 @@ impl SharedConfigSelector {
         self.inner
             .current
             .load()
-            .select_config(PickOptions::new(headers, attributes))
+            .select_config(SelectConfigOptions::new(headers, attributes))
             .map_err(sanitize_config_selector_status)
     }
 
