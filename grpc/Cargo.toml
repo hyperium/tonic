@@ -59,7 +59,7 @@ __internal = []
 gzip = ["dep:flate2"]
 
 [dependencies]
-arc-swap = { version = "1.9.2", default-features = false }
+arc-swap = { version = "1.9", default-features = false }
 base64 = "0.22"
 bytes = "1.10.1"
 flate2 = { version = "1.0", optional = true, default-features = false, features = [

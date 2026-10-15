@@ -642,10 +642,6 @@ struct SharedConfigSelectorInner {
     /// The current config selector. Until the resolver produces its first
     /// result, this is a [`DefaultConfigSelector`] that RPCs never use: they
     /// wait for `resolved` instead.
-    ///
-    /// `ArcSwap` stores a thin pointer, so the `Arc<dyn ConfigSelector>` (a fat
-    /// pointer) is itself stored in an `Arc`. `load` borrows the current value
-    /// without modifying reference counts.
     current: ArcSwap<Arc<dyn ConfigSelector>>,
     /// Set once `current` holds the selector from the resolver's first result.
     resolved: SetOnce<()>,
