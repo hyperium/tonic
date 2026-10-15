@@ -23,3 +23,55 @@
  */
 
 pub(crate) mod compression;
+
+use bytes::Buf;
+use bytes::BufMut;
+use bytes::Bytes;
+use tonic::Status as TonicStatus;
+use tonic::codec::DecodeBuf;
+use tonic::codec::Decoder;
+use tonic::codec::EncodeBuf;
+use tonic::codec::Encoder;
+
+#[derive(Debug, Default, Clone)]
+pub struct BytesDecoder;
+
+impl Decoder for BytesDecoder {
+    type Item = Bytes;
+    type Error = TonicStatus;
+
+    fn decode(&mut self, src: &mut DecodeBuf<'_>) -> Result<Option<Self::Item>, Self::Error> {
+        Ok(Some(src.copy_to_bytes(src.remaining())))
+    }
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct BufEncoder;
+
+impl Encoder for BufEncoder {
+    type Item = Box<dyn Buf + Send + Sync>;
+    type Error = TonicStatus;
+
+    fn encode(&mut self, mut item: Self::Item, dst: &mut EncodeBuf<'_>) -> Result<(), Self::Error> {
+        dst.put(&mut *item);
+        Ok(())
+    }
+}
+
+#[derive(Debug, Default, Clone)]
+pub(crate) struct BufCodec;
+
+impl tonic::codec::Codec for BufCodec {
+    type Encode = Box<dyn Buf + Send + Sync>;
+    type Decode = Bytes;
+    type Encoder = BufEncoder;
+    type Decoder = BytesDecoder;
+
+    fn encoder(&mut self) -> Self::Encoder {
+        BufEncoder
+    }
+
+    fn decoder(&mut self) -> Self::Decoder {
+        BytesDecoder
+    }
+}

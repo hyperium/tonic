@@ -47,6 +47,7 @@
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::time::Instant;
 
 use tokio::sync::watch;
 
@@ -54,6 +55,7 @@ use crate::async_trait;
 use crate::core::ConnectionInfo;
 use crate::core::RecvMessage;
 use crate::core::SendMessage;
+use crate::metadata::AsciiMetadataValue;
 use crate::metadata::MetadataMap;
 use crate::private::Internal;
 use crate::rt::GrpcRuntime;
@@ -62,9 +64,11 @@ use crate::send_future::SendFuture;
 
 pub mod builder;
 pub mod descriptor;
+pub(crate) mod http2_config;
 pub mod interceptor;
 pub(crate) mod router;
 pub mod service;
+pub(crate) mod transport;
 
 use builder::ServerBuilder;
 use interceptor::Identity;
@@ -113,6 +117,7 @@ pub struct Server {
 mod sealed {
     pub trait Sealed {}
     impl Sealed for crate::inmemory::InMemoryListener {}
+    impl Sealed for crate::server::transport::hyper::HyperListener {}
 }
 
 /// A bound listening socket that yields incoming connections.
@@ -513,6 +518,8 @@ impl ResponseHeaders {
 }
 
 /// Contains all information transmitted in the request headers of an RPC.
+// TODO: Revisit symmetry with `client::CallOptions` (whether timeout/deadline
+// and compression encodings should live on `server::RequestHeaders` or `server::CallOptions`).
 #[derive(Debug, Clone)]
 pub struct RequestHeaders {
     /// The full (e.g. "/Service/Method") method name specified for the call.
@@ -521,6 +528,13 @@ pub struct RequestHeaders {
     metadata: MetadataMap,
     /// Information about the client.
     connection_info: ConnectionInfo,
+    /// The deadline for the call, derived from the client's `grpc-timeout`
+    /// when the call started.
+    deadline: Option<Instant>,
+    /// The message compression encoding (`grpc-encoding`) specified by the client.
+    encoding: Option<AsciiMetadataValue>,
+    /// The accepted response compression encodings (`grpc-accept-encoding`) specified by the client.
+    accept_encoding: Option<AsciiMetadataValue>,
 }
 
 impl RequestHeaders {
@@ -530,6 +544,9 @@ impl RequestHeaders {
             method_name: method_name.into(),
             connection_info,
             metadata: MetadataMap::default(),
+            deadline: None,
+            encoding: None,
+            accept_encoding: None,
         }
     }
 
@@ -571,10 +588,37 @@ impl RequestHeaders {
         &self.connection_info
     }
 
-    /// Returns the owned fields in the RequestHeaders.
-    // TODO: make public once fields are fixed.
-    pub(crate) fn into_parts(self) -> (String, MetadataMap) {
-        (self.method_name, self.metadata)
+    /// Sets the deadline for the call on these headers.
+    pub fn with_deadline(mut self, deadline: Instant) -> Self {
+        self.deadline = Some(deadline);
+        self
+    }
+
+    /// Returns the deadline for the call, if the client sent a `grpc-timeout`.
+    pub fn deadline(&self) -> Option<Instant> {
+        self.deadline
+    }
+
+    /// Sets the `grpc-encoding` value on these headers.
+    pub fn with_encoding(mut self, encoding: AsciiMetadataValue) -> Self {
+        self.encoding = Some(encoding);
+        self
+    }
+
+    /// Returns the `grpc-encoding` header value sent by the client, if present.
+    pub fn encoding(&self) -> Option<&str> {
+        self.encoding.as_ref().map(|v| v.to_str())
+    }
+
+    /// Sets the `grpc-accept-encoding` value on these headers.
+    pub fn with_accept_encoding(mut self, accept_encoding: AsciiMetadataValue) -> Self {
+        self.accept_encoding = Some(accept_encoding);
+        self
+    }
+
+    /// Returns the `grpc-accept-encoding` header value sent by the client, if present.
+    pub fn accept_encoding(&self) -> Option<&str> {
+        self.accept_encoding.as_ref().map(|v| v.to_str())
     }
 }
 
