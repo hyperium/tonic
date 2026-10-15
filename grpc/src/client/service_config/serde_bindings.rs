@@ -205,10 +205,25 @@ impl<'de> Deserialize<'de> for SerdeU32 {
                 v.try_into().map(SerdeU32).map_err(serde::de::Error::custom)
             }
 
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            fn visit_f64<E>(self, v: f64) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                if v.is_sign_positive() && v.fract() == 0.0 && v <= f64::from(u32::MAX) {
+                    Ok(SerdeU32(v as u32))
+                } else {
+                    Err(E::custom(format!("invalid u32 value: {v}")))
+                }
+            }
+
             fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
             where
                 E: serde::de::Error,
             {
+                if v.starts_with('+') {
+                    return Err(E::custom("leading '+' is not allowed"));
+                }
                 v.parse().map(SerdeU32).map_err(serde::de::Error::custom)
             }
         }
@@ -315,10 +330,25 @@ mod test {
         let val: TestStruct = serde_json::from_value(json!({})).unwrap();
         assert_eq!(val.val, None);
 
+        let val: TestStruct = serde_json::from_value(json!({ "val": 1024.0 })).unwrap();
+        assert_eq!(val.val, Some(SerdeU32(1024)));
+
+        let val: TestStruct = serde_json::from_str(r#"{"val": 1e3}"#).unwrap();
+        assert_eq!(val.val, Some(SerdeU32(1000)));
+
         let res: Result<TestStruct, _> = serde_json::from_value(json!({ "val": "invalid" }));
         assert!(res.is_err());
 
+        let res: Result<TestStruct, _> = serde_json::from_value(json!({ "val": "+5" }));
+        assert!(res.is_err());
+
+        let res: Result<TestStruct, _> = serde_json::from_value(json!({ "val": 1.5 }));
+        assert!(res.is_err());
+
         let res: Result<TestStruct, _> = serde_json::from_value(json!({ "val": -1 }));
+        assert!(res.is_err());
+
+        let res: Result<TestStruct, _> = serde_json::from_str(r#"{"val": -0}"#);
         assert!(res.is_err());
     }
 

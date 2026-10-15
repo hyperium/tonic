@@ -31,6 +31,7 @@ use std::sync::Arc;
 
 use crate::StatusCodeError;
 use crate::StatusError;
+use crate::client::CallOptions;
 use crate::client::ConnectivityState;
 use crate::client::RequestHeaders;
 use crate::client::load_balancing::subchannel::Subchannel;
@@ -47,6 +48,7 @@ pub mod endpoint_filtering;
 pub mod graceful_switch;
 pub mod lazy;
 pub mod pick_first;
+pub mod priority;
 pub mod registry;
 pub mod round_robin;
 pub mod subchannel;
@@ -358,7 +360,29 @@ pub trait Picker: Send + Sync + Debug {
     /// time-consuming work to service this request, it should return Queue, and
     /// the Pick call will be repeated by the channel when a new Picker is
     /// produced by the LbPolicy.
-    fn pick(&self, request: &RequestHeaders) -> PickResult;
+    fn pick(&self, options: PickOptions<'_>) -> PickResult;
+}
+
+/// The data provided to a [`Picker`] when picking a connection for a request.
+#[non_exhaustive]
+#[derive(Clone, Copy)]
+pub struct PickOptions<'a> {
+    /// The headers of the request.
+    pub request_headers: &'a RequestHeaders,
+    /// The options of the call.  Pickers may read options (including custom
+    /// options set by earlier stages, e.g. the config selector, via
+    /// [`CallOptions::get_option`]), but cannot modify them.
+    pub call_options: &'a CallOptions,
+}
+
+impl<'a> PickOptions<'a> {
+    /// Creates a new `PickOptions`.
+    pub fn new(request_headers: &'a RequestHeaders, call_options: &'a CallOptions) -> Self {
+        Self {
+            request_headers,
+            call_options,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -486,7 +510,7 @@ pub(crate) struct OneSubchannelPicker {
 }
 
 impl Picker for OneSubchannelPicker {
-    fn pick(&self, _: &RequestHeaders) -> PickResult {
+    fn pick(&self, _: PickOptions<'_>) -> PickResult {
         PickResult::Pick(Pick {
             subchannel: self.sc.clone(),
             metadata: MetadataMap::new(),
@@ -501,7 +525,7 @@ impl Picker for OneSubchannelPicker {
 pub(crate) struct QueuingPicker;
 
 impl Picker for QueuingPicker {
-    fn pick(&self, _request: &RequestHeaders) -> PickResult {
+    fn pick(&self, _options: PickOptions<'_>) -> PickResult {
         PickResult::Queue
     }
 }
@@ -512,7 +536,7 @@ pub(crate) struct FailingPicker {
 }
 
 impl Picker for FailingPicker {
-    fn pick(&self, _: &RequestHeaders) -> PickResult {
+    fn pick(&self, _: PickOptions<'_>) -> PickResult {
         PickResult::Fail(StatusError::new(
             StatusCodeError::Unavailable,
             self.error.clone(),

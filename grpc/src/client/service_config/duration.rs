@@ -65,11 +65,13 @@ impl<'de> Deserialize<'de> for GrpcDuration {
     }
 }
 
+const MAX_DURATION_SECONDS: u64 = 315_576_000_000;
+
 // Parsing logic, isolated for testing and to reduce serde monomorphization
 // footprint.
 fn parse_duration(s: &str) -> Result<Duration, String> {
-    if !s.ends_with('s') {
-        return Err("duration string must end with 's'".to_string());
+    if !s.ends_with('s') || s.contains('+') {
+        return Err("invalid duration string".to_string());
     }
     let s = &s[..s.len() - 1]; // strip 's'.
     let mut parts = s.splitn(2, '.');
@@ -79,6 +81,9 @@ fn parse_duration(s: &str) -> Result<Duration, String> {
     let secs: u64 = secs_str
         .parse()
         .map_err(|e| format!("failed to parse seconds: {e}"))?;
+    if secs > MAX_DURATION_SECONDS {
+        return Err(format!("duration exceeds max of {MAX_DURATION_SECONDS}s"));
+    }
 
     let nanos = if let Some(fraction_str) = parts.next() {
         if fraction_str.is_empty() {
@@ -110,6 +115,10 @@ mod test {
         assert_eq!(parse_duration("1s").unwrap(), Duration::from_secs(1));
         assert_eq!(parse_duration("0s").unwrap(), Duration::from_secs(0));
         assert_eq!(
+            parse_duration("315576000000s").unwrap(),
+            Duration::from_secs(315_576_000_000)
+        );
+        assert_eq!(
             parse_duration("1.5s").unwrap(),
             Duration::new(1, 500_000_000)
         );
@@ -126,6 +135,9 @@ mod test {
         assert!(parse_duration("1.0000000001s").is_err());
         assert!(parse_duration("as").is_err());
         assert!(parse_duration(".5s").is_err());
+        assert!(parse_duration("+1s").is_err());
+        assert!(parse_duration("1.+5s").is_err());
+        assert!(parse_duration("315576000001s").is_err());
     }
 
     #[test]

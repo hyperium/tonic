@@ -38,7 +38,6 @@ use tokio::sync::watch;
 
 use crate::StatusCodeError;
 use crate::StatusError;
-use crate::call_attributes::CallAttributes;
 use crate::client::CallOptions;
 use crate::client::ConnectivityState;
 use crate::client::DynInvoke;
@@ -368,13 +367,13 @@ impl Invoke for Arc<ActiveChannel> {
     ) -> (Self::SendStream, Self::RecvStream) {
         let config = match self
             .config_selector
-            .try_select_config(&headers, options.attributes_mut())
+            .try_select_config(&headers, &mut options)
         {
             Some(config) => config,
             // Only until the resolver produces its first result.
             None => {
                 self.config_selector
-                    .wait_and_select_config(&headers, options.attributes_mut())
+                    .wait_and_select_config(&headers, &mut options)
                     .await
             }
         };
@@ -389,9 +388,7 @@ impl Invoke for Arc<ActiveChannel> {
                     None,
                 );
             };
-            let result = state
-                .picker
-                .pick(PickOptions::new(&headers, options.attributes_mut()));
+            let result = state.picker.pick(PickOptions::new(&headers, &options));
             match result {
                 PickResult::Pick(pr) => {
                     if let Some(sc) = pr.subchannel.downcast_ref::<InternalSubchannel>() {
@@ -676,24 +673,24 @@ impl SharedConfigSelector {
     fn try_select_config(
         &self,
         headers: &RequestHeaders,
-        attributes: &mut CallAttributes,
+        call_opts: &mut CallOptions,
     ) -> Option<Result<RpcConfig, StatusError>> {
         if !self.inner.resolved.initialized() {
             return None;
         }
-        Some(self.select_config(headers, attributes))
+        Some(self.select_config(headers, call_opts))
     }
 
     /// Waits for the resolver's first result, then selects the configuration.
     async fn wait_and_select_config(
         &self,
         headers: &RequestHeaders,
-        attributes: &mut CallAttributes,
+        call_opts: &mut CallOptions,
     ) -> Result<RpcConfig, StatusError> {
         // Returns immediately if `resolved` is already set. `SetOnce` stays
         // set, so an `update` that races with this call can't be missed.
         self.inner.resolved.wait().await;
-        self.select_config(headers, attributes)
+        self.select_config(headers, call_opts)
     }
 
     /// Selects the configuration using `current`. Callers must first check
@@ -701,7 +698,7 @@ impl SharedConfigSelector {
     fn select_config(
         &self,
         headers: &RequestHeaders,
-        attributes: &mut CallAttributes,
+        attributes: &mut CallOptions,
     ) -> Result<RpcConfig, StatusError> {
         self.inner
             .current
