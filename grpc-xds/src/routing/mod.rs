@@ -24,9 +24,8 @@
 
 //! Pure xDS routing utilities.
 
-// TODO: remove once the dependency manager consumes virtual-host selection.
-#![allow(dead_code, unused_imports)]
-
 mod virtual_host;
 
+// TODO: remove once the dependency manager consumes virtual-host selection.
+#[cfg_attr(not(test), expect(unused_imports))]
 pub(crate) use virtual_host::find_virtual_host_index;

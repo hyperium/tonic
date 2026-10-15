@@ -34,6 +34,8 @@ use crate::resource::VirtualHost;
 /// Matching is ASCII case-insensitive: exact > suffix > prefix > universal.
 /// Longer domains win within a category; equal matches choose the first host.
 /// Wildcards consume at least one character. Ports and IPv6 brackets are preserved.
+// TODO: remove once the dependency manager consumes virtual-host selection.
+#[cfg_attr(not(test), expect(dead_code))]
 pub(crate) fn find_virtual_host_index(
     authority: &str,
     virtual_hosts: &[VirtualHost],
