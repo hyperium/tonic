@@ -23,6 +23,7 @@
  */
 
 use std::future::Future;
+use std::io;
 use std::net::IpAddr;
 use std::net::SocketAddr;
 use std::pin::Pin;
@@ -30,6 +31,7 @@ use std::time::Duration;
 
 use tokio::net::TcpStream;
 use tokio::task::JoinHandle;
+use tokio::time::sleep;
 
 use crate::client::name_resolution::TCP_IP_NETWORK_TYPE;
 use crate::rt::BoxEndpoint;
@@ -42,9 +44,14 @@ use crate::rt::Sleep;
 use crate::rt::StreamEndpoint;
 use crate::rt::TaskHandle;
 use crate::rt::TcpOptions;
+use crate::rt::address::FailingSocketAddress;
+use crate::rt::address::ListenerAddress;
+use crate::rt::address::TcpAddress;
 
 #[cfg(feature = "dns")]
 mod hickory_resolver;
+#[cfg(unix)]
+mod unix;
 
 /// A DNS resolver that uses tokio::net::lookup_host for resolution. It only
 /// supports host lookups.
@@ -137,25 +144,7 @@ impl Runtime for TokioRuntime {
         path: std::path::PathBuf,
         _opts: super::UnixSocketOptions,
     ) -> BoxFuture<Result<Box<dyn super::GrpcEndpoint>, String>> {
-        use tokio::net::UnixStream;
-
-        use crate::client::name_resolution::UNIX_NETWORK_TYPE;
-
-        Box::pin(async move {
-            let stream = UnixStream::connect(&path)
-                .await
-                .map_err(|err| err.to_string())?;
-            let peer_addr = stream.peer_addr().map_err(|err| err.to_string())?;
-            let local_addr = stream.local_addr().map_err(|err| err.to_string())?;
-
-            let stream: Box<dyn super::GrpcEndpoint> = Box::new(StreamEndpoint {
-                peer_addr: format!("{peer_addr:?}").into_boxed_str(),
-                local_addr: format!("{local_addr:?}").into_boxed_str(),
-                network_type: UNIX_NETWORK_TYPE,
-                inner: stream,
-            });
-            Ok(stream)
-        })
+        Box::pin(unix::connect(path))
     }
 
     fn tcp_listener(
@@ -176,10 +165,7 @@ impl Runtime for TokioRuntime {
         path: std::path::PathBuf,
         _opts: super::UnixSocketOptions,
     ) -> BoxFuture<Result<Box<dyn super::EndpointListener>, String>> {
-        Box::pin(async move {
-            let listener = tokio::net::UnixListener::bind(&path).map_err(|e| e.to_string())?;
-            Ok(Box::new(TokioUnixListener { listener }) as Box<dyn super::EndpointListener>)
-        })
+        Box::pin(async move { unix::bind(path) })
     }
 
     #[cfg(not(unix))]
@@ -202,6 +188,7 @@ impl TokioDefaultDnsResolver {
         Ok(TokioDefaultDnsResolver { _priv: () })
     }
 }
+
 impl StreamEndpoint<TcpStream> {
     pub(crate) fn new_from_tcp(stream: TcpStream) -> Result<Self, String> {
         Ok(StreamEndpoint {
@@ -219,11 +206,82 @@ impl StreamEndpoint<TcpStream> {
             inner: stream,
         })
     }
+
+    /// Creates an endpoint for a stream returned by `accept`, which also
+    /// returned `peer_addr`. Looking the peer address up again could fail if
+    /// the client has already reset the connection. If the local address can't
+    /// be read, it is left empty.
+    fn new_from_accepted_tcp(stream: TcpStream, peer_addr: SocketAddr) -> Self {
+        StreamEndpoint {
+            local_addr: stream
+                .local_addr()
+                .map(|addr| addr.to_string())
+                .unwrap_or_default()
+                .into_boxed_str(),
+            peer_addr: peer_addr.to_string().into_boxed_str(),
+            network_type: TCP_IP_NETWORK_TYPE,
+            inner: stream,
+        }
+    }
 }
 
-// ---------------------------------------------------------------------------
-// TokioTcpListener — EndpointListener for TCP
-// ---------------------------------------------------------------------------
+/// How [`accept_with_retry`] backs off after accept failures that aren't
+/// per-connection.
+struct AcceptRetryPolicy {
+    /// Delay after the first such failure.
+    initial_backoff: Duration,
+    /// Upper bound on the delay between retries.
+    max_backoff: Duration,
+}
+
+/// Policy used by the tokio TCP and Unix listeners.
+const TOKIO_ACCEPT_RETRY_POLICY: AcceptRetryPolicy = AcceptRetryPolicy {
+    initial_backoff: Duration::from_millis(5),
+    max_backoff: Duration::from_secs(1),
+};
+
+/// Reports whether `err` affects only one pending connection, leaving the
+/// listener usable.
+///
+/// Uses the same classification as axum:
+/// <https://github.com/tokio-rs/axum/blob/42d6fdc80d8933ced5ff4ae858f43a3581106c75/axum/src/serve/listener.rs#L266-L274>.
+fn is_connection_error(err: &io::Error) -> bool {
+    matches!(
+        err.kind(),
+        io::ErrorKind::ConnectionAborted
+            | io::ErrorKind::ConnectionRefused
+            | io::ErrorKind::ConnectionReset
+    )
+}
+
+/// Calls `accept` until it succeeds.
+///
+/// Per-connection errors are retried immediately. Other errors are retried with
+/// exponential back-off, as configured by `policy`, without limit.
+// TODO: Every accept error is retried, because there's no simple cross-platform way
+// to tell retryable errors from permanent ones. Following other Rust servers is our
+// best guess for now.
+async fn accept_with_retry<T, F, Fut>(policy: &AcceptRetryPolicy, mut accept: F) -> T
+where
+    F: FnMut() -> Fut,
+    Fut: Future<Output = io::Result<T>>,
+{
+    let mut backoff = policy.initial_backoff;
+    loop {
+        let err = match accept().await {
+            Ok(accepted) => return accepted,
+            Err(err) => err,
+        };
+        if is_connection_error(&err) {
+            // A per-connection error means the kernel is still handing us
+            // connections, so the listener is healthy: reset the back-off.
+            backoff = policy.initial_backoff;
+            continue;
+        }
+        sleep(backoff).await;
+        backoff = backoff.saturating_mul(2).min(policy.max_backoff);
+    }
+}
 
 /// Wraps `tokio::net::TcpListener` as an [`EndpointListener`](super::EndpointListener).
 struct TokioTcpListener {
@@ -233,62 +291,123 @@ struct TokioTcpListener {
 #[crate::async_trait]
 impl super::EndpointListener for TokioTcpListener {
     async fn accept(&self) -> Result<Box<dyn super::GrpcEndpoint>, String> {
-        let (stream, _addr) = self.listener.accept().await.map_err(|e| e.to_string())?;
-        let io = StreamEndpoint::new_from_tcp(stream)?;
-        Ok(Box::new(io))
+        let (stream, peer_addr) =
+            accept_with_retry(&TOKIO_ACCEPT_RETRY_POLICY, || self.listener.accept()).await;
+        Ok(Box::new(StreamEndpoint::new_from_accepted_tcp(
+            stream, peer_addr,
+        )))
     }
 
-    fn local_addr(&self) -> Box<dyn crate::rt::address::ListenerAddress> {
-        let addr = self.listener.local_addr().expect("TCP listener has addr");
-        Box::new(crate::rt::address::TcpAddress(addr))
-    }
-}
-
-// ---------------------------------------------------------------------------
-// TokioUnixListener — EndpointListener for Unix sockets
-// ---------------------------------------------------------------------------
-
-#[cfg(unix)]
-struct TokioUnixListener {
-    listener: tokio::net::UnixListener,
-}
-
-#[cfg(unix)]
-#[crate::async_trait]
-impl super::EndpointListener for TokioUnixListener {
-    async fn accept(&self) -> Result<Box<dyn super::GrpcEndpoint>, String> {
-        use crate::client::name_resolution::UNIX_NETWORK_TYPE;
-
-        let (stream, _addr) = self.listener.accept().await.map_err(|e| e.to_string())?;
-        let peer_addr = stream.peer_addr().map_err(|e| e.to_string())?;
-        let local_addr = stream.local_addr().map_err(|e| e.to_string())?;
-
-        let io: Box<dyn super::GrpcEndpoint> = Box::new(StreamEndpoint {
-            peer_addr: format!("{peer_addr:?}").into_boxed_str(),
-            local_addr: format!("{local_addr:?}").into_boxed_str(),
-            network_type: UNIX_NETWORK_TYPE,
-            inner: stream,
-        });
-        Ok(io)
-    }
-
-    fn local_addr(&self) -> Box<dyn crate::rt::address::ListenerAddress> {
-        let path = self
-            .listener
-            .local_addr()
-            .map(|a| format!("{a:?}"))
-            .unwrap_or_default();
-        Box::new(crate::rt::address::UnixListenerAddress::new(path))
+    fn local_addr(&self) -> Box<dyn ListenerAddress> {
+        // TODO: Should the API return result or a FailingAddress type?
+        match self.listener.local_addr().map_err(|e| e.to_string()) {
+            Ok(addr) => Box::new(TcpAddress(addr)),
+            Err(err) => Box::new(FailingSocketAddress::new("tcp", err)),
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::collections::VecDeque;
+    use std::future::Ready;
+    use std::future::ready;
+    use std::io;
+    use std::time::Duration;
+
+    use tokio::time::Instant;
+
+    use super::AcceptRetryPolicy;
     use super::DnsResolver;
     use super::ResolverOptions;
     use super::Runtime;
     use super::TokioDefaultDnsResolver;
     use super::TokioRuntime;
+    use super::accept_with_retry;
+
+    const TEST_POLICY: AcceptRetryPolicy = AcceptRetryPolicy {
+        initial_backoff: Duration::from_millis(10),
+        max_backoff: Duration::from_millis(40),
+    };
+
+    /// Per-connection error, retried immediately.
+    fn aborted() -> io::Result<u32> {
+        Err(io::Error::from(io::ErrorKind::ConnectionAborted))
+    }
+
+    /// Any other error, retried with back-off.
+    fn other() -> io::Result<u32> {
+        Err(io::Error::other("too many open files"))
+    }
+
+    /// Runs `accept_with_retry` with `TEST_POLICY` over `script` and returns the
+    /// result, the number of `accept` calls, and the virtual time that passed.
+    async fn run_script(script: Vec<io::Result<u32>>) -> (u32, usize, Duration) {
+        let mut script = VecDeque::from(script);
+        let mut calls = 0;
+        let start = Instant::now();
+        let result = accept_with_retry(&TEST_POLICY, || -> Ready<io::Result<u32>> {
+            calls += 1;
+            ready(script.pop_front().expect("script exhausted"))
+        })
+        .await;
+        (result, calls, start.elapsed())
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn accept_with_retry_returns_first_success() {
+        let (result, calls, elapsed) = run_script(vec![Ok(1)]).await;
+
+        assert_eq!(result, 1);
+        assert_eq!(calls, 1);
+        assert_eq!(elapsed, Duration::ZERO);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn accept_with_retry_retries_connection_errors_immediately() {
+        let script = vec![
+            aborted(),
+            Err(io::Error::from(io::ErrorKind::ConnectionReset)),
+            Err(io::Error::from(io::ErrorKind::ConnectionRefused)),
+            Ok(1),
+        ];
+
+        let (result, calls, elapsed) = run_script(script).await;
+
+        assert_eq!(result, 1);
+        assert_eq!(calls, 4);
+        assert_eq!(elapsed, Duration::ZERO);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn accept_with_retry_backs_off_exponentially() {
+        let (result, calls, elapsed) = run_script(vec![other(), other(), Ok(1)]).await;
+
+        assert_eq!(result, 1);
+        assert_eq!(calls, 3);
+        assert_eq!(elapsed, Duration::from_millis(10 + 20));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn accept_with_retry_caps_backoff() {
+        let (result, calls, elapsed) =
+            run_script(vec![other(), other(), other(), other(), Ok(1)]).await;
+
+        assert_eq!(result, 1);
+        assert_eq!(calls, 5);
+        assert_eq!(elapsed, Duration::from_millis(10 + 20 + 40 + 40));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn accept_with_retry_connection_error_resets_backoff() {
+        let script = vec![other(), other(), aborted(), other(), Ok(1)];
+
+        let (result, calls, elapsed) = run_script(script).await;
+
+        assert_eq!(result, 1);
+        assert_eq!(calls, 5);
+        assert_eq!(elapsed, Duration::from_millis(10 + 20 + 10));
+    }
 
     #[tokio::test]
     async fn lookup_hostname() {
