@@ -31,6 +31,8 @@ use std::sync::mpsc;
 use serde::Deserialize;
 use serde::Serialize;
 
+use crate::client::CallOptions;
+use crate::client::ConnectivityState;
 use crate::client::RequestHeaders;
 use crate::client::load_balancing::ChannelController;
 use crate::client::load_balancing::DynLbConfig;
@@ -40,6 +42,9 @@ use crate::client::load_balancing::LbPolicy;
 use crate::client::load_balancing::LbPolicyBuilder;
 use crate::client::load_balancing::LbPolicyOptions;
 use crate::client::load_balancing::LbState;
+use crate::client::load_balancing::PickOptions;
+use crate::client::load_balancing::PickResult;
+use crate::client::load_balancing::Picker;
 use crate::client::load_balancing::Subchannel;
 use crate::client::load_balancing::SubchannelState;
 use crate::client::load_balancing::WorkData;
@@ -49,6 +54,7 @@ use crate::client::load_balancing::subchannel::SubchannelUpdate;
 use crate::client::name_resolution::Endpoint;
 use crate::client::name_resolution::ResolverUpdate;
 use crate::core::Address;
+use crate::status::StatusCodeError;
 
 pub(crate) fn new_request_headers() -> RequestHeaders {
     RequestHeaders::default()
@@ -278,13 +284,83 @@ impl<P> TestEnv<P> {
         }
     }
 
-    /// Verifies that the policy produced a new picker, and returns the state
-    /// containing it.
+    /// Verifies that the policy produced a new picker, and returns the
+    /// [`LbState`] containing the connectivity state and picker without
+    /// inspecting either.
     pub(crate) fn expect_picker_update(&mut self) -> LbState {
         match self.next_event() {
             TestEvent::UpdatePicker(state) => state,
             other => panic!("expected UpdatePicker event, got {other:?}"),
         }
+    }
+
+    /// Calls [`Self::expect_picker_update`], verifies that the reported
+    /// connectivity state equals `want`, and returns the picker without
+    /// calling [`Picker::pick`].
+    ///
+    /// Prefer the state-specific helpers ([`Self::expect_queuing_picker`],
+    /// [`Self::expect_ready_picker`], [`Self::expect_failing_picker`]) when
+    /// testing pickers without side effects. Use this directly when:
+    /// - `want` is [`ConnectivityState::Idle`], where calling [`Picker::pick`]
+    ///   has the side effect of initiating connection attempts;
+    /// - `want` is [`ConnectivityState::Ready`] with multiple subchannels and
+    ///   the caller will perform its own multi-pick assertions; or
+    /// - testing against a stub policy whose picker is a placeholder.
+    pub(crate) fn expect_picker_state(&mut self, want: ConnectivityState) -> Arc<dyn Picker> {
+        let state = self.expect_picker_update();
+        assert_eq!(state.connectivity_state, want);
+        state.picker
+    }
+
+    /// Calls [`Self::expect_picker_state`] with
+    /// [`ConnectivityState::Connecting`], verifies that [`Picker::pick`]
+    /// returns [`PickResult::Queue`] per the [`Picker`] contract for
+    /// `CONNECTING`, and returns the picker.
+    pub(crate) fn expect_queuing_picker(&mut self) -> Arc<dyn Picker> {
+        let picker = self.expect_picker_state(ConnectivityState::Connecting);
+        let res = picker.pick(PickOptions::new(
+            &new_request_headers(),
+            &CallOptions::new(),
+        ));
+
+        assert_eq!(res, PickResult::Queue);
+        picker
+    }
+
+    /// Calls [`Self::expect_picker_state`] with [`ConnectivityState::Ready`],
+    /// verifies that [`Picker::pick`] returns [`PickResult::Pick`] for the
+    /// exact `subchannel` instance (pointer equality), and returns the picker.
+    pub(crate) fn expect_ready_picker(
+        &mut self,
+        subchannel: &Arc<dyn Subchannel>,
+    ) -> Arc<dyn Picker> {
+        let picker = self.expect_picker_state(ConnectivityState::Ready);
+
+        let PickResult::Pick(pick) = picker.pick(PickOptions::new(
+            &new_request_headers(),
+            &CallOptions::new(),
+        )) else {
+            panic!("expected Pick result");
+        };
+        assert_eq!(&pick.subchannel, subchannel);
+        picker
+    }
+
+    /// Calls [`Self::expect_picker_state`] with
+    /// [`ConnectivityState::TransientFailure`], verifies that [`Picker::pick`]
+    /// returns [`PickResult::Fail`] with [`StatusCodeError::Unavailable`] and
+    /// exact message `error`, and returns the picker.
+    pub(crate) fn expect_failing_picker(&mut self, error: &str) -> Arc<dyn Picker> {
+        let picker = self.expect_picker_state(ConnectivityState::TransientFailure);
+        let PickResult::Fail(status) = picker.pick(PickOptions::new(
+            &new_request_headers(),
+            &CallOptions::new(),
+        )) else {
+            panic!("expected Fail result");
+        };
+        assert_eq!(status.code(), StatusCodeError::Unavailable);
+        assert_eq!(status.message(), error);
+        picker
     }
 
     /// Verifies that the policy requested re-resolution.

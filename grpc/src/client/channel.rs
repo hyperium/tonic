@@ -45,6 +45,7 @@ use crate::client::Invoke;
 use crate::client::RequestHeaders;
 use crate::client::load_balancing::LbPolicy as _;
 use crate::client::load_balancing::LbState;
+use crate::client::load_balancing::PickOptions;
 use crate::client::load_balancing::PickResult;
 use crate::client::load_balancing::Picker;
 use crate::client::load_balancing::QueuingPicker;
@@ -367,7 +368,11 @@ impl Invoke for Arc<ActiveChannel> {
             // Fast path: snapshot the latest LB state without locking and pick
             // with its picker.
             let snapshot = self.lb_watcher.snapshot();
-            match snapshot.value().picker.pick(&headers) {
+            match snapshot
+                .value()
+                .picker
+                .pick(PickOptions::new(&headers, &options))
+            {
                 PickResult::Pick(pr) => {
                     if let Some(sc) = pr.subchannel.downcast_ref::<InternalSubchannel>() {
                         return sc.dyn_invoke(headers, options).await;
