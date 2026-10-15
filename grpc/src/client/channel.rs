@@ -31,11 +31,14 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Instant;
 
+use arc_swap::ArcSwap;
+use tokio::sync::SetOnce;
 use tokio::sync::mpsc;
 use tokio::sync::watch;
 
 use crate::StatusCodeError;
 use crate::StatusError;
+use crate::call_attributes::CallAttributes;
 use crate::client::CallOptions;
 use crate::client::ConnectivityState;
 use crate::client::DynInvoke;
@@ -45,6 +48,7 @@ use crate::client::Invoke;
 use crate::client::RequestHeaders;
 use crate::client::load_balancing::LbPolicy as _;
 use crate::client::load_balancing::LbState;
+use crate::client::load_balancing::PickOptions;
 use crate::client::load_balancing::PickResult;
 use crate::client::load_balancing::Picker;
 use crate::client::load_balancing::QueuingPicker;
@@ -61,6 +65,10 @@ use crate::client::load_balancing::{self};
 use crate::client::name_resolution::ResolverBuilder;
 use crate::client::name_resolution::ResolverUpdate;
 use crate::client::name_resolution::Target;
+use crate::client::name_resolution::config_selector;
+use crate::client::name_resolution::config_selector::ConfigSelector;
+use crate::client::name_resolution::config_selector::DefaultConfigSelector;
+use crate::client::name_resolution::config_selector::RpcConfig;
 use crate::client::name_resolution::dns;
 use crate::client::name_resolution::global_registry;
 use crate::client::name_resolution::proxy_resolver;
@@ -290,6 +298,7 @@ struct ActiveChannel {
                                             * dropped. */
     lb_watcher: Arc<Watcher<LbState>>, /* For getting the channel connectivity state and pickers
                                         * for RPCs. */
+    config_selector: SharedConfigSelector,
 }
 
 impl ActiveChannel {
@@ -302,11 +311,13 @@ impl ActiveChannel {
         }));
 
         let (wqtx, mut wqrx) = mpsc::unbounded_channel::<WorkQueueItem>();
+        let config_selector = SharedConfigSelector::new();
         let mut resolver_channel_controller = ResolverChannelController::new(
             wqtx.clone(),
             runtime.clone(),
             lb_watcher.clone(),
             persistent_channel.security_opts.clone(),
+            config_selector.clone(),
         );
 
         let work_scheduler = Arc::new(ResolverWorkScheduler { wqtx });
@@ -341,6 +352,7 @@ impl ActiveChannel {
         Arc::new(Self {
             abort_handle,
             lb_watcher,
+            config_selector,
         })
     }
 }
@@ -352,8 +364,23 @@ impl Invoke for Arc<ActiveChannel> {
     async fn invoke(
         &self,
         headers: RequestHeaders,
-        options: CallOptions,
+        mut options: CallOptions,
     ) -> (Self::SendStream, Self::RecvStream) {
+        let config = match self
+            .config_selector
+            .try_select_config(&headers, options.attributes_mut())
+        {
+            Some(config) => config,
+            // Only until the resolver produces its first result.
+            None => {
+                self.config_selector
+                    .wait_and_select_config(&headers, options.attributes_mut())
+                    .await
+            }
+        };
+        if let Err(status) = config {
+            return FailingRecvStream::new_stream_pair(status, None);
+        }
         let mut i = self.lb_watcher.iter();
         loop {
             let Some(state) = i.next().await else {
@@ -362,7 +389,9 @@ impl Invoke for Arc<ActiveChannel> {
                     None,
                 );
             };
-            let result = &state.picker.pick(&headers);
+            let result = state
+                .picker
+                .pick(PickOptions::new(&headers, options.attributes_mut()));
             match result {
                 PickResult::Pick(pr) => {
                     if let Some(sc) = pr.subchannel.downcast_ref::<InternalSubchannel>() {
@@ -377,7 +406,7 @@ impl Invoke for Arc<ActiveChannel> {
                     // Continue and retry the RPC with the next picker.
                 }
                 PickResult::Fail(status) => {
-                    return FailingRecvStream::new_stream_pair(status.clone(), None);
+                    return FailingRecvStream::new_stream_pair(status, None);
                 }
                 PickResult::Drop(status) => {
                     todo!("dropped pick: {:?}", status);
@@ -411,6 +440,7 @@ struct ResolverChannelController {
     lb_policy: SubchannelSharing<GracefulSwitchPolicy>,
     lb_work_scheduler: Arc<LbWorkScheduler>,
     lb_channel_controller: LbChannelController,
+    config_selector: SharedConfigSelector,
 }
 
 impl ResolverChannelController {
@@ -419,6 +449,7 @@ impl ResolverChannelController {
         runtime: GrpcRuntime,
         lb_watcher: Arc<Watcher<LbState>>,
         security_opts: SecurityOpts,
+        config_selector: SharedConfigSelector,
     ) -> Self {
         let lb_work_scheduler = Arc::new(LbWorkScheduler { wqtx: wqtx.clone() });
         let lb_channel_controller = LbChannelController {
@@ -437,6 +468,7 @@ impl ResolverChannelController {
             lb_channel_controller,
             wqtx: wqtx.clone(),
             runtime: runtime.clone(),
+            config_selector,
         }
     }
 }
@@ -448,10 +480,29 @@ impl name_resolution::ChannelController for ResolverChannelController {
             _ => ServiceConfig::default_lb_policy(),
         };
 
+        let (cfg_selector, update) = config_selector::from_resolver_update(update);
+
         let gsb_config = GracefulSwitchLbConfig::new(builder, config);
 
-        self.lb_policy
-            .resolver_update(update, &gsb_config, &mut self.lb_channel_controller)
+        let lb_result =
+            self.lb_policy
+                .resolver_update(update, &gsb_config, &mut self.lb_channel_controller);
+        // As per gRFC A31, the LB policy's update must be called and return
+        // before the new config selector is used, since the selector may route
+        // RPCs to destinations that only the LB policy's new picker knows
+        // about. `resolver_update` is synchronous, so any picker produced for
+        // this update has already been published.
+        //
+        // The selector is applied even if the LB policy returned an error: the
+        // policy has still processed the update (and may have published a new
+        // picker); the error only asks the resolver to re-resolve.
+        //
+        // TODO: once service config error handling (gRFC A21) is implemented,
+        // keep the previous selector when the resolver returns an invalid
+        // service config.
+        self.config_selector
+            .update(cfg_selector.unwrap_or_else(|| Arc::new(DefaultConfigSelector)));
+        lb_result
     }
 
     fn parse_service_config(&self, config: &str) -> ParseResult {
@@ -586,6 +637,99 @@ fn parse_authority(host_and_port: &str) -> Authority {
         return Authority::new(host, Some(port));
     }
     Authority::new(host_and_port.to_string(), None)
+}
+
+/// Shares an [`ActiveChannel`]'s config selector between the work serializer,
+/// which replaces it on every resolver update, and RPCs, which each read it
+/// once.
+#[derive(Debug, Clone)]
+struct SharedConfigSelector {
+    inner: Arc<SharedConfigSelectorInner>,
+}
+
+#[derive(Debug)]
+struct SharedConfigSelectorInner {
+    /// The current config selector. Until the resolver produces its first
+    /// result, this is a [`DefaultConfigSelector`] that RPCs never use: they
+    /// wait for `resolved` instead.
+    ///
+    /// `ArcSwap` stores a thin pointer, so the `Arc<dyn ConfigSelector>` (a fat
+    /// pointer) is itself stored in an `Arc`. `load` borrows the current value
+    /// without modifying reference counts.
+    current: ArcSwap<Arc<dyn ConfigSelector>>,
+    /// Set once `current` holds the selector from the resolver's first result.
+    resolved: SetOnce<()>,
+}
+
+impl SharedConfigSelector {
+    fn new() -> Self {
+        Self {
+            inner: Arc::new(SharedConfigSelectorInner {
+                current: ArcSwap::from_pointee(Arc::new(DefaultConfigSelector)),
+                resolved: SetOnce::new(),
+            }),
+        }
+    }
+
+    /// Selects the configuration for an RPC, or returns `None` if the resolver
+    /// has not produced a result yet.
+    fn try_select_config(
+        &self,
+        headers: &RequestHeaders,
+        attributes: &mut CallAttributes,
+    ) -> Option<Result<RpcConfig, StatusError>> {
+        if !self.inner.resolved.initialized() {
+            return None;
+        }
+        Some(self.select_config(headers, attributes))
+    }
+
+    /// Waits for the resolver's first result, then selects the configuration.
+    async fn wait_and_select_config(
+        &self,
+        headers: &RequestHeaders,
+        attributes: &mut CallAttributes,
+    ) -> Result<RpcConfig, StatusError> {
+        // Returns immediately if `resolved` is already set. `SetOnce` stays
+        // set, so an `update` that races with this call can't be missed.
+        self.inner.resolved.wait().await;
+        self.select_config(headers, attributes)
+    }
+
+    /// Selects the configuration using `current`. Callers must first check
+    /// that the resolver has produced a result.
+    fn select_config(
+        &self,
+        headers: &RequestHeaders,
+        attributes: &mut CallAttributes,
+    ) -> Result<RpcConfig, StatusError> {
+        self.inner
+            .current
+            .load()
+            .select_config(PickOptions::new(headers, attributes))
+            .map_err(sanitize_config_selector_status)
+    }
+
+    fn update(&self, selector: Arc<dyn ConfigSelector>) {
+        self.inner.current.store(Arc::new(selector));
+        // Set `resolved` after the store, so that RPCs that observe it also
+        // observe the new selector. This fails, harmlessly, on every update
+        // after the first.
+        let _ = self.inner.resolved.set(());
+    }
+}
+
+/// Replaces status codes that config selectors may not produce with INTERNAL,
+/// per gRFC A54.
+fn sanitize_config_selector_status(status: StatusError) -> StatusError {
+    if status.is_restricted_control_plane_code() {
+        StatusError::new(
+            StatusCodeError::Internal,
+            format!("config selector returned illegal status: {status}"),
+        )
+    } else {
+        status
+    }
 }
 
 // Sets up the default registries for transports, name resolvers, and load
