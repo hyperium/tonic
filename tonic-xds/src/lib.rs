@@ -222,6 +222,20 @@
 //! | TLS endpoint connections | [A29] | Supported |
 //! | Least-request load balancing | [A48] | Planned |
 //!
+//! ## Load-balancer backend
+//!
+//! By default each cluster is balanced by Tower's power-of-two-choices
+//! `Balance`, fed endpoints that discovery has already connected.
+//!
+//! The `xds-lb` feature swaps in this crate's own balancer, which
+//! receives bare addresses plus a connector and so owns the connection
+//! lifecycle — the prerequisite for ejecting outliers and for pluggable
+//! pickers such as ring-hash. It is still maturing: outlier detection is
+//! compiled in but left disabled, and only the P2C picker is selected, so the
+//! two backends behave the same today. Both [`XdsChannelBuilder::build_grpc_channel`]
+//! and [`XdsChannelBuilder::build_transport_channel`] honour it, and the
+//! channel types are unchanged, so enabling it needs no code changes.
+//!
 //! [A27]: https://github.com/grpc/proposal/blob/master/A27-xds-global-load-balancing.md
 //! [A28]: https://github.com/grpc/proposal/blob/master/A28-xds-traffic-splitting-and-routing.md
 //! [A29]: https://github.com/grpc/proposal/blob/master/A29-xds-tls-security.md

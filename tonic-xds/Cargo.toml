@@ -76,6 +76,13 @@ google-cloud-auth = { version = "1.9", default-features = false }
 [features]
 testutil = ["dep:tonic-prost"]
 
+# Swaps the per-cluster load balancer from Tower's P2C `Balance` to the
+# in-crate `LoadBalancer`, which owns the endpoint connection lifecycle and so
+# can eject outliers and run pluggable pickers. Still maturing: outlier
+# detection is compiled in but left disabled, and only the P2C picker is
+# selected. Enabling it changes behaviour for the whole dependency graph.
+xds-lb = []
+
 # Bundled OpenTelemetry metrics recorder for the gRFC A78 xDS client metrics.
 # The recorder lives in the companion `xds-client-opentelemetry` crate so its
 # OpenTelemetry version is decoupled from the core crates.
