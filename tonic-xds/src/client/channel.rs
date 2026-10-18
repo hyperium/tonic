@@ -22,9 +22,9 @@
  *
  */
 
-use crate::client::cluster::ClusterClientRegistry;
+use crate::client::cluster::{ClusterChannelFactory, ClusterClientRegistry};
 use crate::client::endpoint::{EndpointAddress, MakeConnector};
-use crate::client::lb::{ClusterDiscovery, XdsLbService};
+use crate::client::lb::{ClusterDiscovery, TowerP2cClusterChannelFactory, XdsLbService};
 use crate::client::route::{PreRouteInterceptor, Router, XdsRoutingLayer};
 use crate::xds::bootstrap::{BootstrapConfig, BootstrapError};
 use crate::xds::cache::XdsCache;
@@ -556,10 +556,10 @@ impl XdsChannelBuilder {
         });
 
         let routing_layer = XdsRoutingLayer::new(router, self.pre_route.clone(), self.authority());
-        self.assemble_channel_stack::<MC::Service, B, ReqBody, ResBody, _>(
+        self.assemble_channel_stack::<B, ReqBody, ResBody, _>(
             routing_layer,
             retry_layer,
-            discovery,
+            Arc::new(TowerP2cClusterChannelFactory::new(discovery)),
             to_endpoint_req,
             Some(resources),
         )
@@ -592,19 +592,15 @@ impl XdsChannelBuilder {
     /// `Request<ReqBody>`: the built-in gRPC path rewraps into [`TonicBody`],
     /// while transport-generic callers pass the body through unchanged
     /// (`ReqBody = SharedBody<B>`).
-    fn assemble_channel_stack<EpService, B, ReqBody, ResBody, F>(
+    fn assemble_channel_stack<B, ReqBody, ResBody, F>(
         &self,
         routing_layer: XdsRoutingLayer,
         retry_layer: RetryLayer,
-        discovery: Arc<dyn ClusterDiscovery<EndpointAddress, EpService>>,
+        cluster_factory: Arc<dyn ClusterChannelFactory<Request<ReqBody>, Response<ResBody>>>,
         to_endpoint_req: F,
         resources: Option<Arc<XdsChannelResources>>,
     ) -> XdsTransportChannel<B, ResBody>
     where
-        EpService: Service<Request<ReqBody>, Response = Response<ResBody>> + Load + Send + 'static,
-        EpService::Error: Into<BoxError>,
-        EpService::Future: Send + 'static,
-        EpService::Metric: Debug,
         F: Fn(Request<SharedBody<B>>) -> Request<ReqBody> + Clone + Send + Sync + 'static,
         B: Body + Unpin + Send + 'static,
         B::Data: Clone + Send + Sync,
@@ -614,7 +610,7 @@ impl XdsChannelBuilder {
     {
         let cluster_registry =
             Arc::new(ClusterClientRegistry::<Request<ReqBody>, Response<ResBody>>::new());
-        let lb_service = XdsLbService::new(cluster_registry, discovery);
+        let lb_service = XdsLbService::new(cluster_registry, cluster_factory);
         let inner = ServiceBuilder::new()
             .layer(routing_layer)
             .layer(retry_layer)
@@ -711,7 +707,7 @@ mod tests {
     fn test_config() -> XdsChannelConfig {
         XdsChannelConfig::new(XdsUri::parse("xds:///test-service").unwrap())
     }
-    use crate::client::lb::{BoxDiscover, ClusterDiscovery};
+    use crate::client::lb::{BoxDiscover, ClusterDiscovery, TowerP2cClusterChannelFactory};
     use crate::client::retry::RetrySharedConfig;
     use crate::client::route::PreRouteInterceptor;
     use crate::client::route::RouteDecision;
@@ -747,10 +743,10 @@ mod tests {
 
             let routing_layer = XdsRoutingLayer::new(router, interceptor, self.authority());
             let retry_layer = RetryLayer::new(retry);
-            self.assemble_channel_stack::<EndpointChannel<Channel>, TonicBody, TonicBody, TonicBody, _>(
+            self.assemble_channel_stack::<TonicBody, TonicBody, TonicBody, _>(
                 routing_layer,
                 retry_layer,
-                discovery,
+                Arc::new(TowerP2cClusterChannelFactory::new(discovery)),
                 |req: Request<SharedBody<TonicBody>>| req.map(TonicBody::new),
                 None,
             )
@@ -1359,12 +1355,17 @@ mod tests {
         let retry_layer = RetryLayer::new(Arc::new(RetrySharedConfig::grpc_default()));
 
         let mut channel = builder.assemble_channel_stack::<
-            EndpointChannel<EchoEndpoint>,
             TestBody,
             shared_http_body::SharedBody<TestBody>,
             TestBody,
             _,
-        >(routing_layer, retry_layer, discovery, |req| req, None);
+        >(
+            routing_layer,
+            retry_layer,
+            Arc::new(TowerP2cClusterChannelFactory::new(discovery)),
+            |req| req,
+            None,
+        );
 
         let request = super::Request::new(TestBody(Some(bytes::Bytes::from_static(b"hi"))));
         let response = channel

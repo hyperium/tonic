@@ -127,8 +127,7 @@ impl<MC: MakeConnector> ClusterDiscovery<EndpointAddress, MC::Service> for XdsCl
             self.registry.clone(),
         ));
 
-        EndpointManager::new(connector)
-            .discover_endpoints(self.cache.watch_endpoints(cluster_name))
+        EndpointManager::new(connector).discover_endpoints(self.cache.watch_endpoints(cluster_name))
     }
 }
 
