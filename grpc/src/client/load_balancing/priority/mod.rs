@@ -347,7 +347,15 @@ enum ChildState {
     ///
     /// [gRFC A115]:
     ///   https://github.com/grpc/proposal/blob/master/A115-remove-priority-lb-child-policy-cache.md
-    Deactivated(Timer),
+    Deactivated {
+        /// The 15-minute retention timer.
+        deactivation_timer: Timer,
+        /// The 10-second failover timer, if the deactivated child is
+        /// `CONNECTING` and its timer has not been cancelled.
+        failover_timer: Option<Timer>,
+        /// Whether a `CONNECTING` transition may start a failover timer.
+        can_start_failover_timer: bool,
+    },
 }
 
 impl ChildState {
@@ -370,6 +378,64 @@ impl ChildState {
         }
     }
 
+    /// Starts the 15-minute retention timer, preserving any pending timer.
+    fn deactivate(&mut self, work_scheduler: &Arc<dyn WorkScheduler>, rt: &GrpcRuntime) {
+        if matches!(self, ChildState::Deactivated { .. }) {
+            return;
+        }
+        let old = std::mem::replace(self, ChildState::TransientFailure);
+        let (failover_timer, can_start_failover_timer) = match old {
+            ChildState::Connecting(timer) => (Some(timer), false),
+            ChildState::ConnectingExpired | ChildState::TransientFailure => (None, false),
+            ChildState::ReadyOrIdle => (None, true),
+            ChildState::Deactivated { .. } => unreachable!("checked above"),
+        };
+        *self = ChildState::Deactivated {
+            deactivation_timer: Timer::new(
+                DEACTIVATION_TIMEOUT,
+                work_scheduler.clone(),
+                rt.clone(),
+            ),
+            failover_timer,
+            can_start_failover_timer,
+        };
+    }
+
+    /// Cancels the 15-minute deactivation timer, preserving the connectivity
+    /// and failover-timer state tracked while the child was deactivated.
+    fn reactivate(
+        &mut self,
+        connectivity_state: ConnectivityState,
+        work_scheduler: &Arc<dyn WorkScheduler>,
+        rt: &GrpcRuntime,
+    ) {
+        let old = std::mem::replace(self, ChildState::TransientFailure);
+        let ChildState::Deactivated {
+            failover_timer,
+            can_start_failover_timer,
+            ..
+        } = old
+        else {
+            unreachable!("reactivate called on non-deactivated child")
+        };
+        *self = match failover_timer {
+            Some(timer) if timer.expired() => ChildState::ConnectingExpired,
+            Some(timer) => ChildState::Connecting(timer),
+            None => match connectivity_state {
+                ConnectivityState::Connecting if can_start_failover_timer => {
+                    ChildState::Connecting(Timer::new(
+                        CONNECTING_TIMEOUT,
+                        work_scheduler.clone(),
+                        rt.clone(),
+                    ))
+                }
+                ConnectivityState::Connecting => ChildState::ConnectingExpired,
+                ConnectivityState::Idle | ConnectivityState::Ready => ChildState::ReadyOrIdle,
+                ConnectivityState::TransientFailure => ChildState::TransientFailure,
+            },
+        };
+    }
+
     /// Updates the state of a child in this state that is now reporting
     /// `connectivity_state`.  Starts a failover timer if the child starts
     /// connecting.
@@ -379,15 +445,49 @@ impl ChildState {
         work_scheduler: &Arc<dyn WorkScheduler>,
         rt: &GrpcRuntime,
     ) {
-        match (&*self, connectivity_state) {
-            // While deactivated, retain the 15-minute deactivation timer (see
-            // gRFC A56 (Section Child Lifetime Management)).
-            (ChildState::Deactivated(_), _) => {}
+        let old = std::mem::replace(self, ChildState::TransientFailure);
+        *self = match (old, connectivity_state) {
+            // A deactivated child keeps tracking connectivity state and its
+            // failover timer; only reactivation cancels the deactivation timer.
+            (
+                ChildState::Deactivated {
+                    deactivation_timer,
+                    failover_timer,
+                    can_start_failover_timer,
+                },
+                connectivity_state,
+            ) => {
+                let (failover_timer, can_start_failover_timer) = match connectivity_state {
+                    ConnectivityState::Connecting => {
+                        if can_start_failover_timer && failover_timer.is_none() {
+                            (
+                                Some(Timer::new(
+                                    CONNECTING_TIMEOUT,
+                                    work_scheduler.clone(),
+                                    rt.clone(),
+                                )),
+                                false,
+                            )
+                        } else {
+                            (failover_timer, false)
+                        }
+                    }
+                    ConnectivityState::Idle | ConnectivityState::Ready => (None, true),
+                    ConnectivityState::TransientFailure => (None, false),
+                };
+                ChildState::Deactivated {
+                    deactivation_timer,
+                    failover_timer,
+                    can_start_failover_timer,
+                }
+            }
             // Keep the failover timer that is already running, unless it has
             // expired.
             (ChildState::Connecting(timer), ConnectivityState::Connecting) => {
                 if timer.expired() {
-                    *self = ChildState::ConnectingExpired;
+                    ChildState::ConnectingExpired
+                } else {
+                    ChildState::Connecting(timer)
                 }
             }
             // A child that has failed, or whose failover timer has expired, is
@@ -395,11 +495,11 @@ impl ChildState {
             (
                 ChildState::ConnectingExpired | ChildState::TransientFailure,
                 ConnectivityState::Connecting,
-            ) => *self = ChildState::ConnectingExpired,
+            ) => ChildState::ConnectingExpired,
             (_, connectivity_state) => {
-                *self = Self::from_connectivity_state(connectivity_state, work_scheduler, rt);
+                Self::from_connectivity_state(connectivity_state, work_scheduler, rt)
             }
-        }
+        };
     }
 }
 
@@ -628,10 +728,13 @@ impl PriorityPolicy {
     fn handle_deactivation_timer(&mut self) {
         for child_data in &mut self.children {
             if let Some(CreatedChild {
-                state: ChildState::Deactivated(timer),
+                state:
+                    ChildState::Deactivated {
+                        deactivation_timer, ..
+                    },
                 ..
             }) = &child_data.child
-                && timer.expired()
+                && deactivation_timer.expired()
             {
                 child_data.child = None;
             }
@@ -680,12 +783,11 @@ impl PriorityPolicy {
             let child = match &mut child_data.child {
                 Some(child) => {
                     // Reactivate child if previously deactivated.
-                    if let ChildState::Deactivated(_) = child.state {
-                        child.state = ChildState::from_connectivity_state(
-                            child.policy.state().connectivity_state,
-                            &self.work_scheduler,
-                            &self.rt,
-                        );
+                    if matches!(child.state, ChildState::Deactivated { .. }) {
+                        let connectivity_state = child.policy.state().connectivity_state;
+                        child
+                            .state
+                            .reactivate(connectivity_state, &self.work_scheduler, &self.rt);
                     }
                     child
                 }
@@ -736,7 +838,7 @@ impl PriorityPolicy {
                     self.set_current_priority(channel_controller, idx, true);
                     return;
                 }
-                ChildState::Deactivated(_) => {
+                ChildState::Deactivated { .. } => {
                     unreachable!("child was reactivated and cannot remain in Deactivated state")
                 }
             }
@@ -772,13 +874,7 @@ impl PriorityPolicy {
                 let Some(child) = &mut child_data.child else {
                     continue;
                 };
-                if !matches!(child.state, ChildState::Deactivated(_)) {
-                    child.state = ChildState::Deactivated(Timer::new(
-                        DEACTIVATION_TIMEOUT,
-                        self.work_scheduler.clone(),
-                        self.rt.clone(),
-                    ));
-                }
+                child.state.deactivate(&self.work_scheduler, &self.rt);
             }
         }
 
