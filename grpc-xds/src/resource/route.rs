@@ -26,27 +26,29 @@
 //!
 //! Models the validated data shapes only (gRFC A28).
 
-// TODO: implement request routing components (virtual-host domain matching, then
+// TODO: implement request routing components (
 // path/header/fraction matching, stripping `-bin` headers from request metadata before
 // evaluating header matchers) in the future resolver/interceptor layer that consumes `XdsConfig`.
 
 use std::collections::HashSet;
 
 use protobuf::Parse;
-use regex::Regex;
+use xds_client::Error;
+use xds_client::Resource;
 use xds_client::resource::TypeUrl;
-use xds_client::{Error, Resource};
 
+use super::safe_regex::SafeRegex;
+use super::string_matcher::StringMatcher;
+use crate::generated::envoy::config::route::v3::HeaderMatcherView;
+use crate::generated::envoy::config::route::v3::RouteActionView;
+use crate::generated::envoy::config::route::v3::RouteConfiguration;
+use crate::generated::envoy::config::route::v3::RouteMatchView;
+use crate::generated::envoy::config::route::v3::RouteView;
+use crate::generated::envoy::config::route::v3::VirtualHostView;
 use crate::generated::envoy::config::route::v3::header_matcher::HeaderMatchSpecifierOneof;
 use crate::generated::envoy::config::route::v3::route::ActionOneof;
 use crate::generated::envoy::config::route::v3::route_action::ClusterSpecifierOneof;
 use crate::generated::envoy::config::route::v3::route_match::PathSpecifierOneof;
-use crate::generated::envoy::config::route::v3::{
-    HeaderMatcherView, RouteActionView, RouteConfiguration, RouteMatchView, RouteView,
-    VirtualHostView,
-};
-use crate::generated::envoy::r#type::matcher::v3::StringMatcherView;
-use crate::generated::envoy::r#type::matcher::v3::string_matcher::MatchPatternOneof;
 use crate::generated::envoy::r#type::v3::fractional_percent::DenominatorType;
 
 /// Validated RouteConfiguration.
@@ -60,8 +62,49 @@ pub(crate) struct RouteConfigResource {
 #[derive(Debug, Clone)]
 pub(crate) struct VirtualHost {
     pub(crate) name: String,
-    pub(crate) domains: Vec<String>,
+    pub(crate) domains: Vec<DomainMatcher>,
     pub(crate) routes: Vec<Route>,
+}
+
+/// A validated virtual-host domain pattern (gRFC A27).
+///
+/// Built with [`DomainMatcher::try_from`], which lowercases the domain and
+/// removes the `*`, so the stored literal is ASCII lowercase and, for
+/// wildcard variants, non-empty.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum DomainMatcher {
+    /// `example.com`
+    Exact(String),
+    /// `*.example.com`, stored as `.example.com`.
+    Suffix(String),
+    /// `example.*`, stored as `example.`.
+    Prefix(String),
+    /// `*`
+    Universal,
+}
+
+/// An empty domain pattern or one with unsupported wildcard placement.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct InvalidDomainPattern;
+
+impl TryFrom<&str> for DomainMatcher {
+    type Error = InvalidDomainPattern;
+
+    fn try_from(domain: &str) -> Result<Self, Self::Error> {
+        if domain.is_empty() {
+            return Err(InvalidDomainPattern);
+        }
+        let domain = domain.to_ascii_lowercase();
+        match domain.find('*') {
+            None => Ok(Self::Exact(domain)),
+            Some(0) if domain.len() == 1 => Ok(Self::Universal),
+            Some(0) if !domain[1..].contains('*') => Ok(Self::Suffix(domain[1..].to_string())),
+            Some(index) if index == domain.len() - 1 => {
+                Ok(Self::Prefix(domain[..index].to_string()))
+            }
+            _ => Err(InvalidDomainPattern),
+        }
+    }
 }
 
 /// A validated route with match criteria and action.
@@ -87,7 +130,7 @@ pub(crate) struct RouteMatch {
 pub(crate) enum PathSpecifier {
     Prefix(String),
     Path(String),
-    SafeRegex(Regex),
+    SafeRegex(SafeRegex),
 }
 
 /// Header matching criteria.
@@ -132,76 +175,6 @@ pub(crate) struct WeightedCluster {
     pub(crate) weight: u32,
 }
 
-/// Validated `envoy.type.matcher.v3.StringMatcher`.
-#[derive(Debug, Clone)]
-pub(crate) enum StringMatcher {
-    Exact { value: String, ignore_case: bool },
-    Prefix { value: String, ignore_case: bool },
-    Suffix { value: String, ignore_case: bool },
-    Contains { value: String, ignore_case: bool },
-    SafeRegex(Regex),
-}
-
-impl StringMatcher {
-    /// Parses and validates an `envoy.type.matcher.v3.StringMatcher`.
-    ///
-    /// Returns an error if the `match_pattern` oneof is unset or carries an
-    /// unsupported variant, a prefix/suffix/contains value is empty, or a
-    /// `safe_regex` fails to compile.
-    fn from_proto(proto: StringMatcherView<'_>) -> xds_client::Result<Self> {
-        let ignore_case = proto.ignore_case();
-        match proto.match_pattern() {
-            MatchPatternOneof::Exact(value) => Ok(Self::Exact {
-                value: value.to_str().unwrap_or_default().to_string(),
-                ignore_case,
-            }),
-            MatchPatternOneof::Prefix(value) => Ok(Self::Prefix {
-                value: non_empty_match_value(value.to_str().unwrap_or_default(), "prefix")?,
-                ignore_case,
-            }),
-            MatchPatternOneof::Suffix(value) => Ok(Self::Suffix {
-                value: non_empty_match_value(value.to_str().unwrap_or_default(), "suffix")?,
-                ignore_case,
-            }),
-            MatchPatternOneof::Contains(value) => Ok(Self::Contains {
-                value: non_empty_match_value(value.to_str().unwrap_or_default(), "contains")?,
-                ignore_case,
-            }),
-            MatchPatternOneof::SafeRegex(r) => {
-                let pattern = r.regex();
-                let pattern = pattern.to_str().unwrap_or_default();
-                Ok(Self::SafeRegex(compile_regex(pattern, "string matcher")?))
-            }
-            MatchPatternOneof::not_set(_) => Err(Error::Validation(
-                "StringMatcher has no match_pattern set".into(),
-            )),
-            _ => Err(Error::Validation(
-                "unsupported StringMatcher pattern".into(),
-            )),
-        }
-    }
-}
-
-fn non_empty_match_value(value: &str, kind: &str) -> xds_client::Result<String> {
-    if value.is_empty() {
-        return Err(Error::Validation(format!(
-            "empty {kind} match is not allowed"
-        )));
-    }
-    Ok(value.to_string())
-}
-
-/// Compiles a `RegexMatcher` pattern, rejecting the empty pattern.
-fn compile_regex(pattern: &str, kind: &str) -> xds_client::Result<Regex> {
-    if pattern.is_empty() {
-        return Err(Error::Validation(format!(
-            "empty {kind} regex is not allowed"
-        )));
-    }
-    Regex::new(pattern)
-        .map_err(|e| Error::Validation(format!("invalid {kind} regex '{pattern}': {e}")))
-}
-
 impl Resource for RouteConfigResource {
     type Message = RouteConfiguration;
 
@@ -244,10 +217,21 @@ fn validate_virtual_host(vh: VirtualHostView<'_>) -> xds_client::Result<VirtualH
             "virtual host '{name}' has no domains"
         )));
     }
-    let domains: Vec<String> = domains_view
+    let domains = domains_view
         .iter()
-        .map(|d| d.to_str().unwrap_or_default().to_string())
-        .collect();
+        .map(|d| {
+            // Invalid UTF-8 is not expected in practice; xDS resource parsing
+            // will later convert panics like this into validation errors.
+            let domain = d
+                .to_str()
+                .expect("virtual host domain should be valid UTF-8");
+            DomainMatcher::try_from(domain).map_err(|_| {
+                Error::Validation(format!(
+                    "invalid domain pattern '{domain}' in virtual host '{name}'"
+                ))
+            })
+        })
+        .collect::<xds_client::Result<Vec<_>>>()?;
 
     let mut routes = Vec::new();
     for route in vh.routes().iter() {
@@ -309,7 +293,10 @@ fn validate_route_match(rm: RouteMatchView<'_>) -> xds_client::Result<RouteMatch
         PathSpecifierOneof::SafeRegex(r) => {
             let pattern = r.regex();
             let pattern = pattern.to_str().unwrap_or_default();
-            PathSpecifier::SafeRegex(compile_regex(pattern, "path")?)
+            let regex = pattern
+                .parse()
+                .map_err(|e| Error::Validation(format!("invalid path regex '{pattern}': {e}")))?;
+            PathSpecifier::SafeRegex(regex)
         }
         // Per A28: not having path_specifier will cause a NACK.
         PathSpecifierOneof::not_set(_) => {
@@ -376,19 +363,23 @@ fn validate_header_matcher(hm: HeaderMatcherView<'_>) -> xds_client::Result<Head
 
     // Legacy matchers are deprecated in favor of StringMatch but remain
     // widely used and are still required by gRFC A63.
+    // Invalid UTF-8 is not expected in practice; xDS resource parsing will
+    // later convert the `expect` panics below into validation errors.
     #[allow(deprecated, unreachable_patterns)]
     let match_specifier = match hm.header_match_specifier() {
         HeaderMatchSpecifierOneof::ExactMatch(v) => {
-            HeaderMatchSpecifier::String(StringMatcher::Exact {
-                value: v.to_str().unwrap_or_default().to_string(),
-                ignore_case: false,
-            })
+            let value = v
+                .to_str()
+                .expect("exact header matcher should be valid UTF-8");
+            HeaderMatchSpecifier::String(StringMatcher::exact(value, false))
         }
         HeaderMatchSpecifierOneof::SafeRegexMatch(r) => {
             let pattern = r.regex();
-            let pattern = pattern.to_str().unwrap_or_default();
-            HeaderMatchSpecifier::String(StringMatcher::SafeRegex(compile_regex(
-                pattern, "header",
+            let pattern = pattern
+                .to_str()
+                .expect("header regex should be valid UTF-8");
+            HeaderMatchSpecifier::String(StringMatcher::safe_regex(pattern.parse().map_err(
+                |e| Error::Validation(format!("invalid header regex '{pattern}': {e}")),
             )?))
         }
         HeaderMatchSpecifierOneof::RangeMatch(r) => HeaderMatchSpecifier::Range {
@@ -403,22 +394,22 @@ fn validate_header_matcher(hm: HeaderMatcherView<'_>) -> xds_client::Result<Head
             }
         }
         HeaderMatchSpecifierOneof::PrefixMatch(v) => {
-            HeaderMatchSpecifier::String(StringMatcher::Prefix {
-                value: non_empty_match_value(v.to_str().unwrap_or_default(), "prefix")?,
-                ignore_case: false,
-            })
+            let value = v
+                .to_str()
+                .expect("prefix header matcher should be valid UTF-8");
+            HeaderMatchSpecifier::String(StringMatcher::prefix(value, false)?)
         }
         HeaderMatchSpecifierOneof::SuffixMatch(v) => {
-            HeaderMatchSpecifier::String(StringMatcher::Suffix {
-                value: non_empty_match_value(v.to_str().unwrap_or_default(), "suffix")?,
-                ignore_case: false,
-            })
+            let value = v
+                .to_str()
+                .expect("suffix header matcher should be valid UTF-8");
+            HeaderMatchSpecifier::String(StringMatcher::suffix(value, false)?)
         }
         HeaderMatchSpecifierOneof::ContainsMatch(v) => {
-            HeaderMatchSpecifier::String(StringMatcher::Contains {
-                value: non_empty_match_value(v.to_str().unwrap_or_default(), "contains")?,
-                ignore_case: false,
-            })
+            let value = v
+                .to_str()
+                .expect("contains header matcher should be valid UTF-8");
+            HeaderMatchSpecifier::String(StringMatcher::contains(value, false)?)
         }
         HeaderMatchSpecifierOneof::StringMatch(sm) => {
             HeaderMatchSpecifier::String(StringMatcher::from_proto(sm)?)
@@ -520,14 +511,20 @@ impl VirtualHost {
 
 #[cfg(test)]
 mod tests {
+    use std::panic::AssertUnwindSafe;
+    use std::panic::catch_unwind;
+
     use super::*;
     use crate::generated::envoy::config::core::v3::RuntimeFractionalPercent;
+    use crate::generated::envoy::config::route::v3::HeaderMatcher as EnvoyHeaderMatcher;
+    use crate::generated::envoy::config::route::v3::QueryParameterMatcher;
+    use crate::generated::envoy::config::route::v3::RedirectAction;
+    use crate::generated::envoy::config::route::v3::Route as EnvoyRoute;
+    use crate::generated::envoy::config::route::v3::RouteAction as EnvoyRouteAction;
+    use crate::generated::envoy::config::route::v3::RouteMatch as EnvoyRouteMatch;
+    use crate::generated::envoy::config::route::v3::VirtualHost as EnvoyVirtualHost;
+    use crate::generated::envoy::config::route::v3::WeightedCluster as EnvoyWeightedCluster;
     use crate::generated::envoy::config::route::v3::weighted_cluster::ClusterWeight;
-    use crate::generated::envoy::config::route::v3::{
-        HeaderMatcher as EnvoyHeaderMatcher, QueryParameterMatcher, RedirectAction,
-        Route as EnvoyRoute, RouteAction as EnvoyRouteAction, RouteMatch as EnvoyRouteMatch,
-        VirtualHost as EnvoyVirtualHost, WeightedCluster as EnvoyWeightedCluster,
-    };
     use crate::generated::envoy::r#type::matcher::v3::RegexMatcher;
     use crate::generated::envoy::r#type::matcher::v3::StringMatcher as EnvoyStringMatcher;
     use crate::generated::envoy::r#type::v3::FractionalPercent;
@@ -640,6 +637,121 @@ mod tests {
 
         let err = RouteConfigResource::validate(rc).unwrap_err();
         assert!(err.to_string().contains("no domains"));
+    }
+
+    #[test]
+    fn validate_virtual_host_rejects_invalid_domain_patterns() {
+        for domain in ["", "a*b.example.com", "**", "*foo*", "foo**", "*foo*bar"] {
+            let mut invalid = EnvoyVirtualHost::new();
+            invalid.set_name("invalid-host");
+            invalid.domains_mut().push(domain);
+            let mut rc = make_route_config("rc-1");
+            rc.virtual_hosts_mut().push(invalid);
+
+            let err = RouteConfigResource::validate(rc).unwrap_err();
+            assert!(
+                err.to_string().contains("invalid domain pattern"),
+                "{domain:?}: {err}"
+            );
+            assert!(
+                err.to_string().contains("invalid-host"),
+                "{domain:?}: {err}"
+            );
+        }
+    }
+
+    #[test]
+    fn invalid_domain_patterns_fail_conversion() {
+        for domain in ["", "a*b.example.com", "**", "*foo*", "foo**", "*foo*bar"] {
+            assert_eq!(
+                DomainMatcher::try_from(domain),
+                Err(InvalidDomainPattern),
+                "{domain:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn domain_patterns_convert_to_lowercase_matchers_without_wildcards() {
+        for (domain, expected) in [
+            ("example.com", DomainMatcher::Exact("example.com".into())),
+            ("Example.COM", DomainMatcher::Exact("example.com".into())),
+            ("*", DomainMatcher::Universal),
+            (
+                "*.Example.com",
+                DomainMatcher::Suffix(".example.com".into()),
+            ),
+            ("*-foo", DomainMatcher::Suffix("-foo".into())),
+            ("FOO.*", DomainMatcher::Prefix("foo.".into())),
+            ("foo-*", DomainMatcher::Prefix("foo-".into())),
+        ] {
+            assert_eq!(DomainMatcher::try_from(domain), Ok(expected), "{domain:?}");
+        }
+    }
+
+    #[test]
+    fn validate_virtual_host_accepts_supported_domain_patterns() {
+        let domains = [
+            "api.example.com",
+            "*.example.com",
+            "*-bar.example.com",
+            "api.*",
+            "api-*",
+            "api.example.com:443",
+            "[2001:db8::1]:443",
+        ];
+        let mut host = EnvoyVirtualHost::new();
+        host.set_name("host");
+        for domain in domains {
+            host.domains_mut().push(domain);
+        }
+        let mut rc = make_route_config("rc-1");
+        rc.virtual_hosts_mut().push(host);
+
+        let validated = RouteConfigResource::validate(rc).unwrap();
+        assert_eq!(
+            validated.virtual_hosts[1].domains,
+            domains.map(|domain| DomainMatcher::try_from(domain).unwrap()),
+        );
+    }
+
+    #[test]
+    fn no_matching_virtual_host_does_not_invalidate_the_resource() {
+        let mut host = EnvoyVirtualHost::new();
+        host.set_name("host");
+        host.domains_mut().push("other.example.com");
+        let mut rc = RouteConfiguration::new();
+        rc.set_name("rc-1");
+        rc.virtual_hosts_mut().push(host);
+
+        let validated = RouteConfigResource::validate(rc).unwrap();
+        assert_eq!(
+            crate::routing::find_virtual_host_index("api.example.com", &validated.virtual_hosts),
+            None,
+        );
+    }
+
+    #[test]
+    fn selected_virtual_host_limits_cluster_dependencies() {
+        let mut rc = make_route_config("rc-1");
+        let mut selected = EnvoyVirtualHost::new();
+        selected.set_name("selected");
+        selected.domains_mut().push("api.example.com");
+        selected.routes_mut().push(make_weighted_route(&[
+            ("cluster-a", Some(80)),
+            ("cluster-b", Some(20)),
+            ("cluster-unused", Some(0)),
+        ]));
+        rc.virtual_hosts_mut().push(selected);
+
+        let validated = RouteConfigResource::validate(rc).unwrap();
+        let index =
+            crate::routing::find_virtual_host_index("API.EXAMPLE.COM", &validated.virtual_hosts)
+                .unwrap();
+        assert_eq!(
+            validated.virtual_hosts[index].cluster_names(),
+            HashSet::from(["cluster-a".to_string(), "cluster-b".to_string()]),
+        );
     }
 
     #[test]
@@ -818,18 +930,82 @@ mod tests {
     }
 
     #[test]
+    #[should_panic = "virtual host domain should be valid UTF-8"]
+    fn invalid_utf8_domain_panics() {
+        let mut host = EnvoyVirtualHost::new();
+        host.set_name("host");
+        host.domains_mut()
+            .push(protobuf::ProtoStr::from_utf8_unchecked(b"\xff"));
+        let mut rc = make_route_config("rc-1");
+        rc.virtual_hosts_mut().push(host);
+
+        let _ = RouteConfigResource::validate(rc);
+    }
+
+    #[test]
+    fn legacy_header_patterns_panic_on_invalid_utf8() {
+        let value = protobuf::ProtoStr::from_utf8_unchecked(b"\xff");
+        for (kind, field) in [
+            ("exact", "exact header matcher"),
+            ("prefix", "prefix header matcher"),
+            ("suffix", "suffix header matcher"),
+            ("contains", "contains header matcher"),
+            ("regex", "header regex"),
+        ] {
+            let mut header = EnvoyHeaderMatcher::new();
+            header.set_name("x-test");
+            match kind {
+                "exact" => header.set_exact_match(value),
+                "prefix" => header.set_prefix_match(value),
+                "suffix" => header.set_suffix_match(value),
+                "contains" => header.set_contains_match(value),
+                "regex" => {
+                    let mut regex = RegexMatcher::new();
+                    regex.set_regex(value);
+                    header.set_safe_regex_match(regex);
+                }
+                _ => panic!("unknown matcher kind"),
+            }
+            let rc = route_config_with_header(header);
+            let payload = catch_unwind(AssertUnwindSafe(|| RouteConfigResource::validate(rc)))
+                .expect_err("expected a panic");
+            let message = payload
+                .downcast_ref::<String>()
+                .expect("panic message should be a String");
+            assert!(
+                message.starts_with(&format!("{field} should be valid UTF-8:")),
+                "{kind}: {message}"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_legacy_exact_header_matcher_preserves_empty_and_utf8_values() {
+        for value in ["", "caf\u{e9}"] {
+            let mut header = EnvoyHeaderMatcher::new();
+            header.set_name("x-test");
+            header.set_exact_match(value);
+
+            let HeaderMatchSpecifier::String(matcher) = validate_header(header) else {
+                panic!("expected a string matcher");
+            };
+            assert!(matcher.is_match(value));
+            assert!(!matcher.is_match(&format!("{value}suffix")));
+        }
+    }
+
+    #[test]
     fn validate_legacy_prefix_header_matcher() {
         let mut header = EnvoyHeaderMatcher::new();
         header.set_name("x-tenant");
         header.set_prefix_match("prod-");
 
-        assert!(matches!(
-            validate_header(header),
-            HeaderMatchSpecifier::String(StringMatcher::Prefix {
-                value,
-                ignore_case: false,
-            }) if value == "prod-"
-        ));
+        let HeaderMatchSpecifier::String(matcher) = validate_header(header) else {
+            panic!("expected a string matcher");
+        };
+        assert!(matcher.is_match("prod-east"));
+        assert!(!matcher.is_match("PROD-east"));
+        assert!(!matcher.is_match("east-prod-"));
     }
 
     #[test]
@@ -838,13 +1014,12 @@ mod tests {
         header.set_name("x-tenant");
         header.set_suffix_match("-canary");
 
-        assert!(matches!(
-            validate_header(header),
-            HeaderMatchSpecifier::String(StringMatcher::Suffix {
-                value,
-                ignore_case: false,
-            }) if value == "-canary"
-        ));
+        let HeaderMatchSpecifier::String(matcher) = validate_header(header) else {
+            panic!("expected a string matcher");
+        };
+        assert!(matcher.is_match("east-canary"));
+        assert!(!matcher.is_match("east-CANARY"));
+        assert!(!matcher.is_match("-canary-east"));
     }
 
     #[test]
@@ -853,13 +1028,12 @@ mod tests {
         header.set_name("x-tenant");
         header.set_contains_match("staging");
 
-        assert!(matches!(
-            validate_header(header),
-            HeaderMatchSpecifier::String(StringMatcher::Contains {
-                value,
-                ignore_case: false,
-            }) if value == "staging"
-        ));
+        let HeaderMatchSpecifier::String(matcher) = validate_header(header) else {
+            panic!("expected a string matcher");
+        };
+        assert!(matcher.is_match("east-staging-1"));
+        assert!(!matcher.is_match("east-STAGING-1"));
+        assert!(!matcher.is_match("east-stag"));
     }
 
     #[test]
@@ -964,30 +1138,94 @@ mod tests {
     }
 
     #[test]
-    fn validate_rejects_empty_path_regex() {
-        let mut regex = RegexMatcher::new();
-        regex.set_regex("");
-        let mut route_match = EnvoyRouteMatch::new();
-        route_match.set_safe_regex(regex);
+    fn validate_path_regex_errors_preserve_context() {
+        for (pattern, reason) in [
+            ("", "empty regex is not allowed"),
+            ("[", "unclosed character class"),
+        ] {
+            let mut regex = RegexMatcher::new();
+            regex.set_regex(pattern);
+            let mut route_match = EnvoyRouteMatch::new();
+            route_match.set_safe_regex(regex);
 
-        let err = RouteConfigResource::validate(route_config_with_match(route_match)).unwrap_err();
-        assert!(err.to_string().contains("empty path regex"));
+            let Error::Validation(message) =
+                RouteConfigResource::validate(route_config_with_match(route_match)).unwrap_err()
+            else {
+                panic!("expected a validation error");
+            };
+            assert!(
+                message.starts_with(&format!("invalid path regex '{pattern}':")),
+                "{message}"
+            );
+            assert!(message.contains(reason), "{message}");
+        }
     }
 
     #[test]
-    fn validate_rejects_empty_header_regex() {
+    fn validated_path_regex_requires_a_full_match() {
         let mut regex = RegexMatcher::new();
-        regex.set_regex("");
+        regex.set_regex("/foo|/bar");
+        let mut route_match = EnvoyRouteMatch::new();
+        route_match.set_safe_regex(regex);
+
+        let validated =
+            RouteConfigResource::validate(route_config_with_match(route_match)).unwrap();
+        let PathSpecifier::SafeRegex(regex) = &validated.virtual_hosts[0].routes[0]
+            .route_match
+            .path_specifier
+        else {
+            panic!("expected regex path matcher");
+        };
+        assert!(regex.is_match("/foo"));
+        assert!(regex.is_match("/bar"));
+        assert!(!regex.is_match("/foobar"));
+        assert!(!regex.is_match("prefix/bar"));
+    }
+
+    #[test]
+    fn validated_legacy_header_regex_requires_a_full_match() {
+        let mut regex = RegexMatcher::new();
+        regex.set_regex("foo|bar");
         let mut header = EnvoyHeaderMatcher::new();
         header.set_name("x-test");
         header.set_safe_regex_match(regex);
 
-        let mut route_match = EnvoyRouteMatch::new();
-        route_match.set_prefix("/");
-        route_match.headers_mut().push(header);
+        let HeaderMatchSpecifier::String(matcher) = validate_header(header) else {
+            panic!("expected string header matcher");
+        };
+        assert!(matcher.is_match("foo"));
+        assert!(matcher.is_match("bar"));
+        assert!(!matcher.is_match("foobar"));
+        assert!(!matcher.is_match("xbar"));
+    }
 
-        let err = RouteConfigResource::validate(route_config_with_match(route_match)).unwrap_err();
-        assert!(err.to_string().contains("empty header regex"));
+    #[test]
+    fn validate_header_regex_errors_preserve_context() {
+        for (pattern, reason) in [
+            ("", "empty regex is not allowed"),
+            ("[", "unclosed character class"),
+        ] {
+            let mut regex = RegexMatcher::new();
+            regex.set_regex(pattern);
+            let mut header = EnvoyHeaderMatcher::new();
+            header.set_name("x-test");
+            header.set_safe_regex_match(regex);
+
+            let mut route_match = EnvoyRouteMatch::new();
+            route_match.set_prefix("/");
+            route_match.headers_mut().push(header);
+
+            let Error::Validation(message) =
+                RouteConfigResource::validate(route_config_with_match(route_match)).unwrap_err()
+            else {
+                panic!("expected a validation error");
+            };
+            assert!(
+                message.starts_with(&format!("invalid header regex '{pattern}':")),
+                "{message}"
+            );
+            assert!(message.contains(reason), "{message}");
+        }
     }
 
     #[test]

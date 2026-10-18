@@ -121,3 +121,7 @@ tonic-prost = { version = "0.14.6", path = "../tonic-prost" }
 [[bench]]
 name = "metadata"
 harness = false
+
+[[bench]]
+name = "call_options"
+harness = false
