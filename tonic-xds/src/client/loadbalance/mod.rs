@@ -22,6 +22,7 @@
  *
  */
 
+pub(crate) mod adapter;
 pub(crate) mod channel_state;
 pub(crate) mod errors;
 pub(crate) mod keyed_futures;

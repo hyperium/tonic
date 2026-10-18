@@ -127,12 +127,13 @@ where
     Req: Send + 'static,
     Resp: 'static,
 {
-    /// Creates a new `ClusterChannel` with the given service and picker.
-    pub(crate) fn from_balancer<B>(balancer: B, buffer_cap: usize) -> Self
+    /// Creates a channel that queues callers in front of `svc`, the service
+    /// that load-balances across the cluster's endpoints.
+    pub(crate) fn from_service<B>(svc: B) -> Self
     where
         B: Service<Req, Error = BoxError, Future = RespFut<Resp>> + Send + 'static,
     {
-        let svc = Buffer::new(balancer, buffer_cap);
+        let svc = Buffer::new(svc, DEFAULT_BUFFER_CAPACITY);
         Self { svc }
     }
 
@@ -148,7 +149,7 @@ where
         <D::Service as Service<Req>>::Error: Into<BoxError>,
         <D::Service as Service<Req>>::Future: Send + 'static,
     {
-        Self::from_balancer(ClusterBalancer::new(discover), DEFAULT_BUFFER_CAPACITY)
+        Self::from_service(ClusterBalancer::new(discover))
     }
 }
 
