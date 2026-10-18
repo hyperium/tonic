@@ -91,7 +91,7 @@ pub(crate) struct XdsClusterDiscovery<MC = GrpcMakeConnector> {
     cache: Arc<XdsCache>,
     make_connector: Arc<MC>,
     #[cfg(feature = "_tls-any")]
-    registry: Arc<CertProviderRegistry>,
+    cert_registry: Arc<CertProviderRegistry>,
 }
 
 impl<MC> XdsClusterDiscovery<MC> {
@@ -99,12 +99,12 @@ impl<MC> XdsClusterDiscovery<MC> {
     pub(crate) fn new(
         cache: Arc<XdsCache>,
         make_connector: MC,
-        registry: Arc<CertProviderRegistry>,
+        cert_registry: Arc<CertProviderRegistry>,
     ) -> Self {
         Self {
             cache,
             make_connector: Arc::new(make_connector),
-            registry,
+            cert_registry,
         }
     }
 
@@ -124,7 +124,7 @@ impl<MC: MakeConnector> ClusterDiscovery<EndpointAddress, MC::Service> for XdsCl
             cluster_name.to_string(),
             self.make_connector.clone(),
             #[cfg(feature = "_tls-any")]
-            self.registry.clone(),
+            self.cert_registry.clone(),
         ));
 
         EndpointManager::new(connector).discover_endpoints(self.cache.watch_endpoints(cluster_name))

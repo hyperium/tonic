@@ -96,7 +96,6 @@ impl<S: Send + 'static> EndpointManager<S> {
 /// the load balancer's channel state machine — without connecting. For
 /// balancers that drive connect / eject / reconnect themselves and so need the
 /// address rather than a live channel.
-#[expect(dead_code, reason = "consumed by the in-crate load balancer wiring")]
 pub(crate) fn discover_addresses(
     watch: CacheWatch<EndpointsResource>,
 ) -> BoxDiscover<EndpointAddress, IdleChannel> {
