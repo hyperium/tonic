@@ -65,6 +65,7 @@ trap cleanup EXIT
 sleep 3
 
 TARGET_DIR="$(cargo metadata --format-version 1 | jq -r '.target_directory')"
+# Test a tonic client against a Go server.
 "${TARGET_DIR}/debug/client" --codec=prost --test_case="${JOINED_TEST_CASES}" "${ARG}"
 
 # Test a grpc rust client against a Go server.
@@ -76,7 +77,8 @@ while kill -0 ${SERVER_PID} 2> /dev/null; do
     sleep 0.5
 done
 
-CODECS=("prost" "protobuf")
+# TODO: Enable protobuf codec once gRPC server transport is implemented.
+CODECS=("prost")
 
 for CODEC in "${CODECS[@]}"; do
     # run the test server

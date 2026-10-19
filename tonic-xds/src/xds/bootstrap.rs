@@ -33,10 +33,15 @@ use std::collections::HashMap;
 use serde::Deserialize;
 use xds_client::message::{Locality, MetadataValue, Node};
 
+use crate::xds::cert_provider_config::{FileWatcherConfig, TlsChannelCredentials};
+
 /// Environment variable pointing to a bootstrap JSON file path.
 const ENV_BOOTSTRAP_FILE: &str = "GRPC_XDS_BOOTSTRAP";
 /// Environment variable containing inline bootstrap JSON.
 const ENV_BOOTSTRAP_CONFIG: &str = "GRPC_XDS_BOOTSTRAP_CONFIG";
+/// `Node.user_agent_name`, which gRFC A27 has the client populate rather than
+/// the bootstrap. The "gRPC <language>" prefix matches other gRPC xDS clients.
+const USER_AGENT_NAME: &str = "gRPC Rust tonic-xds";
 
 /// Parsed xDS bootstrap configuration per [gRFC A27].
 ///
@@ -179,15 +184,10 @@ impl XdsServerConfig {
     /// Skips unknown types so a bootstrap written for a newer client still
     /// resolves. Returns `None` for a config still awaiting
     /// [`BootstrapConfig::validate`], which requires a match.
-    fn selected_credential(&self) -> Option<&ChannelCredentialType> {
-        self.channel_creds.iter().map(|c| &c.cred_type).find(|t| {
-            matches!(
-                t,
-                ChannelCredentialType::Insecure
-                    | ChannelCredentialType::Tls
-                    | ChannelCredentialType::GoogleDefault
-            )
-        })
+    fn selected_credential(&self) -> Option<&ChannelCredentialConfig> {
+        self.channel_creds
+            .iter()
+            .find(|credential| credential.cred_type.is_supported())
     }
 }
 
@@ -197,6 +197,35 @@ pub(crate) struct ChannelCredentialConfig {
     /// Credential type (e.g., `"insecure"`, `"tls"`, `"google_default"`).
     #[serde(rename = "type")]
     pub cred_type: ChannelCredentialType,
+    /// Credential-specific configuration.
+    #[serde(default = "empty_json_object")]
+    pub config: serde_json::Value,
+}
+
+fn empty_json_object() -> serde_json::Value {
+    serde_json::Value::Object(serde_json::Map::new())
+}
+
+impl ChannelCredentialConfig {
+    fn tls_config(&self, server_index: usize) -> Result<Option<FileWatcherConfig>, BootstrapError> {
+        if !matches!(self.cred_type, ChannelCredentialType::Tls) {
+            return Ok(None);
+        }
+
+        let config: FileWatcherConfig =
+            serde_json::from_value(self.config.clone()).map_err(|error| {
+                BootstrapError::Validation(format!(
+                    "xds_servers[{server_index}].channel_creds tls config is invalid: {error}"
+                ))
+            })?;
+        if !config.has_paired_identity_files() {
+            return Err(BootstrapError::Validation(format!(
+                "xds_servers[{server_index}].channel_creds tls config must set \
+                 'certificate_file' and 'private_key_file' together"
+            )));
+        }
+        Ok(Some(config))
+    }
 }
 
 /// Channel credential type offered to the xDS management server.
@@ -215,6 +244,9 @@ pub enum ChannelCredentialType {
     /// TLS with the platform's default trust roots.
     Tls,
     /// Google default credentials (ALTS or TLS plus call credentials).
+    ///
+    /// Parsed for forward compatibility, but not selected because tonic-xds
+    /// does not yet provide Google default channel credentials.
     GoogleDefault,
     /// A credential type this client does not implement.
     ///
@@ -232,6 +264,10 @@ pub enum ChannelCredentialType {
 }
 
 impl ChannelCredentialType {
+    fn is_supported(&self) -> bool {
+        matches!(self, Self::Insecure | Self::Tls)
+    }
+
     /// The bootstrap JSON spelling, so errors name what the caller wrote.
     fn as_json_name(&self) -> &str {
         match self {
@@ -242,10 +278,9 @@ impl ChannelCredentialType {
         }
     }
 
-    /// Whether this type expects a TLS handshake. `google_default` counts:
-    /// it negotiates TLS outside its ALTS environments.
+    /// Whether this supported type expects a TLS handshake.
     fn is_tls(&self) -> bool {
-        matches!(self, Self::Tls | Self::GoogleDefault)
+        matches!(self, Self::Tls)
     }
 }
 
@@ -426,10 +461,11 @@ impl BootstrapConfig {
                 };
                 return Err(BootstrapError::Validation(format!(
                     "xds_servers[{i}].channel_creds must list at least one credential type this \
-                     client supports (insecure, tls, google_default); {found}"
+                     client supports (insecure, tls); {found}"
                 )));
             };
-            Self::validate_uri_scheme(i, &server.server_uri, selected)?;
+            selected.tls_config(i)?;
+            Self::validate_uri_scheme(i, &server.server_uri, &selected.cred_type)?;
         }
         Ok(())
     }
@@ -469,7 +505,7 @@ impl BootstrapConfig {
         if !credential.is_tls() && is_https {
             return Err(BootstrapError::Validation(format!(
                 "xds_servers[{index}].server_uri '{server_uri}' requires TLS but channel_creds \
-                 selects '{cred}'; list 'tls' or 'google_default', or drop the 'https://' scheme"
+                 selects '{cred}'; list 'tls' or drop the 'https://' scheme"
             )));
         }
         Ok(())
@@ -498,7 +534,21 @@ impl BootstrapConfig {
     /// Validation guarantees one exists, so a validated config always returns
     /// `Some`.
     pub(crate) fn selected_credential(&self) -> Option<&ChannelCredentialType> {
-        self.xds_servers.first()?.selected_credential()
+        self.xds_servers
+            .first()?
+            .selected_credential()
+            .map(|credential| &credential.cred_type)
+    }
+
+    #[cfg_attr(not(feature = "_tls-any"), allow(dead_code))]
+    pub(crate) fn tls_config(&self) -> Result<Option<FileWatcherConfig>, BootstrapError> {
+        let Some(server) = self.xds_servers.first() else {
+            return Ok(None);
+        };
+        match server.selected_credential() {
+            Some(credential) => credential.tls_config(0),
+            None => Ok(None),
+        }
     }
 
     /// Returns `true` if the connection to the xDS server uses TLS.
@@ -603,8 +653,40 @@ impl BootstrapConfigBuilder {
     pub fn channel_creds(mut self, creds: impl IntoIterator<Item = ChannelCredentialType>) -> Self {
         self.channel_creds = creds
             .into_iter()
-            .map(|cred_type| ChannelCredentialConfig { cred_type })
+            .map(|cred_type| ChannelCredentialConfig {
+                cred_type,
+                config: empty_json_object(),
+            })
             .collect();
+        self
+    }
+
+    /// Configures the first `tls` channel credential with gRFC A65 file
+    /// settings.
+    ///
+    /// If [`channel_creds`](Self::channel_creds) does not already contain
+    /// [`ChannelCredentialType::Tls`], a TLS entry is appended. Credential
+    /// preference still follows list order, so configure the desired ordering
+    /// with `channel_creds` first.
+    #[must_use]
+    pub fn tls_channel_credentials(mut self, config: TlsChannelCredentials) -> Self {
+        match serde_json::to_value(config) {
+            Ok(config) => {
+                if let Some(credential) = self
+                    .channel_creds
+                    .iter_mut()
+                    .find(|credential| matches!(credential.cred_type, ChannelCredentialType::Tls))
+                {
+                    credential.config = config;
+                } else {
+                    self.channel_creds.push(ChannelCredentialConfig {
+                        cred_type: ChannelCredentialType::Tls,
+                        config,
+                    });
+                }
+            }
+            Err(source) => self.record_error("xds_servers[].channel_creds[].config", source),
+        }
         self
     }
 
@@ -762,7 +844,7 @@ impl TryFrom<NodeConfig> for Node {
     type Error = BootstrapError;
 
     fn try_from(config: NodeConfig) -> Result<Self, Self::Error> {
-        let mut node = Node::new("tonic-xds", env!("CARGO_PKG_VERSION"));
+        let mut node = Node::new(USER_AGENT_NAME, env!("CARGO_PKG_VERSION"));
 
         if !config.id.is_empty() {
             node = node.with_id(config.id);
@@ -862,7 +944,7 @@ mod tests {
         let node = Node::try_from(config.node).unwrap();
         assert_eq!(node.id.as_deref(), Some("projects/123/nodes/456"));
         assert_eq!(node.cluster.as_deref(), Some("test-cluster"));
-        assert_eq!(node.user_agent_name, "tonic-xds");
+        assert_eq!(node.user_agent_name, "gRPC Rust tonic-xds");
 
         let locality = node.locality.unwrap();
         assert_eq!(locality.region, "us-east1");
@@ -884,7 +966,7 @@ mod tests {
         let config = BootstrapConfig::from_json(full_json()).unwrap();
         assert_eq!(
             config.selected_credential(),
-            Some(&ChannelCredentialType::GoogleDefault)
+            Some(&ChannelCredentialType::Tls)
         );
     }
 
@@ -958,20 +1040,16 @@ mod tests {
             "unix:///etc/istio/proxy/XDS",
             "unix:/etc/istio/proxy/XDS",
         ] {
-            for cred in ["tls", "google_default"] {
-                let json = format!(
-                    r#"{{
-                        "xds_servers": [{{
-                            "server_uri": "{uri}",
-                            "channel_creds": [{{"type": "{cred}"}}]
-                        }}]
-                    }}"#
-                );
-                let err = BootstrapConfig::from_json(&json)
-                    .expect_err(&format!("{uri} with {cred} should be rejected"));
-                assert!(err.to_string().contains("connects in plaintext"), "{uri}");
-                assert!(err.to_string().contains(cred), "{uri}");
-            }
+            let json = format!(
+                r#"{{
+                    "xds_servers": [{{
+                        "server_uri": "{uri}",
+                        "channel_creds": [{{"type": "tls"}}]
+                    }}]
+                }}"#
+            );
+            let err = BootstrapConfig::from_json(&json).unwrap_err();
+            assert!(err.to_string().contains("connects in plaintext"), "{uri}");
         }
     }
 
@@ -993,7 +1071,7 @@ mod tests {
             ("https://xds.example.com:443", "tls", true),
             ("http://localhost:18000", "insecure", false),
             // No scheme: the transport picks one from the credential.
-            ("xds.example.com:443", "google_default", true),
+            ("xds.example.com:443", "tls", true),
             // Fails `http::Uri`; the transport routes it to its UDS connector.
             ("unix:///etc/istio/proxy/XDS", "insecure", false),
             // An unrecognised scheme stays plaintext, which `insecure` agrees with.
@@ -1463,11 +1541,14 @@ mod tests {
     }
 
     #[test]
-    fn parse_google_default() {
+    fn unsupported_google_default_falls_back_to_tls() {
         let json = r#"{
             "xds_servers": [{
                 "server_uri": "xds.example.com:443",
-                "channel_creds": [{"type": "google_default"}]
+                "channel_creds": [
+                    {"type": "google_default"},
+                    {"type": "tls"}
+                ]
             }],
             "node": {"id": "n1"}
         }"#;
@@ -1479,8 +1560,157 @@ mod tests {
         assert!(config.use_tls());
         assert_eq!(
             config.selected_credential(),
-            Some(&ChannelCredentialType::GoogleDefault)
+            Some(&ChannelCredentialType::Tls)
         );
+    }
+
+    #[test]
+    fn google_default_without_a_supported_fallback_fails() {
+        let json = r#"{
+            "xds_servers": [{
+                "server_uri": "xds.example.com:443",
+                "channel_creds": [{"type": "google_default"}]
+            }]
+        }"#;
+        let err = BootstrapConfig::from_json(json).unwrap_err();
+        assert!(err.to_string().contains("found only [google_default]"));
+    }
+
+    #[test]
+    fn parses_a65_tls_config() {
+        let json = r#"{
+            "xds_servers": [{
+                "server_uri": "xds.example.com:443",
+                "channel_creds": [{
+                    "type": "tls",
+                    "config": {
+                        "ca_certificate_file": "/certs/ca.pem",
+                        "certificate_file": "/certs/client.pem",
+                        "private_key_file": "/certs/client.key",
+                        "refresh_interval": "0.5s"
+                    }
+                }]
+            }]
+        }"#;
+        let config = BootstrapConfig::from_json(json).unwrap();
+        let tls = config.tls_config().unwrap().unwrap();
+        assert_eq!(
+            tls.ca_certificate_file.as_deref(),
+            Some(std::path::Path::new("/certs/ca.pem"))
+        );
+        assert_eq!(
+            tls.certificate_file.as_deref(),
+            Some(std::path::Path::new("/certs/client.pem"))
+        );
+        assert_eq!(
+            tls.private_key_file.as_deref(),
+            Some(std::path::Path::new("/certs/client.key"))
+        );
+        assert_eq!(
+            tls.refresh_interval,
+            Some(std::time::Duration::from_millis(500))
+        );
+    }
+
+    #[test]
+    fn a65_tls_config_may_use_only_system_roots() {
+        for credential in [r#"{"type": "tls"}"#, r#"{"type": "tls", "config": {}}"#] {
+            let json = format!(
+                r#"{{
+                    "xds_servers": [{{
+                        "server_uri": "xds.example.com:443",
+                        "channel_creds": [{credential}]
+                    }}]
+                }}"#
+            );
+            let config = BootstrapConfig::from_json(&json).unwrap();
+            assert!(
+                !config
+                    .tls_config()
+                    .unwrap()
+                    .unwrap()
+                    .has_certificate_files()
+            );
+        }
+    }
+
+    #[test]
+    fn a65_tls_config_requires_certificate_and_key_together() {
+        for field in ["certificate_file", "private_key_file"] {
+            let json = format!(
+                r#"{{
+                    "xds_servers": [{{
+                        "server_uri": "xds.example.com:443",
+                        "channel_creds": [{{
+                            "type": "tls",
+                            "config": {{"{field}": "/certs/file.pem"}}
+                        }}]
+                    }}]
+                }}"#
+            );
+            let err = BootstrapConfig::from_json(&json).unwrap_err();
+            assert!(
+                err.to_string()
+                    .contains("must set 'certificate_file' and 'private_key_file' together")
+            );
+        }
+    }
+
+    #[test]
+    fn a65_tls_config_rejects_invalid_refresh_interval() {
+        let err = BootstrapConfig::from_json(
+            r#"{
+                "xds_servers": [{
+                    "server_uri": "xds.example.com:443",
+                    "channel_creds": [{
+                        "type": "tls",
+                        "config": {"refresh_interval": "0s"}
+                    }]
+                }]
+            }"#,
+        )
+        .unwrap_err();
+
+        assert!(err.to_string().contains("must be greater than 0"));
+    }
+
+    #[test]
+    fn builder_configures_a65_tls_credentials() {
+        let built = BootstrapConfig::builder("xds.example.com:443")
+            .channel_creds([
+                ChannelCredentialType::GoogleDefault,
+                ChannelCredentialType::Tls,
+            ])
+            .tls_channel_credentials(
+                TlsChannelCredentials::new()
+                    .with_ca_certificate_file("/certs/ca.pem")
+                    .with_identity_files("/certs/client.pem", "/certs/client.key")
+                    .with_refresh_interval(std::time::Duration::from_millis(500)),
+            )
+            .build()
+            .unwrap();
+        let parsed = BootstrapConfig::from_json(
+            r#"{
+                "xds_servers": [{
+                    "server_uri": "xds.example.com:443",
+                    "channel_creds": [
+                        {"type": "google_default"},
+                        {
+                            "type": "tls",
+                            "config": {
+                                "ca_certificate_file": "/certs/ca.pem",
+                                "certificate_file": "/certs/client.pem",
+                                "private_key_file": "/certs/client.key",
+                                "refresh_interval": "0.5s"
+                            }
+                        }
+                    ]
+                }]
+            }"#,
+        )
+        .unwrap();
+
+        assert_eq!(built, parsed);
     }
 
     #[test]

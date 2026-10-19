@@ -95,7 +95,7 @@ pub use metrics::{Instrument, InstrumentKind, KeyValue, MetricsRecorder, StringV
 
 pub use resource::{DecodeResult, DecodedResource, Resource};
 pub use runtime::Runtime;
-pub use transport::{Transport, TransportBuilder, TransportStream};
+pub use transport::{Transport, TransportBuilder, TransportReceiver, TransportSender};
 
 // Tokio runtime
 #[cfg(feature = "rt-tokio")]

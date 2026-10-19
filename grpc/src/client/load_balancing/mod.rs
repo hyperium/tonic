@@ -31,6 +31,7 @@ use std::sync::Arc;
 
 use crate::StatusCodeError;
 use crate::StatusError;
+use crate::client::CallOptions;
 use crate::client::ConnectivityState;
 use crate::client::RequestHeaders;
 use crate::client::load_balancing::subchannel::Subchannel;
@@ -47,6 +48,7 @@ pub mod endpoint_filtering;
 pub mod graceful_switch;
 pub mod lazy;
 pub mod pick_first;
+pub mod priority;
 pub mod registry;
 pub mod round_robin;
 pub mod subchannel;
@@ -78,10 +80,8 @@ pub trait LbPolicyBuilder: Send + Sync + Debug + 'static {
     /// default implementation returns Ok(None).
     fn parse_config(
         &self,
-        _config: &ParsedJsonLbConfig,
-    ) -> Result<Option<<Self::LbPolicy as LbPolicy>::LbConfig>, String> {
-        Ok(None)
-    }
+        _config: &LbConfigJson,
+    ) -> Result<<Self::LbPolicy as LbPolicy>::LbConfig, String>;
 }
 
 /// An LB policy instance.
@@ -97,21 +97,18 @@ pub trait LbPolicy: Send + Sync + Debug + 'static {
     fn resolver_update(
         &mut self,
         update: ResolverUpdate,
-        config: Option<&Self::LbConfig>,
+        config: &Self::LbConfig,
         channel_controller: &mut dyn ChannelController,
     ) -> Result<(), String>;
 
-    /// Called by the channel when any subchannel created by the LB policy
-    /// changes state.
-    fn subchannel_update(
-        &mut self,
-        subchannel: Arc<dyn Subchannel>,
-        state: &SubchannelState,
-        channel_controller: &mut dyn ChannelController,
-    );
-
     /// Called by the channel in response to a call from the LB policy to the
-    /// WorkScheduler's request_work method.
+    /// WorkScheduler's `schedule_work` method.
+    ///
+    /// This is also how subchannel state updates are delivered: when a
+    /// subchannel created by this policy changes state, the channel schedules
+    /// work on the WorkScheduler that was passed to
+    /// [`ChannelController::new_subchannel`], and `data` contains a
+    /// [`SubchannelUpdate`](subchannel::SubchannelUpdate).
     fn work(&mut self, data: Option<WorkData>, channel_controller: &mut dyn ChannelController);
 
     /// Called by the channel when an LbPolicy goes idle and the channel
@@ -173,30 +170,119 @@ pub type WorkData = Box<dyn WorkDataTrait>;
 /// the LbPolicy needs to provide an update without waiting for an update
 /// from the channel first.
 pub trait WorkScheduler: Send + Sync + Debug {
-    // Schedules a call into the LbPolicy's work method.  If there is already a
-    // pending work call that has not yet started, this may not schedule another
-    // call.
+    /// Schedules a call into the LbPolicy's work method.  Multiple work calls
+    /// carrying a `data` payload of `None` may be coalesced with one another.
     fn schedule_work(&self, data: Option<WorkData>);
+}
+
+/// A resolved load balancing policy builder and its parsed configuration.
+#[derive(Clone, Debug)]
+pub struct ParsedLbConfig {
+    /// The registered builder for the selected load balancing policy.
+    pub builder: Arc<DynLbPolicyBuilder>,
+    /// The policy-specific configuration produced by [`LbPolicyBuilder::parse_config`].
+    pub config: DynLbConfig,
+}
+
+impl ParsedLbConfig {
+    /// Evaluates a non-empty gRFC A24 `LoadBalancingConfig` JSON array string
+    /// against the global LB registry, selecting the first registered policy
+    /// and parsing its configuration.
+    pub fn parse(json: &str) -> Result<Self, String> {
+        let value: serde_json::Value = serde_json::from_str(json)
+            .map_err(|e| format!("failed to parse LB config JSON: {e}"))?;
+        Self::from_value(value)?.ok_or_else(|| {
+            "Load balancing policy configuration list must not be empty.".to_string()
+        })
+    }
+
+    /// Evaluates an optional gRFC A24 `LoadBalancingConfig` JSON value against
+    /// the global LB registry.
+    ///
+    /// Returns `Ok(None)` if the JSON value is `null` or an empty array (`[]`),
+    /// allowing top-level service configuration to fall back to
+    /// `loadBalancingPolicy` or the default policy.
+    pub(crate) fn from_value(value: serde_json::Value) -> Result<Option<Self>, String> {
+        if value.is_null() {
+            return Ok(None);
+        }
+
+        let serde_json::Value::Array(entries) = value else {
+            return Err("Load balancing configuration must be a JSON array.".to_string());
+        };
+
+        if entries.is_empty() {
+            return Ok(None);
+        }
+
+        for entry in entries {
+            let serde_json::Value::Object(map) = entry else {
+                return Err("Each load balancing config entry must be a JSON object.".to_string());
+            };
+
+            let mut iter = map.into_iter();
+            let (Some((name, raw_config)), None) = (iter.next(), iter.next()) else {
+                return Err(
+                    "Each load balancing config entry must contain exactly one policy name."
+                        .to_string(),
+                );
+            };
+
+            if let Some(builder) = GLOBAL_LB_REGISTRY.get_policy(&name) {
+                let lb_config_json = LbConfigJson::from_value(raw_config);
+                let parsed_config = builder.parse_config(&lb_config_json)?;
+                return Ok(Some(ParsedLbConfig {
+                    builder,
+                    config: parsed_config,
+                }));
+            }
+        }
+
+        Err("No supported load balancing policy found in config.".to_string())
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for ParsedLbConfig {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        Self::from_value(value)
+            .map_err(serde::de::Error::custom)?
+            .ok_or_else(|| {
+                serde::de::Error::custom(
+                    "Load balancing policy configuration list must not be empty.",
+                )
+            })
+    }
 }
 
 /// Abstract representation of the configuration for any LB policy, stored as
 /// JSON.  Hides internal storage details and includes a method to deserialize
 /// the JSON into a concrete policy struct.
-#[derive(Debug)]
-pub struct ParsedJsonLbConfig {
+#[derive(Clone, Debug)]
+pub struct LbConfigJson {
     value: serde_json::Value,
 }
 
-impl ParsedJsonLbConfig {
-    /// Creates a new ParsedJsonLbConfig from the provided JSON string.
+impl LbConfigJson {
+    /// Creates a new LbConfigJson from the provided JSON string.
     pub fn new(json: &str) -> Result<Self, String> {
         match serde_json::from_str(json) {
-            Ok(value) => Ok(ParsedJsonLbConfig { value }),
+            Ok(value) => Ok(LbConfigJson { value }),
             Err(e) => Err(format!("failed to parse LB config JSON: {e}")),
         }
     }
 
-    pub fn from_value(value: serde_json::Value) -> Self {
+    /// Creates an empty JSON object configuration (`{}`).
+    pub fn empty() -> Self {
+        Self {
+            value: serde_json::Value::Object(serde_json::Map::new()),
+        }
+    }
+
+    pub(crate) fn from_value(value: serde_json::Value) -> Self {
         Self { value }
     }
 
@@ -221,7 +307,21 @@ impl ParsedJsonLbConfig {
 /// Controls channel behaviors.
 pub trait ChannelController: Send + Sync {
     /// Creates a new subchannel and returns its current state.
-    fn new_subchannel(&mut self, address: &Address) -> (Arc<dyn Subchannel>, SubchannelState);
+    ///
+    /// Whenever the subchannel changes state, the channel calls
+    /// [`schedule_work`](WorkScheduler::schedule_work) on `work_scheduler`
+    /// with a [`SubchannelUpdate`](subchannel::SubchannelUpdate) describing the
+    /// new state.  Policies should generally pass the WorkScheduler they were
+    /// given in [`LbPolicyOptions`] so the update is routed back to them.
+    ///
+    /// Note that `work_scheduler` may be called before this method returns.
+    /// However, no update for the state returned by this method should be
+    /// expected.
+    fn new_subchannel(
+        &mut self,
+        address: &Address,
+        work_scheduler: Arc<dyn WorkScheduler>,
+    ) -> (Arc<dyn Subchannel>, SubchannelState);
 
     /// Provides a new snapshot of the LB policy's state to the channel.
     fn update_picker(&mut self, update: LbState);
@@ -260,7 +360,29 @@ pub trait Picker: Send + Sync + Debug {
     /// time-consuming work to service this request, it should return Queue, and
     /// the Pick call will be repeated by the channel when a new Picker is
     /// produced by the LbPolicy.
-    fn pick(&self, request: &RequestHeaders) -> PickResult;
+    fn pick(&self, options: PickOptions<'_>) -> PickResult;
+}
+
+/// The data provided to a [`Picker`] when picking a connection for a request.
+#[non_exhaustive]
+#[derive(Clone, Copy)]
+pub struct PickOptions<'a> {
+    /// The headers of the request.
+    pub request_headers: &'a RequestHeaders,
+    /// The options of the call.  Pickers may read options (including custom
+    /// options set by earlier stages, e.g. the config selector, via
+    /// [`CallOptions::get_option`]), but cannot modify them.
+    pub call_options: &'a CallOptions,
+}
+
+impl<'a> PickOptions<'a> {
+    /// Creates a new `PickOptions`.
+    pub fn new(request_headers: &'a RequestHeaders, call_options: &'a CallOptions) -> Self {
+        Self {
+            request_headers,
+            call_options,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -381,29 +503,13 @@ impl Debug for Pick {
     }
 }
 
-/// OneSubchannelPicker always returns a single subchannel.
-#[derive(Debug)]
-pub(crate) struct OneSubchannelPicker {
-    sc: Arc<dyn Subchannel>,
-}
-
-impl Picker for OneSubchannelPicker {
-    fn pick(&self, _: &RequestHeaders) -> PickResult {
-        PickResult::Pick(Pick {
-            subchannel: self.sc.clone(),
-            metadata: MetadataMap::new(),
-            on_complete: None,
-        })
-    }
-}
-
 /// QueuingPicker always returns Queue.  LB policies that are not actively
 /// Connecting should not use this picker.
 #[derive(Debug)]
 pub(crate) struct QueuingPicker;
 
 impl Picker for QueuingPicker {
-    fn pick(&self, _request: &RequestHeaders) -> PickResult {
+    fn pick(&self, _options: PickOptions<'_>) -> PickResult {
         PickResult::Queue
     }
 }
@@ -414,7 +520,7 @@ pub(crate) struct FailingPicker {
 }
 
 impl Picker for FailingPicker {
-    fn pick(&self, _: &RequestHeaders) -> PickResult {
+    fn pick(&self, _: PickOptions<'_>) -> PickResult {
         PickResult::Fail(StatusError::new(
             StatusCodeError::Unavailable,
             self.error.clone(),
@@ -438,19 +544,10 @@ impl<T: LbPolicy + ?Sized> LbPolicy for Box<T> {
     fn resolver_update(
         &mut self,
         update: ResolverUpdate,
-        config: Option<&Self::LbConfig>,
+        config: &Self::LbConfig,
         channel_controller: &mut dyn ChannelController,
     ) -> Result<(), String> {
         (**self).resolver_update(update, config, channel_controller)
-    }
-
-    fn subchannel_update(
-        &mut self,
-        subchannel: Arc<dyn Subchannel>,
-        state: &SubchannelState,
-        channel_controller: &mut dyn ChannelController,
-    ) {
-        (**self).subchannel_update(subchannel, state, channel_controller);
     }
 
     fn work(&mut self, data: Option<WorkData>, channel_controller: &mut dyn ChannelController) {
@@ -475,8 +572,84 @@ impl<B: LbPolicyBuilder + ?Sized> LbPolicyBuilder for Arc<B> {
 
     fn parse_config(
         &self,
-        config: &ParsedJsonLbConfig,
-    ) -> Result<Option<<B::LbPolicy as LbPolicy>::LbConfig>, String> {
+        config: &LbConfigJson,
+    ) -> Result<<B::LbPolicy as LbPolicy>::LbConfig, String> {
         (**self).parse_config(config)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde::Deserialize;
+
+    use super::*;
+    use crate::client::load_balancing::pick_first::PickFirstConfig;
+
+    #[test]
+    fn parsed_lb_config_selects_first_registered_policy() {
+        let resolved = ParsedLbConfig::parse(
+            r#"[
+                { "unsupported_policy": { "key": "value" } },
+                { "pick_first": { "shuffleAddressList": true } },
+                { "round_robin": {} }
+            ]"#,
+        )
+        .unwrap();
+
+        assert_eq!(resolved.builder.name(), "pick_first");
+        assert!(
+            resolved
+                .config
+                .as_ref()
+                .downcast_ref::<PickFirstConfig>()
+                .is_some()
+        );
+
+        let invalid = ParsedLbConfig::parse(
+            r#"[
+                { "pick_first": { "shuffleAddressList": "not_a_bool" } },
+                { "round_robin": {} }
+            ]"#,
+        );
+        assert!(invalid.is_err());
+    }
+
+    #[test]
+    fn parsed_lb_config_rejects_empty_and_null() {
+        assert!(ParsedLbConfig::parse("[]").is_err());
+        assert!(
+            ParsedLbConfig::from_value(serde_json::json!([]))
+                .unwrap()
+                .is_none()
+        );
+
+        assert!(ParsedLbConfig::parse("null").is_err());
+        assert!(
+            ParsedLbConfig::from_value(serde_json::Value::Null)
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn parsed_lb_config_deserializes_in_parent_config_struct() {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct ParentConfig {
+            child_policy: ParsedLbConfig,
+            fallback_policy: ParsedLbConfig,
+        }
+
+        let parent_json = LbConfigJson::new(
+            r#"{
+                "childPolicy": [{ "round_robin": {} }],
+                "fallbackPolicy": [{ "pick_first": { "shuffleAddressList": true } }]
+            }"#,
+        )
+        .unwrap();
+
+        let parsed: ParentConfig = parent_json.convert_to().unwrap();
+        assert_eq!(parsed.child_policy.builder.name(), "round_robin");
+        assert_eq!(parsed.fallback_policy.builder.name(), "pick_first");
     }
 }

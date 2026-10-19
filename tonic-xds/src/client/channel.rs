@@ -29,7 +29,11 @@ use crate::client::route::{PreRouteInterceptor, Router, XdsRoutingLayer};
 use crate::xds::bootstrap::{BootstrapConfig, BootstrapError};
 use crate::xds::cache::XdsCache;
 #[cfg(feature = "_tls-any")]
-use crate::xds::cert_provider::{CertProviderError, CertProviderRegistry, CertificateProvider};
+use crate::xds::cert_provider::{
+    CertProviderError, CertProviderRegistry, CertificateProvider, file_watcher::FileWatcherProvider,
+};
+#[cfg(feature = "_tls-any")]
+use crate::xds::cert_provider_config::FileWatcherConfig;
 use crate::xds::cluster_discovery::{GrpcMakeConnector, XdsClusterDiscovery};
 use crate::xds::resource_manager::XdsResourceManager;
 use crate::xds::routing::XdsRouter;
@@ -44,6 +48,8 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 use tonic::{body::Body as TonicBody, client::GrpcService};
 use tower::{BoxError, Service, ServiceBuilder, load::Load, util::BoxCloneSyncService};
+#[cfg(feature = "_tls-any")]
+use xds_client::Error as XdsClientError;
 use xds_client::{
     ClientConfig, MetricsRecorder, Node, ProstCodec, TokioRuntime, TonicTransportBuilder, XdsClient,
 };
@@ -56,6 +62,8 @@ pub struct XdsChannelConfig {
     target_uri: XdsUri,
     bootstrap: Option<BootstrapConfig>,
     call_creds: Option<Arc<dyn TonicCallCredentials>>,
+    max_decoding_message_size: Option<usize>,
+    max_encoding_message_size: Option<usize>,
 }
 
 impl XdsChannelConfig {
@@ -66,6 +74,8 @@ impl XdsChannelConfig {
             target_uri,
             bootstrap: None,
             call_creds: None,
+            max_decoding_message_size: None,
+            max_encoding_message_size: None,
         }
     }
 
@@ -100,10 +110,29 @@ impl XdsChannelConfig {
         self.call_creds = Some(creds);
         self
     }
+
+    /// Limit the size of a decoded ADS response, in bytes.
+    ///
+    /// Defaults to tonic's 4 MiB. A control plane whose response exceeds the
+    /// limit breaks the stream, so raise it to match the largest resource set
+    /// the server sends.
+    pub fn with_max_decoding_message_size(mut self, limit: usize) -> Self {
+        self.max_decoding_message_size = Some(limit);
+        self
+    }
+
+    /// Limit the size of an encoded ADS request, in bytes.
+    ///
+    /// Defaults to tonic's `usize::MAX`.
+    pub fn with_max_encoding_message_size(mut self, limit: usize) -> Self {
+        self.max_encoding_message_size = Some(limit);
+        self
+    }
 }
 
 /// Errors that can occur when building an [`XdsChannel`].
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum BuildError {
     /// Bootstrap configuration could not be loaded.
     #[error("bootstrap: {0}")]
@@ -112,6 +141,52 @@ pub enum BuildError {
     #[cfg(feature = "_tls-any")]
     #[error("certificate provider: {0}")]
     CertProvider(#[from] CertProviderError),
+    /// A65 ADS TLS certificate files failed to initialize.
+    #[cfg(feature = "_tls-any")]
+    #[error("ADS TLS credentials: {0}")]
+    AdsTls(#[source] CertProviderError),
+}
+
+#[cfg(feature = "_tls-any")]
+#[derive(Clone)]
+struct AdsTlsConfigProvider {
+    file_watcher: Option<Arc<dyn CertificateProvider>>,
+}
+
+#[cfg(feature = "_tls-any")]
+impl AdsTlsConfigProvider {
+    fn new(config: FileWatcherConfig) -> Result<Self, CertProviderError> {
+        let file_watcher = if config.has_certificate_files() {
+            Some(Arc::new(FileWatcherProvider::new(config)?) as Arc<dyn CertificateProvider>)
+        } else {
+            None
+        };
+        Ok(Self { file_watcher })
+    }
+
+    fn client_tls_config(&self) -> xds_client::Result<tonic::transport::ClientTlsConfig> {
+        let mut tls_config = tonic::transport::ClientTlsConfig::new();
+        if let Some(provider) = &self.file_watcher {
+            let data = provider
+                .fetch()
+                .map_err(|error| XdsClientError::TlsConfig(Box::new(error)))?;
+            if let Some(roots) = data.roots() {
+                tls_config =
+                    tls_config.ca_certificate(tonic::transport::Certificate::from_pem(roots));
+            } else {
+                tls_config = tls_config.with_native_roots();
+            }
+            if let Some(identity) = data.identity() {
+                tls_config = tls_config.identity(tonic::transport::Identity::from_pem(
+                    identity.cert_chain(),
+                    identity.key(),
+                ));
+            }
+        } else {
+            tls_config = tls_config.with_native_roots();
+        }
+        Ok(tls_config)
+    }
 }
 
 /// Holds owned resources whose background tasks must live as long as the channel.
@@ -367,12 +442,13 @@ impl XdsChannelBuilder {
 
         #[allow(unused_mut)]
         let mut transport_builder = TonicTransportBuilder::new();
-        #[cfg(any(feature = "tls-ring", feature = "tls-aws-lc"))]
-        if bootstrap.use_tls() {
-            transport_builder = transport_builder
-                .with_tls_config(tonic::transport::ClientTlsConfig::new().with_enabled_roots());
+        #[cfg(feature = "_tls-any")]
+        if let Some(tls_config) = bootstrap.tls_config()? {
+            let provider = AdsTlsConfigProvider::new(tls_config).map_err(BuildError::AdsTls)?;
+            transport_builder =
+                transport_builder.with_tls_config_factory(move |_| provider.client_tls_config());
         }
-        #[cfg(not(any(feature = "tls-ring", feature = "tls-aws-lc")))]
+        #[cfg(not(feature = "_tls-any"))]
         if bootstrap.use_tls() {
             return Err(BuildError::Bootstrap(BootstrapError::Validation(
                 "TLS requested by bootstrap but no TLS feature enabled \
@@ -383,6 +459,13 @@ impl XdsChannelBuilder {
 
         if let Some(creds) = self.config.call_creds.clone() {
             transport_builder = transport_builder.with_call_credentials(creds);
+        }
+
+        if let Some(limit) = self.config.max_decoding_message_size {
+            transport_builder = transport_builder.with_max_decoding_message_size(limit);
+        }
+        if let Some(limit) = self.config.max_encoding_message_size {
+            transport_builder = transport_builder.with_max_encoding_message_size(limit);
         }
 
         #[cfg(feature = "_tls-any")]
@@ -1102,6 +1185,50 @@ mod tests {
         let config = XdsChannelConfig::new(XdsUri::parse("xds:///svc").unwrap())
             .with_call_credentials(std::sync::Arc::new(DummyCreds));
         assert!(config.call_creds.is_some());
+    }
+
+    #[cfg(feature = "_tls-any")]
+    #[test]
+    fn a65_missing_certificate_file_fails_channel_build() {
+        use super::BuildError;
+        use crate::BootstrapConfig;
+        use crate::xds::cert_provider::CertProviderError;
+
+        let bootstrap = BootstrapConfig::from_json(
+            r#"{
+                "xds_servers": [{
+                    "server_uri": "xds.example.com:443",
+                    "channel_creds": [{
+                        "type": "tls",
+                        "config": {
+                            "ca_certificate_file": "/definitely/missing/a65-ca.pem"
+                        }
+                    }]
+                }]
+            }"#,
+        )
+        .unwrap();
+        let config = test_config().with_bootstrap(bootstrap);
+
+        let error = XdsChannelBuilder::new(config)
+            .build_grpc_channel()
+            .unwrap_err();
+        assert!(matches!(
+            &error,
+            BuildError::AdsTls(CertProviderError::FileRead { .. })
+        ));
+        assert!(std::error::Error::source(&error).is_some());
+    }
+
+    #[cfg(feature = "_tls-any")]
+    #[test]
+    fn a65_empty_config_does_not_create_a_file_watcher() {
+        use super::AdsTlsConfigProvider;
+        use crate::xds::cert_provider_config::FileWatcherConfig;
+
+        let provider = AdsTlsConfigProvider::new(FileWatcherConfig::default()).unwrap();
+        assert!(provider.file_watcher.is_none());
+        provider.client_tls_config().unwrap();
     }
 
     /// Smoke test: verifies builder wiring with a disconnected XdsClient

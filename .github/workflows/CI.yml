@@ -150,7 +150,7 @@ jobs:
     - uses: Swatinem/rust-cache@v2
       with:
         cache-targets: "false"
-    - run: cargo hack udeps --workspace --exclude-features=_tls-any,tls,tls-aws-lc,tls-ring,tls-connect-info --each-feature
+    - run: cargo hack udeps --workspace --exclude-features=_tls-any,_tonic-tls-any,tls,tls-aws-lc,tls-ring,tls-connect-info --each-feature
     - run: cargo udeps --package tonic --features tls-ring,transport
     - run: cargo udeps --package tonic --features tls-ring,server
     - run: cargo udeps --package tonic --features tls-ring,channel
@@ -183,10 +183,10 @@ jobs:
         # Windows is the long pole of a build. Caching it avoids adding ~5 minutes of build time
         cache-targets: ${{ matrix.os == 'windows-latest' }}
     - name: Check features
-      # `_tls-any` is an internal feature that only compiles together with a
-      # crypto backend (tls-ring / tls-aws-lc); exclude it from the per-feature
-      # check so it isn't built in isolation.
-      run: cargo hack check --workspace --no-private --each-feature --no-dev-deps --exclude-features _tls-any
+      # `_tls-any` and `_tonic-tls-any` are internal features that only compile
+      # together with a crypto backend (tls-ring / tls-aws-lc); exclude them
+      # from the per-feature check so they aren't built in isolation.
+      run: cargo hack check --workspace --no-private --each-feature --no-dev-deps --exclude-features _tls-any,_tonic-tls-any
     - name: Check tonic feature powerset
       run: cargo hack check --package tonic --feature-powerset --depth 2
     - name: Check all targets

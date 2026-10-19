@@ -408,8 +408,7 @@ fn validate_route(
         .ok_or_else(|| Error::Validation("route missing action field".into()))?;
 
     let validated_action;
-    let route_retry;
-    match action {
+    let route_retry = match action {
         route::Action::Route(mut route_action) => {
             // Take the retry policy before `route_action` is consumed; parse it
             // only if the route is kept, so dropped routes cost no parse.
@@ -418,7 +417,7 @@ fn validate_route(
                 Some(action) => validated_action = action,
                 None => return Ok(None),
             }
-            route_retry = retry_policy.as_ref().map(parse_retry).transpose()?;
+            retry_policy.as_ref().map(parse_retry).transpose()?
         }
         // Per A28: action field must be "route", otherwise NACK.
         _ => {

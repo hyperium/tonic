@@ -319,4 +319,241 @@ mod test {
             let _ = backend.shutdown.send(());
         }
     }
+
+    /// A CDS response past tonic's 4 MiB decode default only arrives when the
+    /// channel raises the limit, so successful routing proves the configured
+    /// ceiling reached the ADS transport.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn configured_decoding_limit_admits_oversized_ads_response() {
+        const PADDING: usize = 5 * 1024 * 1024;
+
+        let backend = spawn_greeter_server("backend", None, None)
+            .await
+            .expect("spawn greeter backend");
+        let backend_addr = backend.addr;
+
+        let (control_plane, cp_addr) = start_control_plane().await;
+
+        control_plane.get_service().set_xds_config(
+            &config::AdsTypeUrl::Lds,
+            HashMap::from([(
+                "my-service".to_string(),
+                config::build_inline_listener("my-service", "my-cluster"),
+            )]),
+        );
+        // `alt_stat_name` is ignored by CDS validation, so it pads the response
+        // without changing how the cluster behaves.
+        let mut cluster = config::build_cluster("my-cluster");
+        cluster.alt_stat_name = "x".repeat(PADDING);
+        control_plane.get_service().set_xds_config(
+            &config::AdsTypeUrl::Cds,
+            HashMap::from([("my-cluster".to_string(), cluster)]),
+        );
+        control_plane.get_service().set_xds_config(
+            &config::AdsTypeUrl::Eds,
+            HashMap::from([(
+                "my-cluster".to_string(),
+                config::build_cla(
+                    "my-cluster",
+                    &[(backend_addr.ip().to_string(), backend_addr.port())],
+                ),
+            )]),
+        );
+
+        let bootstrap_json = format!(
+            r#"{{"xds_servers":[{{"server_uri":"http://{cp_addr}","channel_creds":[{{"type":"insecure"}}]}}],"node":{{"id":"test"}}}}"#
+        );
+        let bootstrap = BootstrapConfig::from_json(&bootstrap_json).expect("parse bootstrap");
+        let target = XdsUri::parse("xds:///my-service").expect("parse target");
+        let channel = XdsChannelBuilder::new(
+            XdsChannelConfig::new(target)
+                .with_bootstrap(bootstrap)
+                .with_max_decoding_message_size(2 * PADDING),
+        )
+        .build_grpc_channel()
+        .expect("build xds channel");
+
+        let mut client = GreeterClient::new(channel);
+        let reply = tokio::time::timeout(
+            Duration::from_secs(30),
+            say_hello_until_prefix(&mut client, "backend:"),
+        )
+        .await
+        .expect("oversized CDS response never routed; decoding limit not applied");
+        assert_eq!(reply, "backend: world");
+
+        let _ = backend.shutdown.send(());
+    }
+}
+
+/// gRFC A65 end-to-end test
+#[cfg(feature = "_tls-any")]
+mod a65_ads_tls {
+    use std::collections::HashMap;
+    use std::io::Write;
+
+    use tempfile::NamedTempFile;
+    use tokio::time::Duration;
+    use tonic::transport::{Certificate, Identity, ServerTlsConfig};
+    use xds_test_util::RunningControlPlane;
+    use xds_test_util::XdsTestControlPlaneService;
+    use xds_test_util::config;
+
+    use crate::BootstrapConfig;
+    use crate::XdsChannelBuilder;
+    use crate::XdsChannelConfig;
+    use crate::XdsUri;
+
+    /// The service the client under test subscribes to.
+    const SUBJECT_SERVICE: &str = "my-service";
+
+    struct TestCa {
+        params: rcgen::CertificateParams,
+        key: rcgen::KeyPair,
+        pem: String,
+    }
+
+    fn gen_ca() -> TestCa {
+        let key = rcgen::KeyPair::generate().unwrap();
+        let mut params = rcgen::CertificateParams::new(vec!["a65-test-ca".into()]).unwrap();
+        params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
+        params.key_usages = vec![
+            rcgen::KeyUsagePurpose::KeyCertSign,
+            rcgen::KeyUsagePurpose::CrlSign,
+        ];
+        let pem = params.self_signed(&key).unwrap().pem();
+        TestCa { params, key, pem }
+    }
+
+    /// Issue a leaf cert from `ca`. Returns `(cert_pem, key_pem)`.
+    fn gen_leaf(
+        ca: &TestCa,
+        san: &str,
+        purpose: rcgen::ExtendedKeyUsagePurpose,
+    ) -> (String, String) {
+        let key = rcgen::KeyPair::generate().unwrap();
+        let mut params = rcgen::CertificateParams::new(vec![san.to_string()]).unwrap();
+        params.extended_key_usages = vec![purpose];
+        let issuer = rcgen::Issuer::from_params(&ca.params, &ca.key);
+        let cert = params.signed_by(&key, &issuer).unwrap();
+        (cert.pem(), key.serialize_pem())
+    }
+
+    fn write_temp(content: &str) -> NamedTempFile {
+        let mut f = NamedTempFile::new().unwrap();
+        f.write_all(content.as_bytes()).unwrap();
+        f.flush().unwrap();
+        f
+    }
+
+    /// Pin a process-wide rustls crypto provider. With both `tls-ring` and
+    /// `tls-aws-lc` compiled in, as under CI's `--all-features`, rustls cannot
+    /// choose one on its own and panics.
+    fn ensure_crypto_provider() {
+        if rustls::crypto::CryptoProvider::get_default().is_some() {
+            return;
+        }
+        #[cfg(feature = "tls-ring")]
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        #[cfg(all(not(feature = "tls-ring"), feature = "tls-aws-lc"))]
+        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+    }
+
+    /// Start an ADS control plane that serves TLS and requires client certs
+    /// signed by `ca`.
+    async fn start_mtls_control_plane(ca: &TestCa) -> RunningControlPlane {
+        ensure_crypto_provider();
+        let (server_cert, server_key) =
+            gen_leaf(ca, "127.0.0.1", rcgen::ExtendedKeyUsagePurpose::ServerAuth);
+        let tls = ServerTlsConfig::new()
+            .identity(Identity::from_pem(server_cert, server_key))
+            .client_ca_root(Certificate::from_pem(ca.pem.clone()));
+
+        let running = XdsTestControlPlaneService::new()
+            .start_with_tls(tls)
+            .await
+            .expect("start TLS control plane");
+
+        running.get_service().set_xds_config(
+            &config::AdsTypeUrl::Lds,
+            HashMap::from([(
+                SUBJECT_SERVICE.to_string(),
+                config::build_inline_listener(SUBJECT_SERVICE, "my-cluster"),
+            )]),
+        );
+        running
+    }
+
+    /// Build a channel whose bootstrap requests A65 TLS channel credentials.
+    fn build_channel_with_tls_creds(
+        control_plane: &RunningControlPlane,
+        ca_file: &NamedTempFile,
+        cert_file: &NamedTempFile,
+        key_file: &NamedTempFile,
+    ) -> Result<crate::XdsChannelGrpc, crate::BuildError> {
+        let bootstrap_json = serde_json::json!({
+            "xds_servers": [{
+                "server_uri": control_plane.addr().to_string(),
+                "channel_creds": [{"type": "tls", "config": {
+                    "ca_certificate_file": ca_file.path().to_str().unwrap(),
+                    "certificate_file": cert_file.path().to_str().unwrap(),
+                    "private_key_file": key_file.path().to_str().unwrap(),
+                }}],
+            }],
+            "node": {"id": "a65-test"},
+        })
+        .to_string();
+
+        let bootstrap = BootstrapConfig::from_json(&bootstrap_json).expect("parse bootstrap");
+        let target = XdsUri::parse(&format!("xds:///{SUBJECT_SERVICE}")).expect("parse target");
+        XdsChannelBuilder::new(XdsChannelConfig::new(target).with_bootstrap(bootstrap))
+            .build_grpc_channel()
+    }
+
+    /// Poll until `SUBJECT_SERVICE` appears as an LDS subscriber, i.e. the
+    /// client's ADS stream completed its TLS handshake. `timeout` is a failure
+    /// ceiling, not a wait. Returns `false` on timeout.
+    async fn ads_stream_established(
+        control_plane: &RunningControlPlane,
+        timeout: Duration,
+    ) -> bool {
+        let deadline = tokio::time::Instant::now() + timeout;
+        while tokio::time::Instant::now() < deadline {
+            if control_plane
+                .get_service()
+                .has_subscriber_for(&config::AdsTypeUrl::Lds, SUBJECT_SERVICE)
+            {
+                return true;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        false
+    }
+
+    /// Bootstrap names a CA plus a client identity, and the mTLS-demanding
+    /// control plane accepts the stream.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn bootstrap_tls_creds_are_used_for_the_ads_connection() {
+        let ca = gen_ca();
+        let control_plane = start_mtls_control_plane(&ca).await;
+
+        let ca_file = write_temp(&ca.pem);
+        let (client_cert, client_key) = gen_leaf(
+            &ca,
+            "a65-client",
+            rcgen::ExtendedKeyUsagePurpose::ClientAuth,
+        );
+        let cert_file = write_temp(&client_cert);
+        let key_file = write_temp(&client_key);
+
+        let _channel =
+            build_channel_with_tls_creds(&control_plane, &ca_file, &cert_file, &key_file)
+                .expect("build xds channel");
+
+        assert!(
+            ads_stream_established(&control_plane, Duration::from_secs(10)).await,
+            "ADS stream never established; the bootstrap CA and client identity \
+             were not used for the control plane connection",
+        );
+    }
 }

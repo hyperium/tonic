@@ -38,7 +38,7 @@
     unused,
     clippy::all
 )]
-pub(crate) mod generated {
+mod generated {
     include!(concat!(env!("OUT_DIR"), "/generated/mod.rs"));
 }
 
@@ -46,11 +46,18 @@ pub(crate) mod generated {
 /// `xds_client::Resource` so they can be deserialized, named, and validated
 /// per their respective gRFCs (A27 core resource types, A28 route matching,
 /// A37 aggregate clusters).
-pub(crate) mod resource;
+mod resource;
+
+/// Pure routing utilities.
+mod routing;
+
+/// xDS load balancing policies (gRFC A31 and friends), plus
+/// [`load_balancing::register`] to install them in the gRPC LB registry.
+mod load_balancing;
 
 /// [`xds_config::XdsConfig`]: the atomic xDS configuration snapshot assembled
 /// from a channel's Listener/RouteConfiguration/Cluster/Endpoints resources.
-pub(crate) mod xds_config;
+mod xds_config;
 
 #[cfg(test)]
 mod tests {
@@ -62,10 +69,10 @@ mod tests {
     //! `generated` module is `pub(crate)` — doctests compile as an external
     //! crate and can only reach the public API.
 
-    use crate::generated::envoy::config::{
-        cluster::v3::Cluster, endpoint::v3::ClusterLoadAssignment, listener::v3::Listener,
-        route::v3::RouteConfiguration,
-    };
+    use crate::generated::envoy::config::cluster::v3::Cluster;
+    use crate::generated::envoy::config::endpoint::v3::ClusterLoadAssignment;
+    use crate::generated::envoy::config::listener::v3::Listener;
+    use crate::generated::envoy::config::route::v3::RouteConfiguration;
 
     /// Encodes then decodes a message. `serialize` / `parse` are methods of the
     /// `protobuf::Message` trait (in scope via the `M: protobuf::Message` bound).

@@ -1,7 +1,7 @@
 [package]
 name = "xds-client"
 description = "An xDS client implementation in Rust"
-version = "0.1.0-alpha.3"
+version = "0.1.0-alpha.4"
 edition = "2024"
 homepage = "https://github.com/hyperium/tonic"
 repository = "https://github.com/hyperium/tonic"
@@ -36,8 +36,9 @@ transport-tonic = [
     "dep:tokio-stream",
     "dep:http",
 ]
-tonic-tls-ring = ["transport-tonic", "tonic/tls-ring"]
-tonic-tls-aws-lc = ["transport-tonic", "tonic/tls-aws-lc"]
+_tonic-tls-any = ["transport-tonic"]
+tonic-tls-ring = ["_tonic-tls-any", "tonic/tls-ring"]
+tonic-tls-aws-lc = ["_tonic-tls-any", "tonic/tls-aws-lc"]
 rt-tokio = ["tokio/rt", "tokio/time"]
 codegen-prost = ["dep:envoy-types", "dep:prost"]
 test-util = []

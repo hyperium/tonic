@@ -72,7 +72,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Channel built. Sending requests (Ctrl-C to stop)...\n");
 
-    for i in 1.. {
+    let mut i = 1_u64;
+    loop {
         let request = HelloRequest {
             name: format!("request-{i}"),
         };
@@ -87,7 +88,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+        i = i.checked_add(1).ok_or("request counter exhausted")?;
     }
-
-    Ok(())
 }

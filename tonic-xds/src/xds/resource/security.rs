@@ -45,19 +45,81 @@ const TLS_TRANSPORT_SOCKET_NAME: &str = "envoy.transport_sockets.tls";
 /// Cluster-level TLS security config.
 ///
 /// Holds the instance names referenced by the cluster, not resolved
-/// providers. Resolution against [`CertProviderRegistry`] happens later, at
+/// providers. Resolving a name to a provider happens later, at
 /// connection-building time, so that this type can be derived during CDS
-/// resource validation (where the registry is not available).
-///
-/// [`CertProviderRegistry`]: crate::xds::cert_provider::CertProviderRegistry
+/// resource validation.
 #[derive(Debug, Clone)]
-pub(crate) struct ClusterSecurityConfig {
+pub struct ClusterSecurityConfig {
     /// Bootstrap instance name for the CA trust bundle. Required.
-    pub ca_instance_name: String,
+    ca_instance_name: String,
     /// Bootstrap instance name for client identity. `Some` implies mTLS.
-    pub identity_instance_name: Option<String>,
+    identity_instance_name: Option<String>,
     /// SAN matchers for server authorization. May be empty.
-    pub san_matchers: Vec<SanMatcher>,
+    san_matchers: Vec<SanMatcher>,
+}
+
+impl ClusterSecurityConfig {
+    /// Parse the `transport_socket` of a serialized CDS `Cluster`.
+    ///
+    /// Takes the encoded resource rather than a decoded `Cluster` so that the
+    /// envoy protobuf types stay out of this crate's public API. A caller
+    /// driving its own ADS stream has these bytes already: they are what the
+    /// management server sent.
+    ///
+    /// Returns `Ok(None)` when the cluster declares no transport socket and so
+    /// connects in plaintext, and an error for any A29 NACK condition.
+    ///
+    /// [`XdsChannel`](crate::XdsChannel) parses clusters itself and hands the
+    /// result to a connector, so this is for a caller outside that flow, which
+    /// holds the resource and its own providers.
+    pub fn from_cluster_bytes(cluster: &[u8]) -> Result<Option<Self>, Error> {
+        let cluster = envoy_types::pb::envoy::config::cluster::v3::Cluster::decode(cluster)?;
+        parse_transport_socket(cluster.transport_socket)
+    }
+
+    /// Bootstrap instance name of the CA trust bundle used to validate the
+    /// peer's certificate chain.
+    pub fn ca_instance_name(&self) -> &str {
+        &self.ca_instance_name
+    }
+
+    /// Bootstrap instance name of the local identity (client certificate).
+    /// `Some` implies mTLS is requested for this cluster.
+    pub fn identity_instance_name(&self) -> Option<&str> {
+        self.identity_instance_name.as_deref()
+    }
+
+    /// Build a config directly, for tests that need a cluster's security
+    /// settings without a `Cluster` to parse.
+    #[cfg(test)]
+    pub(crate) fn for_test(ca_instance_name: &str, identity_instance_name: Option<&str>) -> Self {
+        Self {
+            ca_instance_name: ca_instance_name.to_owned(),
+            identity_instance_name: identity_instance_name.map(str::to_owned),
+            san_matchers: Vec::new(),
+        }
+    }
+
+    /// Build the gRFC A29 server-certificate verifier for this cluster.
+    ///
+    /// `ca_provider` supplies the trust bundle named by
+    /// [`ca_instance_name`](Self::ca_instance_name). The bundle is re-read on
+    /// each handshake, so CA rotation is picked up.
+    ///
+    /// Build once per CDS update and clone the returned `Arc` per connection;
+    /// this is not for the per-request hot path.
+    #[cfg(feature = "_tls-any")]
+    pub fn build_verifier(
+        &self,
+        ca_provider: std::sync::Arc<dyn crate::xds::cert_provider::CertificateProvider>,
+    ) -> std::sync::Arc<dyn rustls::client::danger::ServerCertVerifier> {
+        std::sync::Arc::new(
+            crate::xds::cert_provider::verifier::XdsServerCertVerifier::new(
+                ca_provider,
+                self.san_matchers.clone(),
+            ),
+        )
+    }
 }
 
 /// Parse a cluster's `transport_socket` into a [`ClusterSecurityConfig`].
@@ -247,6 +309,7 @@ fn reject(set: bool, field: &str) -> xds_client::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use envoy_types::pb::envoy::config::cluster::v3::Cluster;
     use envoy_types::pb::envoy::extensions::transport_sockets::tls::v3::{
         CertificateProviderPluginInstance, SubjectAltNameMatcher, subject_alt_name_matcher::SanType,
     };
@@ -289,6 +352,45 @@ mod tests {
                 value: upstream.encode_to_vec(),
             })),
         }
+    }
+
+    fn cluster_bytes(transport_socket: Option<TransportSocket>) -> Vec<u8> {
+        Cluster {
+            name: "c".into(),
+            transport_socket,
+            ..Default::default()
+        }
+        .encode_to_vec()
+    }
+
+    #[test]
+    fn from_cluster_bytes_reads_the_transport_socket() {
+        let cluster = cluster_bytes(Some(wrap_upstream(common_ctx(ca_validation_ctx("ca")))));
+
+        let security = ClusterSecurityConfig::from_cluster_bytes(&cluster)
+            .expect("parses")
+            .expect("not plaintext");
+
+        assert_eq!(security.ca_instance_name(), "ca");
+        assert_eq!(security.identity_instance_name(), None);
+    }
+
+    #[test]
+    fn from_cluster_bytes_yields_plaintext_without_a_transport_socket() {
+        let plaintext =
+            ClusterSecurityConfig::from_cluster_bytes(&cluster_bytes(None)).expect("parses");
+        assert!(plaintext.is_none());
+    }
+
+    #[test]
+    fn from_cluster_bytes_propagates_a_rejection() {
+        let cluster = cluster_bytes(Some(wrap_upstream(CommonTlsContext::default())));
+        assert!(ClusterSecurityConfig::from_cluster_bytes(&cluster).is_err());
+    }
+
+    #[test]
+    fn from_cluster_bytes_rejects_bytes_that_are_not_a_cluster() {
+        assert!(ClusterSecurityConfig::from_cluster_bytes(&[0xff, 0xff]).is_err());
     }
 
     #[test]

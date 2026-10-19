@@ -50,7 +50,7 @@ use x509_parser::extensions::{GeneralName, ParsedExtension};
 use x509_parser::oid_registry::OID_X509_EXT_SUBJECT_ALT_NAME;
 use x509_parser::prelude::FromDer;
 
-use crate::xds::cert_provider::{CertificateData, CertificateProvider};
+use crate::xds::cert_provider::{CertificateData, CertificateProvider, default_crypto_provider};
 use crate::xds::resource::san_matcher::{SanEntry, SanMatcher};
 
 /// Parsed CA roots cached against the [`CertificateData`] they were parsed
@@ -116,20 +116,6 @@ impl XdsServerCertVerifier {
         })));
         Ok(store)
     }
-}
-
-/// Resolve a [`rustls::crypto::CryptoProvider`]: prefer the process-installed
-/// default, fall back to a feature-flagged provider. Mirrors tonic's
-/// `transport::channel::service::tls` bootstrap so we make the same choice as
-/// the rest of the channel stack.
-fn default_crypto_provider() -> Arc<rustls::crypto::CryptoProvider> {
-    if let Some(p) = rustls::crypto::CryptoProvider::get_default() {
-        return p.clone();
-    }
-    #[cfg(feature = "tls-ring")]
-    return Arc::new(rustls::crypto::ring::default_provider());
-    #[cfg(all(not(feature = "tls-ring"), feature = "tls-aws-lc"))]
-    return Arc::new(rustls::crypto::aws_lc_rs::default_provider());
 }
 
 impl ServerCertVerifier for XdsServerCertVerifier {

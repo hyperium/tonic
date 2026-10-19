@@ -103,7 +103,6 @@ fn main() {
             .output_dir(generated_dir.join("routeguide"))
             .input("route_guide.proto")
             .include(manifest_dir.join("proto/routeguide"))
-            .client_only()
             .compile()
             .unwrap();
     }

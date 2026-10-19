@@ -22,10 +22,13 @@
  *
  */
 
-use interop::{server_prost, server_protobuf};
 use std::str::FromStr;
+
+use interop::server_prost;
+use interop::server_protobuf;
+use tonic::transport::Identity;
 use tonic::transport::Server;
-use tonic::transport::{Identity, ServerTlsConfig};
+use tonic::transport::ServerTlsConfig;
 
 #[derive(Debug)]
 struct Opts {
@@ -97,20 +100,20 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                 .await?;
         }
         Codec::Protobuf => {
-            let test_service =
-                server_protobuf::TestServiceServer::new(server_protobuf::TestService::default());
+            let test_service = server_protobuf::TestServiceServer::new(
+                server_protobuf::InteropTestService::default(),
+            );
             let unimplemented_service = server_protobuf::UnimplementedServiceServer::new(
-                server_protobuf::UnimplementedService::default(),
+                server_protobuf::UnimplementedInteropService::default(),
             );
 
-            // Wrap this test_service with a service that will echo headers as trailers.
-            let test_service_svc = server_protobuf::EchoHeadersSvc::new(test_service);
-
-            builder
-                .add_service(test_service_svc)
+            let _server = grpc::server::Server::builder()
+                .interceptor(server_protobuf::EchoHeaders::new())
+                .add_service(test_service)
                 .add_service(unimplemented_service)
-                .serve(addr)
-                .await?;
+                .build();
+
+            unimplemented!("gRPC server transport is not implemented yet");
         }
     };
 

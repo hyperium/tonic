@@ -41,6 +41,21 @@ use std::sync::Arc;
 use serde::Deserialize;
 
 use crate::xds::bootstrap::CertProviderPluginConfig;
+use crate::xds::cert_provider_config::FileWatcherConfig;
+
+/// Resolve a [`rustls::crypto::CryptoProvider`]: prefer the process-installed
+/// default, fall back to a feature-flagged provider. Mirrors tonic's
+/// `transport::channel::service::tls` bootstrap so we make the same choice as
+/// the rest of the channel stack.
+pub(crate) fn default_crypto_provider() -> Arc<rustls::crypto::CryptoProvider> {
+    if let Some(p) = rustls::crypto::CryptoProvider::get_default() {
+        return p.clone();
+    }
+    #[cfg(feature = "tls-ring")]
+    return Arc::new(rustls::crypto::ring::default_provider());
+    #[cfg(all(not(feature = "tls-ring"), feature = "tls-aws-lc"))]
+    return Arc::new(rustls::crypto::aws_lc_rs::default_provider());
+}
 
 /// PEM-encoded identity (a cert chain paired with its private key).
 #[derive(Clone)]
@@ -177,6 +192,26 @@ pub enum CertProviderError {
          set or both be unset"
     )]
     UnpairedCertKey,
+    /// The identity certificate and private key do not form a usable pair,
+    /// either because they are not the same key pair or because one of them
+    /// failed to parse.
+    ///
+    /// Could happen when the two files were read mid-rotation, with one
+    /// already replaced, partially written, or not yet replaced. The snapshot
+    /// is discarded instead of cached, so the last known-good material stays
+    /// in use.
+    #[error(
+        "certificate '{cert_path}' and private key '{key_path}' are not a \
+         valid pair (the files may have been read during a rotation): {reason}"
+    )]
+    InvalidIdentityPair {
+        /// Path of the certificate chain file.
+        cert_path: String,
+        /// Path of the private key file.
+        key_path: String,
+        /// Why the pair was rejected.
+        reason: String,
+    },
     /// Neither an identity nor a CA bundle was configured.
     #[error(
         "invalid file_watcher config: at least one of 'certificate_file' or \
@@ -249,13 +284,12 @@ impl CertProviderRegistry {
     ) -> Result<Arc<dyn CertificateProvider>, CertProviderError> {
         match entry.plugin_name.as_str() {
             file_watcher::PLUGIN_NAME => {
-                let config =
-                    file_watcher::FileWatcherConfig::deserialize(&entry.config).map_err(|e| {
-                        CertProviderError::InvalidPluginConfig {
-                            plugin: entry.plugin_name.clone(),
-                            source: e,
-                        }
-                    })?;
+                let config = FileWatcherConfig::deserialize(&entry.config).map_err(|e| {
+                    CertProviderError::InvalidPluginConfig {
+                        plugin: entry.plugin_name.clone(),
+                        source: e,
+                    }
+                })?;
                 Ok(Arc::new(file_watcher::FileWatcherProvider::new(config)?))
             }
             other => Err(CertProviderError::UnknownPlugin(other.to_string())),

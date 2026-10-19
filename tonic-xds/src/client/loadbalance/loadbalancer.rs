@@ -68,6 +68,9 @@ use crate::client::loadbalance::channel_state::{
 };
 use crate::client::loadbalance::errors::LbError;
 use crate::client::loadbalance::keyed_futures::KeyedFutures;
+use crate::client::loadbalance::outcome::{
+    CallOutcome, HealthOutcome, OutcomeClassifier, OutcomeSource,
+};
 use crate::client::loadbalance::outlier_detection::{OutlierDetector, OutlierStatsRegistry};
 use crate::client::loadbalance::pickers::ChannelPicker;
 use crate::xds::resource::outlier_detection::OutlierDetectionConfig;
@@ -127,6 +130,11 @@ pub(crate) struct LoadBalancer<D, C: Connector, Req> {
     /// and nothing reads from `eject_rx`.
     outlier: OutlierDetector,
     picker: Arc<dyn ChannelPicker<ReadyChannel<C::Service>, Req> + Send + Sync>,
+    /// Transport-specific mapping of each call's result to an outlier-detection
+    /// health verdict. gRPC uses `GrpcOutcomeClassifier`; HTTP and other
+    /// transports inject their own so their status codes are interpreted
+    /// correctly.
+    outcome_classifier: Arc<dyn OutcomeClassifier>,
 }
 
 impl<D, C, Req> LoadBalancer<D, C, Req>
@@ -148,6 +156,7 @@ where
         connector: Arc<C>,
         picker: Arc<dyn ChannelPicker<ReadyChannel<C::Service>, Req> + Send + Sync>,
         config: Arc<ArcSwap<OutlierDetectionConfig>>,
+        outcome_classifier: Arc<dyn OutcomeClassifier>,
     ) -> Self {
         let (registry, eject_rx) = OutlierStatsRegistry::new(config);
         let outlier = OutlierDetector::new(registry, eject_rx);
@@ -160,6 +169,7 @@ where
             ejected: KeyedFutures::new(),
             outlier,
             picker,
+            outcome_classifier,
         }
     }
 
@@ -340,7 +350,7 @@ where
     D::Error: Into<tower::BoxError>,
     C: Connector + Send + Sync + 'static,
     C::Service: Service<Req> + Clone + Send + 'static,
-    <C::Service as Service<Req>>::Response: Send + 'static,
+    <C::Service as Service<Req>>::Response: Send + 'static + OutcomeSource,
     <C::Service as Service<Req>>::Error: Into<tower::BoxError>,
     <C::Service as Service<Req>>::Future: Send + 'static,
     Req: Send + 'static,
@@ -364,7 +374,7 @@ where
         // No ready endpoints. Fail fast iff discovery is closed and
         // nothing else can produce one.
         match discover_result {
-            Poll::Ready(LbError::DiscoverClosed) if self.connecting.len() == 0 => {
+            Poll::Ready(LbError::DiscoverClosed) if self.connecting.is_empty() => {
                 Poll::Ready(Err(LbError::Stagnation))
             }
             Poll::Ready(e) => {
@@ -388,12 +398,23 @@ where
         // Cheap clone (all Arc-shared internals) so the async block
         // can take ownership without holding the picker borrow.
         let mut svc = picked.clone();
+        let classifier = Arc::clone(&self.outcome_classifier);
         LbFuture::Pending(Box::pin(async move {
             tower::ServiceExt::ready(&mut svc)
                 .await
                 .map_err(|e| LbError::LbChannelPollReadyError(e.into()))?;
             let result = svc.call(req).await;
-            svc.record_outcome(result.is_ok());
+            // The transport-specific classifier decides what this outcome means
+            // for outlier detection; `Ignore` records nothing (e.g. HTTP 4xx).
+            let outcome = match &result {
+                Ok(response) => response.call_outcome(),
+                Err(_) => CallOutcome::Error,
+            };
+            match classifier.classify(outcome) {
+                HealthOutcome::Success => svc.record_outcome(true),
+                HealthOutcome::Failure => svc.record_outcome(false),
+                HealthOutcome::Ignore => {}
+            }
             result.map_err(|e| LbError::LbChannelCallError(e.into()))
         }))
     }
@@ -410,6 +431,41 @@ mod tests {
     use std::sync::atomic::{AtomicU64, Ordering};
     use tokio::sync::mpsc;
     use tower::load::Load;
+
+    use crate::client::loadbalance::outcome::GrpcOutcomeClassifier;
+    use std::sync::LazyLock;
+
+    /// Mock endpoint response. `MockResponse` carries no HTTP metadata, so it
+    /// satisfies the load balancer's `OutcomeSource` bound as a 200 with no
+    /// headers — a success under `GrpcOutcomeClassifier`, matching the
+    /// pre-classifier `record_outcome(result.is_ok())` behavior.
+    ///
+    /// This is a dedicated newtype rather than an `impl` on a primitive so the
+    /// mock can never collide with a future `OutcomeSource` implementation.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    struct MockResponse(&'static str);
+
+    static EMPTY_HEADERS: LazyLock<http::HeaderMap> = LazyLock::new(http::HeaderMap::new);
+
+    impl OutcomeSource for MockResponse {
+        fn call_outcome(&self) -> CallOutcome<'_> {
+            CallOutcome::Response {
+                status: http::StatusCode::OK,
+                headers: &EMPTY_HEADERS,
+            }
+        }
+    }
+
+    /// Classifier returning a fixed verdict, so tests can assert the LB records
+    /// exactly what the classifier says regardless of the transport result.
+    #[derive(Debug)]
+    struct FixedClassifier(HealthOutcome);
+
+    impl OutcomeClassifier for FixedClassifier {
+        fn classify(&self, _outcome: CallOutcome<'_>) -> HealthOutcome {
+            self.0
+        }
+    }
 
     // -- Mock service --
 
@@ -438,9 +494,9 @@ mod tests {
     }
 
     impl Service<&'static str> for MockService {
-        type Response = &'static str;
+        type Response = MockResponse;
         type Error = tower::BoxError;
-        type Future = future::Ready<Result<&'static str, tower::BoxError>>;
+        type Future = future::Ready<Result<MockResponse, tower::BoxError>>;
 
         fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
             if self.fail_poll_ready.load(Ordering::Relaxed) {
@@ -455,7 +511,7 @@ mod tests {
             if self.fail_call.load(Ordering::Relaxed) {
                 future::ready(Err("injected call error".into()))
             } else {
-                future::ready(Ok("ok"))
+                future::ready(Ok(MockResponse("ok")))
             }
         }
     }
@@ -547,7 +603,13 @@ mod tests {
         let picker: Arc<dyn ChannelPicker<ReadyChannel<MockService>, &'static str> + Send + Sync> =
             Arc::new(P2cPicker);
         let config = Arc::new(ArcSwap::from_pointee(OutlierDetectionConfig::default()));
-        let lb = LoadBalancer::new(discover, connector.clone(), picker, config);
+        let lb = LoadBalancer::new(
+            discover,
+            connector.clone(),
+            picker,
+            config,
+            Arc::new(GrpcOutcomeClassifier),
+        );
         (lb, connector)
     }
 
@@ -599,7 +661,13 @@ mod tests {
         let picker: Arc<dyn ChannelPicker<ReadyChannel<MockService>, &'static str> + Send + Sync> =
             Arc::new(RecordingPicker { seen: seen.clone() });
         let config = Arc::new(ArcSwap::from_pointee(OutlierDetectionConfig::default()));
-        let lb = LoadBalancer::new(discover, connector, picker, config);
+        let lb = LoadBalancer::new(
+            discover,
+            connector,
+            picker,
+            config,
+            Arc::new(GrpcOutcomeClassifier),
+        );
         (lb, seen)
     }
 
@@ -882,7 +950,7 @@ mod tests {
         drive_to_ready(&mut lb, &connector).await;
 
         let result = lb.call("hello").await;
-        assert_eq!(result.unwrap(), "ok");
+        assert_eq!(result.unwrap(), MockResponse("ok"));
     }
 
     #[tokio::test]
@@ -901,7 +969,7 @@ mod tests {
 
         let num_requests = 1000;
         for _ in 0..num_requests {
-            assert_eq!(lb.call("hello").await.unwrap(), "ok");
+            assert_eq!(lb.call("hello").await.unwrap(), MockResponse("ok"));
         }
 
         // Check all endpoints were called.
@@ -1011,11 +1079,21 @@ mod tests {
         discover: MockDiscover,
         config: OutlierDetectionConfig,
     ) -> (Lb, Arc<MockConnector>, Arc<OutlierStatsRegistry>) {
+        make_lb_with_classifier(discover, config, Arc::new(GrpcOutcomeClassifier))
+    }
+
+    /// Like [`make_lb_with_outlier`], but with a caller-supplied outcome
+    /// classifier so tests can exercise the transport-agnostic seam.
+    fn make_lb_with_classifier(
+        discover: MockDiscover,
+        config: OutlierDetectionConfig,
+        classifier: Arc<dyn OutcomeClassifier>,
+    ) -> (Lb, Arc<MockConnector>, Arc<OutlierStatsRegistry>) {
         let connector = Arc::new(MockConnector::new());
         let picker: Arc<dyn ChannelPicker<ReadyChannel<MockService>, &'static str> + Send + Sync> =
             Arc::new(P2cPicker);
         let config = Arc::new(ArcSwap::from_pointee(config));
-        let lb = LoadBalancer::new(discover, connector.clone(), picker, config);
+        let lb = LoadBalancer::new(discover, connector.clone(), picker, config, classifier);
         let registry = lb.outlier.registry().clone();
         (lb, connector, registry)
     }
@@ -1078,6 +1156,80 @@ mod tests {
         assert!(!lb.ready.contains_key(&addr(8084)));
         // The registry's `ejected_count` should reflect the same.
         assert!(registry.len() == 5);
+    }
+
+    #[tokio::test]
+    async fn outcome_classifier_failure_ejects_despite_transport_success() {
+        // Every transport call succeeds ("ok"), but a Failure-returning
+        // classifier makes outlier detection treat each as a failure — proving
+        // the ejection signal now comes from the classifier, not `is_ok()`.
+        let (tx, discover) = new_discover();
+        let (mut lb, connector, registry) = make_lb_with_classifier(
+            discover,
+            fp_config(
+                /*threshold*/ 50, /*request_volume*/ 5, /*minimum_hosts*/ 3,
+            ),
+            Arc::new(FixedClassifier(HealthOutcome::Failure)),
+        );
+
+        for port in 8080..=8084 {
+            tx.send(Ok(Change::Insert(addr(port), IdleChannel::new(addr(port)))))
+                .await
+                .unwrap();
+        }
+        drive_to_ready(&mut lb, &connector).await;
+
+        for _ in 0..100 {
+            lb.call("hello").await.unwrap();
+        }
+        registry.run_housekeeping();
+        let _ = poll_ready_now(&mut lb);
+
+        assert!(
+            !lb.ejected.is_empty(),
+            "a success classified as Failure should drive ejection",
+        );
+    }
+
+    #[tokio::test]
+    async fn outcome_classifier_ignore_records_nothing() {
+        // Every transport call fails, but an Ignore-returning classifier records
+        // neither success nor failure, so no endpoint is ever ejected.
+        let (tx, discover) = new_discover();
+        let (mut lb, connector, registry) = make_lb_with_classifier(
+            discover,
+            fp_config(
+                /*threshold*/ 50, /*request_volume*/ 5, /*minimum_hosts*/ 3,
+            ),
+            Arc::new(FixedClassifier(HealthOutcome::Ignore)),
+        );
+
+        for port in 8080..=8084 {
+            tx.send(Ok(Change::Insert(addr(port), IdleChannel::new(addr(port)))))
+                .await
+                .unwrap();
+        }
+        drive_to_ready(&mut lb, &connector).await;
+        // Every endpoint fails at the transport level.
+        for port in 8080..=8084 {
+            connector
+                .service(&addr(port))
+                .fail_call
+                .store(true, Ordering::Relaxed);
+        }
+
+        for _ in 0..100 {
+            let _ = lb.call("hello").await;
+        }
+
+        // Ignore records neither success nor failure, so the counters stay at
+        // zero. A "not ejected" check can't prove this: a classifier that
+        // recorded a success on each failing call would also never eject.
+        // `add_channel` is get-or-create, so this reads the state the load
+        // balancer has been recording into.
+        for port in 8080..=8084 {
+            assert_eq!(registry.add_channel(addr(port)).counters(), (0, 0));
+        }
     }
 
     #[tokio::test]

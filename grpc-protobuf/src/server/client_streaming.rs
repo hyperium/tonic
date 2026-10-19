@@ -114,6 +114,8 @@ mod tests {
     use grpc::core::Address;
     use grpc::core::ConnectionInfo;
     use grpc::core::RecvMessage;
+    use grpc::core::StreamEnded;
+    use grpc::core::StreamError;
     use grpc::credentials::SecurityInfo;
     use grpc::server::RecvStream;
     use grpc::server::SendStream;
@@ -147,7 +149,7 @@ mod tests {
             &mut self,
             _item: ResponseStreamItem<'a>,
             _options: SendOptions,
-        ) -> Result<(), ()> {
+        ) -> Result<(), StreamEnded> {
             Ok(())
         }
     }
@@ -155,7 +157,7 @@ mod tests {
     struct EmptyRecvStream;
 
     impl RecvStream for EmptyRecvStream {
-        async fn next(&mut self, _msg: &mut dyn RecvMessage) -> Option<Result<(), ()>> {
+        async fn next(&mut self, _msg: &mut dyn RecvMessage) -> Option<Result<(), StreamError>> {
             None
         }
     }

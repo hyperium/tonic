@@ -45,10 +45,10 @@ use crate::client::DynInvoke;
 use crate::client::DynRecvStream;
 use crate::client::DynSendStream;
 use crate::client::RequestHeaders;
-use crate::client::channel::WorkQueueItem;
-use crate::client::channel::WorkQueueTx;
+use crate::client::load_balancing::WorkScheduler;
 use crate::client::load_balancing::subchannel::Subchannel;
 use crate::client::load_balancing::subchannel::SubchannelState;
+use crate::client::load_balancing::subchannel::SubchannelUpdate;
 use crate::client::load_balancing::subchannel::private::Sealed;
 use crate::client::stream_util::FailingRecvStream;
 use crate::client::transport::DynTransport;
@@ -249,7 +249,7 @@ pub(crate) struct InternalSubchannel {
 struct InternalSubchannelData {
     address: Address,
     state: InternalSubchannelState,
-    work_queue: WorkQueueTx,
+    work_scheduler: Arc<dyn WorkScheduler>,
     on_drop: Arc<Notify>,
     transport_builder: Arc<dyn DynTransport>,
     backoff: Arc<dyn Backoff>,
@@ -268,9 +268,9 @@ impl InternalSubchannelData {
             return;
         };
 
-        _ = self
-            .work_queue
-            .send(WorkQueueItem::SubchannelStateUpdate { subchannel, state });
+        // Send the update directly to the subchannel's work scheduler.
+        self.work_scheduler
+            .schedule_work(Some(Box::new(SubchannelUpdate::new(subchannel, state))));
     }
 }
 
@@ -311,7 +311,7 @@ impl InternalSubchannel {
         backoff: Arc<dyn Backoff>,
         runtime: GrpcRuntime,
         mut security_opts: SecurityOpts,
-        work_queue: WorkQueueTx,
+        work_scheduler: Arc<dyn WorkScheduler>,
     ) -> Arc<dyn Subchannel> {
         let on_drop = Arc::new(Notify::new());
         if let Some(proxy_opts) = ProxyOptions::from_addr(&address) {
@@ -330,13 +330,14 @@ impl InternalSubchannel {
                 weak_self: weak_self.clone(),
                 runtime,
                 state: InternalSubchannelState::Idle,
-                work_queue,
+                work_scheduler,
                 on_drop,
                 transport_options: TransportOptions::default(), // TODO: should be configurable
                 security_opts,
             })),
         });
-        move_to_idle(&this.data);
+        // Do not report the initial state; the initial state is returned
+        // synchronously.
         this
     }
 

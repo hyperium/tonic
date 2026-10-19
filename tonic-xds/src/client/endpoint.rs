@@ -24,8 +24,6 @@
 
 use crate::common::async_util::BoxFuture;
 #[cfg(feature = "_tls-any")]
-use crate::xds::cert_provider::verifier::XdsServerCertVerifier;
-#[cfg(feature = "_tls-any")]
 use crate::xds::cert_provider::{CertProviderRegistry, CertificateProvider};
 use crate::xds::resource::cluster::ClusterResource;
 use crate::xds::resource::security::ClusterSecurityConfig;
@@ -301,13 +299,13 @@ impl ClusterTlsConfig<'_> {
     /// Bootstrap instance name of the CA trust bundle used to validate the
     /// peer's certificate chain.
     pub fn ca_instance_name(&self) -> &str {
-        &self.security.ca_instance_name
+        self.security.ca_instance_name()
     }
 
     /// Bootstrap instance name of the local identity (client certificate).
     /// `Some` implies mTLS is requested for this cluster.
     pub fn identity_instance_name(&self) -> Option<&str> {
-        self.security.identity_instance_name.as_deref()
+        self.security.identity_instance_name()
     }
 
     /// Build the gRFC-A29 server-certificate verifier for this cluster.
@@ -325,15 +323,12 @@ impl ClusterTlsConfig<'_> {
     ) -> Result<Arc<dyn rustls::client::danger::ServerCertVerifier>, ClusterTlsError> {
         let ca_provider = self
             .registry
-            .get(&self.security.ca_instance_name)
+            .get(self.security.ca_instance_name())
             .ok_or_else(|| {
-                ClusterTlsError::UnknownCaInstance(self.security.ca_instance_name.clone())
+                ClusterTlsError::UnknownCaInstance(self.security.ca_instance_name().to_owned())
             })?
             .clone();
-        Ok(Arc::new(XdsServerCertVerifier::new(
-            ca_provider,
-            self.security.san_matchers.clone(),
-        )))
+        Ok(self.security.build_verifier(ca_provider))
     }
 
     /// Resolve the optional mTLS identity provider for this cluster.
@@ -345,13 +340,12 @@ impl ClusterTlsConfig<'_> {
         &self,
     ) -> Result<Option<Arc<dyn CertificateProvider>>, ClusterTlsError> {
         self.security
-            .identity_instance_name
-            .as_ref()
+            .identity_instance_name()
             .map(|name| {
                 self.registry
                     .get(name)
                     .cloned()
-                    .ok_or_else(|| ClusterTlsError::UnknownIdentityInstance(name.clone()))
+                    .ok_or_else(|| ClusterTlsError::UnknownIdentityInstance(name.to_owned()))
             })
             .transpose()
     }

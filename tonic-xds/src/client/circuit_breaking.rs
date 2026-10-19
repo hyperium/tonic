@@ -419,6 +419,8 @@ impl InFlightCounter {
     }
 
     fn deactivate(&self) {
+        // TODO: Switch to `try_update` and remove this allow once MSRV >= 1.95.
+        #[allow(deprecated)]
         let result = self
             .active_refs
             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |count| {
@@ -1228,6 +1230,8 @@ mod tests {
         type Error = BoxError;
         type Future = std::future::Ready<Result<Self::Response, Self::Error>>;
 
+        // TODO: Switch to `try_update` and remove this allow once MSRV >= 1.95.
+        #[allow(deprecated)]
         fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
             if self
                 .ready_budget
