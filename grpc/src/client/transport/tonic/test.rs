@@ -23,13 +23,11 @@
  */
 
 use std::net::SocketAddr;
-use std::path::PathBuf;
 use std::pin::Pin;
 use std::result::Result;
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::async_trait;
 use bytes::Buf;
 use bytes::Bytes;
 use h2::Reason;
@@ -54,6 +52,7 @@ use tonic_prost::prost::Message as ProstMessage;
 
 use crate::StatusCodeError;
 use crate::StatusError;
+use crate::async_trait;
 use crate::attributes::Attributes;
 use crate::client::CallOptions;
 use crate::client::Channel;
@@ -306,6 +305,7 @@ async fn grpc_invoke_tonic_unary() {
 mod unix_tests {
     use std::path::Component;
     use std::path::Path;
+    use std::path::PathBuf;
 
     use tempfile::tempdir;
     use tokio::net::UnixListener;
