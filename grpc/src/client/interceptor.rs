@@ -329,6 +329,7 @@ mod test {
     use crate::client::Trailers;
     use crate::core::RecvMessage;
     use crate::core::SendMessage;
+    use crate::core::StreamEnded;
 
     #[derive(Clone)]
     struct Reusable;
@@ -643,12 +644,16 @@ mod test {
 
     struct MockSendStream(mpsc::Sender<(Bytes, SendOptions)>);
     impl SendStream for MockSendStream {
-        async fn send(&mut self, item: &dyn SendMessage, options: SendOptions) -> Result<(), ()> {
+        async fn send(
+            &mut self,
+            item: &dyn SendMessage,
+            options: SendOptions,
+        ) -> Result<(), StreamEnded> {
             let mut data = item.encode().unwrap();
             self.0
                 .send((data.copy_to_bytes(data.remaining()), options))
                 .await
-                .map_err(|_| ())
+                .map_err(|_| StreamEnded)
         }
     }
     struct MockRecvStream(broadcast::Receiver<ResponseStreamItem>);
@@ -712,7 +717,11 @@ mod test {
     }
 
     impl<S: SendStream> SendStream for RetrySendStream<S> {
-        async fn send(&mut self, msg: &dyn SendMessage, options: SendOptions) -> Result<(), ()> {
+        async fn send(
+            &mut self,
+            msg: &dyn SendMessage,
+            options: SendOptions,
+        ) -> Result<(), StreamEnded> {
             loop {
                 let res = self.send_stream.send(msg, options.clone()).await;
                 let mut cache = self.cache.lock().await;
@@ -736,7 +745,7 @@ mod test {
                 }
                 let Some(send_stream) = cache.send_stream.take() else {
                     // We were notified but no new stream was present; return error.
-                    return Err(());
+                    return Err(StreamEnded);
                 };
                 // Retry on the new stream.
                 self.send_stream = send_stream;
@@ -956,7 +965,11 @@ mod test {
 
     struct NopStream;
     impl SendStream for NopStream {
-        async fn send(&mut self, _item: &dyn SendMessage, _options: SendOptions) -> Result<(), ()> {
+        async fn send(
+            &mut self,
+            _item: &dyn SendMessage,
+            _options: SendOptions,
+        ) -> Result<(), StreamEnded> {
             Ok(())
         }
     }
