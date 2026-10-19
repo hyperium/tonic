@@ -301,6 +301,7 @@ pub struct XdsChannelBuilder {
     recorder: Option<Arc<dyn MetricsRecorder>>,
     pre_route: Option<Arc<dyn PreRouteInterceptor>>,
     retry_classifier_factory: Option<Arc<dyn RetryClassifierFactory>>,
+    lb_backend: LbBackend,
     #[cfg(feature = "_tls-any")]
     cert_providers: HashMap<String, Arc<dyn CertificateProvider>>,
 }
@@ -348,6 +349,7 @@ impl XdsChannelBuilder {
             recorder: None,
             pre_route: None,
             retry_classifier_factory: None,
+            lb_backend: LbBackend::default(),
             #[cfg(feature = "_tls-any")]
             cert_providers: HashMap::new(),
         }
@@ -393,6 +395,17 @@ impl XdsChannelBuilder {
         factory: Arc<dyn RetryClassifierFactory>,
     ) -> Self {
         self.retry_classifier_factory = Some(factory);
+        self
+    }
+
+    /// Selects the per-cluster load-balancer implementation. Defaults to
+    /// [`LbBackend::TowerP2c`].
+    ///
+    /// Both backends are always compiled, and the channel types are identical,
+    /// so switching needs no other code change.
+    #[must_use]
+    pub fn with_lb_backend(mut self, backend: LbBackend) -> Self {
+        self.lb_backend = backend;
         self
     }
 
@@ -534,7 +547,7 @@ impl XdsChannelBuilder {
         ReqBody: Send + 'static,
         ResBody: Send + 'static,
     {
-        let cluster_factory = LbBackend::SELECTED.cluster_factory::<MC, ReqBody, ResBody>(
+        let cluster_factory = self.lb_backend.cluster_factory::<MC, ReqBody, ResBody>(
             parts.cache.clone(),
             make_connector,
             #[cfg(feature = "_tls-any")]
@@ -697,7 +710,7 @@ impl XdsChannelBuilder {
     ///
     /// # Outlier detection
     ///
-    /// Under the `xds-lb` feature, endpoint health is judged by a
+    /// With [`LbBackend::XdsLb`], endpoint health is judged by a
     /// plain-HTTP classifier — `5xx` counts as a failure and `4xx` is ignored,
     /// since a client error reflects the request rather than upstream health.
     pub fn build_transport_channel<MC, B, ResBody>(
@@ -734,31 +747,27 @@ impl XdsChannelBuilder {
     }
 }
 
-/// Builds the per-cluster load balancers for the channel stack, using Tower's
 /// The per-cluster load-balancer implementations.
 ///
-/// A build selects one through [`SELECTED`](Self::SELECTED); tests construct
-/// either explicitly so a single run covers both.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum LbBackend {
+/// Select one with
+/// [`XdsChannelBuilder::with_lb_backend`](XdsChannelBuilder::with_lb_backend);
+/// the default is [`TowerP2c`](Self::TowerP2c).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum LbBackend {
     /// Tower's power-of-two-choices `Balance` over already-connected endpoints.
+    #[default]
     TowerP2c,
-    /// The in-crate `LoadBalancer`, which owns the connection lifecycle and so
-    /// can eject outliers.
+    /// This crate's own balancer, which owns the endpoint connection lifecycle
+    /// and so can eject outliers and run pluggable pickers.
+    ///
+    /// Still maturing: outlier detection is compiled in but left disabled, and
+    /// only the power-of-two-choices picker is selected, so the two backends
+    /// behave the same today.
     XdsLb,
 }
 
 impl LbBackend {
-    /// The backend this build uses, chosen by the `xds-lb` feature.
-    ///
-    /// A `const` so the dispatch in [`cluster_factory`](Self::cluster_factory)
-    /// folds away and the unselected arm is dropped.
-    pub(crate) const SELECTED: Self = if cfg!(feature = "xds-lb") {
-        Self::XdsLb
-    } else {
-        Self::TowerP2c
-    };
-
     /// Builds the per-cluster load balancers for the channel stack.
     ///
     /// `outcome_classifier` only matters to [`XdsLb`](Self::XdsLb), which is
@@ -845,30 +854,6 @@ mod test_backends {
             Arc::new(
                 CertProviderRegistry::from_bootstrap(&Default::default(), Default::default())
                     .unwrap(),
-            )
-        }
-    }
-
-    impl XdsChannelBuilder {
-        /// Builds a real xDS gRPC channel — bootstrap, ADS client and resource
-        /// manager included — load-balanced by `backend`.
-        pub(crate) fn build_grpc_channel_with_backend(
-            &self,
-            backend: LbBackend,
-        ) -> Result<XdsChannelGrpc, BuildError> {
-            let parts = self.build_xds_parts()?;
-            let factory = backend.grpc_factory(
-                parts.cache.clone(),
-                #[cfg(feature = "_tls-any")]
-                parts.cert_provider_registry.clone(),
-            );
-            Ok(
-                self.build_channel_with_factory::<TonicBody, TonicBody, TonicBody, _>(
-                    parts,
-                    factory,
-                    |req: Request<SharedBody<TonicBody>>| req.map(TonicBody::new),
-                    Arc::new(RetrySharedConfig::grpc_default()),
-                ),
             )
         }
     }

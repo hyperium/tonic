@@ -19,7 +19,7 @@ tokio = { version = "1", features = ["sync", "macros"] }
 rand = "0.10"
 
 # Optional dependencies for tonic transport
-tonic = { version = "0.14.6", optional = true }
+tonic = { version = "0.14", optional = true }
 tokio-stream = { version = "0.1", optional = true }
 http = { version = "1", optional = true }
 
@@ -49,7 +49,7 @@ tokio = { version = "1", features = [
     "macros",
     "net",
 ] }
-tonic = { version = "0.14.6" }
+tonic = { version = "0.14" }
 async-stream = "0.3"
 envoy-types = "0.7"
 prost = "0.14"

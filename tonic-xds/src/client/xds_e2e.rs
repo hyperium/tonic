@@ -63,16 +63,14 @@ mod test {
     /// Builds a real xDS channel whose bootstrap points at `cp_addr`, whose
     /// target resolves the listener `listener_name`, and whose clusters are
     /// load-balanced by `backend`.
-    ///
-    /// The backend is chosen explicitly rather than taken from the `xds-lb`
-    /// feature, so one test run covers both.
     fn build_channel_with_backend(
         cp_addr: SocketAddr,
         listener_name: &str,
         backend: LbBackend,
     ) -> XdsChannelGrpc {
         builder_for(cp_addr, listener_name)
-            .build_grpc_channel_with_backend(backend)
+            .with_lb_backend(backend)
+            .build_grpc_channel()
             .expect("build xds channel")
     }
 
