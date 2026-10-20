@@ -57,7 +57,6 @@ use grpc::__unstable::client::load_balancing::registry::GLOBAL_LB_REGISTRY;
 use grpc::__unstable::client::name_resolution::ResolverUpdate;
 use grpc::StatusCodeError;
 use grpc::StatusError;
-use grpc::client::ConnectivityState;
 use serde::Deserialize;
 
 use crate::wrr::RandomWrr;
@@ -146,10 +145,7 @@ impl WeightedTargetPolicy {
     fn update_picker(&mut self, channel_controller: &mut dyn ChannelController) {
         // Wake IDLE children now: the picker below excludes them whenever
         // another child is READY or CONNECTING, so no pick would reach them.
-        self.child_manager
-            .exit_idle_filtered(channel_controller, |child| {
-                child.state().connectivity_state == ConnectivityState::Idle
-            });
+        self.child_manager.exit_idle(channel_controller);
         // Reset the flag so the next `work()`/`exit_idle()` republishes only if
         // a child updates its picker after this point.
         let _ = self.child_manager.child_updated();
@@ -267,6 +263,7 @@ mod tests {
     use grpc::__unstable::client::load_balancing::subchannel::SubchannelState;
     use grpc::__unstable::client::name_resolution::Endpoint;
     use grpc::client::CallOptions;
+    use grpc::client::ConnectivityState;
     use grpc::client::RequestHeaders;
     use grpc::core::Address;
     use serde::Serialize;
@@ -455,23 +452,14 @@ mod tests {
     }
 
     #[test]
-    fn only_idle_children_are_asked_to_exit_idle() {
-        // Under weights 30/50 for "b"/"c", key 0 selects "b" and key 30
-        // selects "c".
+    fn idle_children_are_asked_to_exit_idle() {
+        // Under weights 30/70 for "a"/"b", key 0 selects "a" and key 30
+        // selects "b".
         let mut t = Harness::new(&[0, 30]);
-        let state = t.apply(&[
-            ("a", 20, Mock::TransientFailure),
-            ("b", 30, Mock::Idle),
-            ("c", 50, Mock::Idle),
-        ]);
+        let state = t.apply(&[("a", 30, Mock::Idle), ("b", 70, Mock::Idle)]);
         assert_eq!(state.connectivity_state, ConnectivityState::Connecting);
+        assert_picks(&*state.picker, "a");
         assert_picks(&*state.picker, "b");
-        assert_picks(&*state.picker, "c");
-        assert_eq!(
-            t.scheduler.0.lock().unwrap().len(),
-            2,
-            "only the IDLE children should be asked to exit idle"
-        );
     }
 
     #[test]
@@ -507,22 +495,36 @@ mod tests {
     #[test]
     fn exit_idle_and_work_republish_only_on_child_update() {
         let mut t = Harness::new(&[]);
-        t.apply(&[("a", 100, Mock::Ready)]);
+        // "a" stays IDLE through `apply`, then exits to CONNECTING on
+        // `exit_idle` (scheduling work), and reaches READY on `work`.
+        assert_eq!(
+            t.apply(&[("a", 100, Mock::StayIdle)]).connectivity_state,
+            ConnectivityState::Idle
+        );
         t.policy.exit_idle(&mut t.controller);
+        assert_eq!(
+            t.take_state().connectivity_state,
+            ConnectivityState::Connecting
+        );
+        t.run_work();
+        assert_eq!(t.take_state().connectivity_state, ConnectivityState::Ready);
+
+        // Once READY (not IDLE), `exit_idle` is a no-op and does not republish.
+        t.policy.exit_idle(&mut t.controller);
+        assert!(
+            t.controller.states.is_empty(),
+            "exit_idle should not publish when no child updated"
+        );
+
+        // Queue work via an IDLE -> CONNECTING transition, then make the child
+        // READY so running the queued work does not change its state.
+        t.apply(&[("a", 100, Mock::Idle)]);
+        t.apply(&[("a", 100, Mock::Ready)]);
         t.run_work();
         assert!(
             t.controller.states.is_empty(),
-            "policy should not publish when no child updated"
+            "work should not publish when no child updated"
         );
-
-        t.apply(&[("a", 100, Mock::Connecting)]);
-        t.policy.exit_idle(&mut t.controller);
-        t.run_work();
-        assert_eq!(t.take_state().connectivity_state, ConnectivityState::Ready);
-
-        t.apply(&[("a", 100, Mock::RepublishOnExitIdle)]);
-        t.policy.exit_idle(&mut t.controller);
-        assert_eq!(t.take_state().connectivity_state, ConnectivityState::Ready);
     }
 
     /// A `WeightedTargetPolicy` whose sampler returns the given keys in order.
@@ -654,16 +656,14 @@ mod tests {
     #[serde(rename_all = "snake_case")]
     enum Mock {
         Idle,
-        /// Reports IDLE and ignores `exit_idle`.
+        /// Reports IDLE and ignores the `exit_idle` call made during
+        /// `resolver_update`, remaining IDLE until the next `exit_idle`.
         StayIdle,
         Connecting,
         Ready,
         /// Reports READY, then IDLE when the work it schedules runs, as
         /// pick_first does when its connection drops.
         ReadyThenIdle,
-        /// Reports READY and publishes a new READY picker on `exit_idle`, as
-        /// round_robin does when `exit_idle` wakes one of its IDLE children.
-        RepublishOnExitIdle,
         TransientFailure,
         /// Returns an error without publishing a state.
         FailUpdate,
@@ -689,7 +689,7 @@ mod tests {
         work_scheduler: Arc<dyn WorkScheduler>,
         state: Option<ConnectivityState>,
         picked: PickedChild,
-        behavior: Option<Mock>,
+        skip_next_exit_idle: bool,
     }
 
     impl MockChildPolicy {
@@ -717,7 +717,7 @@ mod tests {
                     tag: String::new(),
                     update: ResolverUpdate::default(),
                 },
-                behavior: None,
+                skip_next_exit_idle: false,
             }
         }
 
@@ -743,11 +743,11 @@ mod tests {
                 tag: config.tag.clone(),
                 update,
             };
-            self.behavior = Some(config.behavior);
+            self.skip_next_exit_idle = matches!(config.behavior, Mock::StayIdle);
             let state = match config.behavior {
                 Mock::Idle | Mock::StayIdle => ConnectivityState::Idle,
                 Mock::Connecting => ConnectivityState::Connecting,
-                Mock::Ready | Mock::RepublishOnExitIdle => ConnectivityState::Ready,
+                Mock::Ready => ConnectivityState::Ready,
                 Mock::ReadyThenIdle => {
                     self.work_scheduler
                         .schedule_work(Some(Box::new(DropConnection)));
@@ -760,20 +760,13 @@ mod tests {
             Ok(())
         }
 
-        // Unless ignored, every call schedules work, so tests can count the
-        // calls. Idle -> Connecting on `exit_idle`, then Connecting -> Ready
-        // on that work.
+        // Idle -> Connecting on `exit_idle`, then Connecting -> Ready on
+        // the scheduled work.
         fn exit_idle(&mut self, channel_controller: &mut dyn ChannelController) {
-            match self.behavior {
-                Some(Mock::StayIdle) => return,
-                Some(Mock::RepublishOnExitIdle) => channel_controller.update_picker(LbState {
-                    connectivity_state: ConnectivityState::Ready,
-                    picker: Arc::new(MockPicker(self.picked.clone())),
-                }),
-                _ => {}
-            }
-            self.work_scheduler.schedule_work(None);
-            if self.state == Some(ConnectivityState::Idle) {
+            if self.state == Some(ConnectivityState::Idle)
+                && !std::mem::take(&mut self.skip_next_exit_idle)
+            {
+                self.work_scheduler.schedule_work(None);
                 self.set_state(ConnectivityState::Connecting, channel_controller);
             }
         }
