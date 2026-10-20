@@ -663,7 +663,7 @@ where
         let command_tx = self.command_tx.clone();
         let mut transport_task = Some(async move {
             tokio::select! {
-                _ = Self::run_transport(transport_context, &command_tx) => {}
+                _ = transport_context.run(&command_tx) => {}
                 // Covers setup, backoff, I/O, and a held ProcessingDone token.
                 _ = shutdown_rx => {}
             }
@@ -1367,20 +1367,41 @@ where
             let _ = event_tx.send(event);
         }
     }
+}
+
+/// Runtime, transport builder, and configuration owned by the lifecycle task.
+pub(crate) struct TransportContext<R, TB> {
+    runtime: R,
+    builder: TB,
+    servers: Vec<ServerConfig>,
+    retry_policy: RetryPolicy,
+}
+
+impl<R: Runtime, TB: TransportBuilder> TransportContext<R, TB> {
+    pub(crate) fn new(
+        runtime: R,
+        builder: TB,
+        servers: Vec<ServerConfig>,
+        retry_policy: RetryPolicy,
+    ) -> Self {
+        Self {
+            runtime,
+            builder,
+            servers,
+            retry_policy,
+        }
+    }
 
     /// One long-lived lifecycle task. It owns transport handles and waits, but
     /// never reads or mutates resource, subscription, version, or nonce state.
-    async fn run_transport<TB: TransportBuilder>(
-        context: TransportContext<R, TB>,
-        command_tx: &mpsc::WeakUnboundedSender<WorkerCommand>,
-    ) {
+    async fn run(self, command_tx: &mpsc::WeakUnboundedSender<WorkerCommand>) {
         // Future extension (gRFC A71): Try servers in priority order with fallback.
-        let Some(server) = context.servers.first() else {
+        let Some(server) = self.servers.first() else {
             return;
         };
-        let mut backoff = Backoff::new(context.retry_policy);
+        let mut backoff = Backoff::new(self.retry_policy);
         loop {
-            if let Ok(transport) = context.builder.build(server).await
+            if let Ok(transport) = self.builder.build(server).await
                 && let Ok((tx, rx)) = transport.new_stream().await
             {
                 let (writes, write_rx) = mpsc::unbounded_channel();
@@ -1420,7 +1441,7 @@ where
             let Some(delay) = backoff.next_backoff() else {
                 return;
             };
-            context.runtime.sleep(delay).await;
+            self.runtime.sleep(delay).await;
         }
     }
 
@@ -1456,30 +1477,6 @@ where
         tokio::select! {
             _ = write_loop => {}
             _ = read_loop => {}
-        }
-    }
-}
-
-/// Runtime, transport builder, and configuration owned by the lifecycle task.
-pub(crate) struct TransportContext<R, TB> {
-    runtime: R,
-    builder: TB,
-    servers: Vec<ServerConfig>,
-    retry_policy: RetryPolicy,
-}
-
-impl<R, TB> TransportContext<R, TB> {
-    pub(crate) fn new(
-        runtime: R,
-        builder: TB,
-        servers: Vec<ServerConfig>,
-        retry_policy: RetryPolicy,
-    ) -> Self {
-        Self {
-            runtime,
-            builder,
-            servers,
-            retry_policy,
         }
     }
 }
