@@ -198,16 +198,19 @@ where
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         if let Poll::Ready(result) = this.inner.poll(cx) {
-            return Poll::Ready(match (result, this.sleep.take()) {
+            let sleep = this.sleep.take();
+            let expired = matches!(&sleep, Some(s) if Instant::now() >= s.deadline());
+            return Poll::Ready(match (result, sleep) {
+                // An attempt cut short by the deadline, by the endpoint's own
+                // `grpc-timeout` timer (an error) or the server's (a CANCELLED
+                // reply), is reported as the deadline it hit. Any other result
+                // that is ready is kept, even if the deadline is too.
+                (Err(_), _) if expired => Err(deadline_exceeded()),
+                (Ok(response), _) if expired && is_cancelled(&response) => Err(deadline_exceeded()),
                 (Ok(response), Some(sleep)) => Ok(match *this.body_deadline {
                     Some(body_deadline) => response.map(|body| body_deadline(body, sleep)),
                     None => response,
                 }),
-                // An attempt cut short by the deadline (e.g. by the endpoint's own
-                // `grpc-timeout` timer) is reported as the deadline it hit.
-                (Err(_), Some(sleep)) if Instant::now() >= sleep.deadline() => {
-                    Err(deadline_exceeded())
-                }
                 (result, _) => result.map_err(Into::into),
             });
         }
@@ -223,6 +226,12 @@ fn deadline_exceeded() -> BoxError {
     Box::new(tonic::Status::deadline_exceeded(
         "deadline exceeded (from grpc-timeout or xDS max stream duration)",
     ))
+}
+
+/// Whether `response` is a trailers-only gRPC reply with status CANCELLED.
+fn is_cancelled<B>(response: &Response<B>) -> bool {
+    tonic::Status::from_header_map(response.headers())
+        .is_some_and(|status| status.code() == tonic::Code::Cancelled)
 }
 
 /// Sets the request's `grpc-timeout` to the time remaining until its
@@ -339,9 +348,10 @@ mod tests {
         OkAfter(Duration),
         /// Replies UNAVAILABLE (retryable) after the given delay.
         UnavailableAfter(Duration),
-        /// Fails with a transport error when its advertised `grpc-timeout`
-        /// elapses, like tonic's per-endpoint timeout.
-        HonorsGrpcTimeout,
+        /// Gives up when its advertised `grpc-timeout` elapses: with an error
+        /// like tonic's client-side endpoint timeout, or (`reply`) with a
+        /// CANCELLED response like a tonic server.
+        HonorsGrpcTimeout { reply: bool },
         /// Replies with headers at once, then streams one frame and stalls.
         StallingStream,
     }
@@ -377,13 +387,17 @@ mod tests {
                         tokio::time::sleep(delay).await;
                         Ok(tonic::Status::unavailable("try again").into_http())
                     }
-                    Endpoint::HonorsGrpcTimeout => {
+                    Endpoint::HonorsGrpcTimeout { reply } => {
                         let timeout = crate::common::grpc_timeout::parse_grpc_timeout(
                             timeout.as_deref().expect("grpc-timeout"),
                         )
                         .unwrap();
                         tokio::time::sleep(timeout).await;
-                        Err::<Response<TonicBody>, BoxError>("timeout expired".into())
+                        if reply {
+                            Ok(tonic::Status::cancelled("Timeout expired").into_http())
+                        } else {
+                            Err("timeout expired".into())
+                        }
                     }
                     Endpoint::StallingStream => Ok(Response::new(TonicBody::new(StallingBody {
                         sent_first: false,
@@ -454,6 +468,8 @@ mod tests {
             (Some(10), Some("20S"), Some(10)),
             (Some(10), Some("5S"), Some(5)),
             (Some(40), None, Some(40)),
+            // A reply ready on the same tick as the deadline is kept.
+            (Some(DELAY), None, Some(DELAY)),
             // A malformed app `grpc-timeout` is treated as absent, as tonic does:
             // forwarded untouched, or replaced when an xDS deadline applies.
             (None, Some("bogus"), None),
@@ -500,10 +516,12 @@ mod tests {
 
     #[tokio::test(start_paused = true)]
     async fn endpoint_timeout_at_deadline_reports_deadline_exceeded() {
-        let (svc, _) = grpc_stack(Endpoint::HonorsGrpcTimeout);
-        let (result, elapsed) = call(svc, request(Some(secs(3)), None)).await;
-        assert_eq!(result, Err(tonic::Code::DeadlineExceeded));
-        assert_eq!(elapsed, secs(3));
+        for reply in [false, true] {
+            let (svc, _) = grpc_stack(Endpoint::HonorsGrpcTimeout { reply });
+            let (result, elapsed) = call(svc, request(Some(secs(3)), None)).await;
+            assert_eq!(result, Err(tonic::Code::DeadlineExceeded), "reply={reply}");
+            assert_eq!(elapsed, secs(3), "reply={reply}");
+        }
     }
 
     #[tokio::test(start_paused = true)]
