@@ -22,8 +22,9 @@
  *
  */
 
-pub(crate) mod channel;
+pub(crate) mod adapter;
 pub(crate) mod channel_state;
+pub(crate) mod cluster_factory;
 pub(crate) mod errors;
 pub(crate) mod keyed_futures;
 pub(crate) mod loadbalancer;

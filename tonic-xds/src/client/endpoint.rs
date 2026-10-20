@@ -394,8 +394,10 @@ pub trait MakeConnector: Send + Sync + 'static {
     /// The service type produced by the connectors.
     ///
     /// Must be `Send + 'static` because discovery drives it from a spawned
-    /// task and streams endpoint changes carrying it across threads.
-    type Service: Send + 'static;
+    /// task and streams endpoint changes carrying it across threads, and
+    /// `Clone` because a load balancer hands a handle to each concurrent
+    /// request it dispatches to the endpoint.
+    type Service: Clone + Send + 'static;
 
     /// Build a connector for the given cluster.
     fn make_connector(
