@@ -50,6 +50,8 @@
 
 use std::marker::PhantomData;
 
+use grpc::core::StreamEnded;
+use grpc::core::StreamError;
 use grpc::server::DynRecvStream;
 use grpc::server::DynSendStream;
 use grpc::server::ResponseStreamItem;
@@ -93,25 +95,25 @@ where
 
     /// Receives the next request message from the stream into `req`.
     ///
-    /// Returns `Some(Ok(()))` on success, `Some(Err(()))` if the stream
-    /// encountered an error, or `None` if the client has closed the stream.
+    /// Returns `Some(Ok(()))` on success, `Some(Err(StreamError))` if the
+    /// stream encountered an error, or `None` if the client has closed the stream.
     pub async fn recv_into(
         &mut self,
         req: &mut impl AsMut<MutProxied = M>,
-    ) -> Option<Result<(), ()>> {
+    ) -> Option<Result<(), StreamError>> {
         let mut req_view = ProtoRecvMessage::from_mut(req);
         self.rx.dyn_next(&mut req_view).await
     }
 
     /// Receives the next request message from the stream.
     ///
-    /// Returns `Some(Ok(msg))` on success, `Some(Err(()))` if the stream
-    /// encountered an error, or `None` if the client has closed the stream.
-    pub async fn recv(&mut self) -> Option<Result<M, ()>> {
+    /// Returns `Some(Ok(msg))` on success, `Some(Err(StreamError))` if the
+    /// stream encountered an error, or `None` if the client has closed the stream.
+    pub async fn recv(&mut self) -> Option<Result<M, StreamError>> {
         let mut req = M::default();
         match self.recv_into(&mut req).await {
             Some(Ok(())) => Some(Ok(req)),
-            Some(Err(())) => Some(Err(())),
+            Some(Err(e)) => Some(Err(e)),
             None => None,
         }
     }
@@ -141,11 +143,10 @@ where
     ///
     /// Note: success does *not* indicate successful receipt of the response by
     /// the client; it only indicates that the stream has not yet terminated.
-    #[allow(clippy::result_unit_err)]
-    pub async fn send(&mut self, resp: &impl AsView<Proxied = M>) -> Result<(), ()> {
+    pub async fn send(&mut self, resp: impl AsView<Proxied = M>) -> Result<(), StreamEnded> {
         self.tx
             .dyn_send(
-                ResponseStreamItem::Message(&ProtoSendMessage::from_view(resp)),
+                ResponseStreamItem::Message(&ProtoSendMessage::from_view(&resp)),
                 SendOptions::default(),
             )
             .await

@@ -38,7 +38,7 @@
     unused,
     clippy::all
 )]
-pub(crate) mod generated {
+mod generated {
     include!(concat!(env!("OUT_DIR"), "/generated/mod.rs"));
 }
 
@@ -46,7 +46,10 @@ pub(crate) mod generated {
 /// `xds_client::Resource` so they can be deserialized, named, and validated
 /// per their respective gRFCs (A27 core resource types, A28 route matching,
 /// A37 aggregate clusters).
-pub(crate) mod resource;
+mod resource;
+
+/// Pure routing utilities.
+mod routing;
 
 /// xDS load balancing policies (gRFC A31 and friends), plus
 /// [`load_balancing::register`] to install them in the gRPC LB registry.
@@ -58,7 +61,7 @@ mod wrr;
 
 /// [`xds_config::XdsConfig`]: the atomic xDS configuration snapshot assembled
 /// from a channel's Listener/RouteConfiguration/Cluster/Endpoints resources.
-pub(crate) mod xds_config;
+mod xds_config;
 
 #[cfg(test)]
 mod tests {

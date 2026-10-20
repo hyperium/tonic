@@ -56,7 +56,9 @@ use grpc::client::interceptor::IntoOnce;
 use grpc::client::interceptor::InvokeOnceExt as _;
 use grpc::client::stream_util::RecvStreamValidator;
 use grpc::core::RecvMessage;
+use grpc::core::StreamEnded;
 use protobuf::AsMut;
+use protobuf::AsView;
 use protobuf::Message;
 
 use crate::ProtoRecvMessage;
@@ -106,7 +108,7 @@ where
     /// Note: success does *not* indicate successful transmission of the request
     /// or successful receipt of the request by the server.  Success only
     /// indicates that the stream has not yet terminated.
-    pub async fn send(&mut self, message: M) -> Result<(), ()> {
+    pub async fn send(&mut self, message: impl AsView<Proxied = M>) -> Result<(), StreamEnded> {
         self.tx
             .send(
                 &ProtoSendMessage::from_view(&message),
@@ -146,7 +148,10 @@ where
 
     /// Receives the next response message from the stream into `res` and
     /// returns `Ok` on success or `Err` if the stream has ended.
-    pub async fn recv_into(&mut self, res: &mut impl AsMut<MutProxied = M>) -> Result<(), ()> {
+    pub async fn recv_into(
+        &mut self,
+        res: &mut impl AsMut<MutProxied = M>,
+    ) -> Result<(), StreamEnded> {
         let mut res_view = ProtoRecvMessage::from_mut(res);
         let mut i = self.rx.recv(&mut res_view).await;
 
@@ -166,9 +171,9 @@ where
             ResponseStreamItem::Message => Ok(()),
             ResponseStreamItem::Trailers(trailers) => {
                 self.status = Some(status_from_trailers(trailers));
-                Err(())
+                Err(StreamEnded)
             }
-            ResponseStreamItem::StreamClosed => Err(()),
+            ResponseStreamItem::StreamClosed => Err(StreamEnded),
         }
     }
 

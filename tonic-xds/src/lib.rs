@@ -222,6 +222,32 @@
 //! | TLS endpoint connections | [A29] | Supported |
 //! | Least-request load balancing | [A48] | Planned |
 //!
+//! ## Load-balancer backend
+//!
+//! By default each cluster is balanced by Tower's power-of-two-choices
+//! `Balance`, fed endpoints that discovery has already connected.
+//!
+//! [`LbBackend::XdsLb`] selects this crate's own balancer instead, which
+//! receives bare addresses plus a connector and so owns the connection
+//! lifecycle — the prerequisite for ejecting outliers and for pluggable
+//! pickers such as ring-hash. It is still maturing: outlier detection is
+//! compiled in but left disabled, and only the P2C picker is selected, so the
+//! two backends behave the same today.
+//!
+//! ```rust,no_run
+//! use tonic_xds::{LbBackend, XdsChannelBuilder, XdsChannelConfig, XdsUri};
+//!
+//! let target = XdsUri::parse("xds:///myservice:50051").unwrap();
+//! let channel = XdsChannelBuilder::new(XdsChannelConfig::new(target))
+//!     .with_lb_backend(LbBackend::XdsLb)
+//!     .build_grpc_channel()
+//!     .unwrap();
+//! ```
+//!
+//! Both [`XdsChannelBuilder::build_grpc_channel`] and
+//! [`XdsChannelBuilder::build_transport_channel`] honour it, and the channel
+//! types are unchanged, so switching needs no other code change.
+//!
 //! [A27]: https://github.com/grpc/proposal/blob/master/A27-xds-global-load-balancing.md
 //! [A28]: https://github.com/grpc/proposal/blob/master/A28-xds-traffic-splitting-and-routing.md
 //! [A29]: https://github.com/grpc/proposal/blob/master/A29-xds-tls-security.md
@@ -234,7 +260,7 @@ pub(crate) mod common;
 pub(crate) mod xds;
 
 pub use client::channel::{
-    BuildError, XdsChannel, XdsChannelBuilder, XdsChannelConfig, XdsChannelGrpc,
+    BuildError, LbBackend, XdsChannel, XdsChannelBuilder, XdsChannelConfig, XdsChannelGrpc,
     XdsTransportChannel,
 };
 pub use client::endpoint::{

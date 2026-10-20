@@ -22,9 +22,13 @@
  *
  */
 
-use crate::client::cluster::ClusterClientRegistry;
+use crate::client::cluster::{ClusterChannelFactory, ClusterClientRegistry};
 use crate::client::endpoint::{EndpointAddress, MakeConnector};
-use crate::client::lb::{ClusterDiscovery, XdsLbService};
+use crate::client::lb::{ClusterDiscovery, TowerP2cClusterChannelFactory, XdsLbService};
+use crate::client::loadbalance::cluster_factory::XdsLbClusterChannelFactory;
+use crate::client::loadbalance::outcome::{
+    GrpcOutcomeClassifier, HttpOutcomeClassifier, OutcomeClassifier,
+};
 use crate::client::route::{PreRouteInterceptor, Router, XdsRoutingLayer};
 use crate::xds::bootstrap::{BootstrapConfig, BootstrapError};
 use crate::xds::cache::XdsCache;
@@ -297,6 +301,7 @@ pub struct XdsChannelBuilder {
     recorder: Option<Arc<dyn MetricsRecorder>>,
     pre_route: Option<Arc<dyn PreRouteInterceptor>>,
     retry_classifier_factory: Option<Arc<dyn RetryClassifierFactory>>,
+    lb_backend: LbBackend,
     #[cfg(feature = "_tls-any")]
     cert_providers: HashMap<String, Arc<dyn CertificateProvider>>,
 }
@@ -344,6 +349,7 @@ impl XdsChannelBuilder {
             recorder: None,
             pre_route: None,
             retry_classifier_factory: None,
+            lb_backend: LbBackend::default(),
             #[cfg(feature = "_tls-any")]
             cert_providers: HashMap::new(),
         }
@@ -389,6 +395,17 @@ impl XdsChannelBuilder {
         factory: Arc<dyn RetryClassifierFactory>,
     ) -> Self {
         self.retry_classifier_factory = Some(factory);
+        self
+    }
+
+    /// Selects the per-cluster load-balancer implementation. Defaults to
+    /// [`LbBackend::TowerP2c`].
+    ///
+    /// Both backends are always compiled, and the channel types are identical,
+    /// so switching needs no other code change.
+    #[must_use]
+    pub fn with_lb_backend(mut self, backend: LbBackend) -> Self {
+        self.lb_backend = backend;
         self
     }
 
@@ -513,6 +530,7 @@ impl XdsChannelBuilder {
         make_connector: MC,
         to_endpoint_req: F,
         fallback_retry: Arc<RetrySharedConfig>,
+        outcome_classifier: Arc<dyn OutcomeClassifier>,
     ) -> XdsTransportChannel<B, ResBody>
     where
         MC: MakeConnector,
@@ -521,7 +539,40 @@ impl XdsChannelBuilder {
                 Response = Response<ResBody>,
                 Error: Into<BoxError>,
                 Future: Send + 'static,
-            > + Load<Metric: Debug>,
+            > + Load<Metric: Debug + PartialOrd>,
+        F: Fn(Request<SharedBody<B>>) -> Request<ReqBody> + Clone + Send + Sync + 'static,
+        B: Body + Unpin + Send + 'static,
+        B::Data: Clone + Send + Sync,
+        B::Error: Clone + Send + Sync,
+        ReqBody: Send + 'static,
+        ResBody: Send + 'static,
+    {
+        let cluster_factory = self.lb_backend.cluster_factory::<MC, ReqBody, ResBody>(
+            parts.cache.clone(),
+            make_connector,
+            #[cfg(feature = "_tls-any")]
+            parts.cert_provider_registry.clone(),
+            outcome_classifier,
+        );
+        self.build_channel_with_factory::<B, ReqBody, ResBody, _>(
+            parts,
+            cluster_factory,
+            to_endpoint_req,
+            fallback_retry,
+        )
+    }
+
+    /// [`build_channel`](Self::build_channel) with the load-balancer backend
+    /// supplied rather than selected by feature, so tests can drive the real
+    /// xDS runtime against either one.
+    fn build_channel_with_factory<B, ReqBody, ResBody, F>(
+        &self,
+        parts: XdsRuntimeParts,
+        cluster_factory: Arc<dyn ClusterChannelFactory<Request<ReqBody>, Response<ResBody>>>,
+        to_endpoint_req: F,
+        fallback_retry: Arc<RetrySharedConfig>,
+    ) -> XdsTransportChannel<B, ResBody>
+    where
         F: Fn(Request<SharedBody<B>>) -> Request<ReqBody> + Clone + Send + Sync + 'static,
         B: Body + Unpin + Send + 'static,
         B::Data: Clone + Send + Sync,
@@ -542,24 +593,16 @@ impl XdsChannelBuilder {
         // configs come from RDS via the request's `RouteDecision`; see `RetryLayer`.
         let retry_layer = RetryLayer::new(fallback_retry);
 
-        #[cfg(feature = "_tls-any")]
-        let discovery: Arc<dyn ClusterDiscovery<EndpointAddress, MC::Service>> = Arc::new(
-            XdsClusterDiscovery::new(parts.cache, make_connector, parts.cert_provider_registry),
-        );
-        #[cfg(not(feature = "_tls-any"))]
-        let discovery: Arc<dyn ClusterDiscovery<EndpointAddress, MC::Service>> =
-            Arc::new(XdsClusterDiscovery::new(parts.cache, make_connector));
-
         let resources = Arc::new(XdsChannelResources {
             _resource_manager: parts.resource_manager,
             _xds_client: parts.xds_client,
         });
 
         let routing_layer = XdsRoutingLayer::new(router, self.pre_route.clone(), self.authority());
-        self.assemble_channel_stack::<MC::Service, B, ReqBody, ResBody, _>(
+        self.assemble_channel_stack::<B, ReqBody, ResBody, _>(
             routing_layer,
             retry_layer,
-            discovery,
+            cluster_factory,
             to_endpoint_req,
             Some(resources),
         )
@@ -576,6 +619,7 @@ impl XdsChannelBuilder {
             GrpcMakeConnector::new(),
             |req: Request<SharedBody<TonicBody>>| req.map(TonicBody::new),
             Arc::new(RetrySharedConfig::grpc_default()),
+            Arc::new(GrpcOutcomeClassifier),
         )
     }
 
@@ -592,19 +636,15 @@ impl XdsChannelBuilder {
     /// `Request<ReqBody>`: the built-in gRPC path rewraps into [`TonicBody`],
     /// while transport-generic callers pass the body through unchanged
     /// (`ReqBody = SharedBody<B>`).
-    fn assemble_channel_stack<EpService, B, ReqBody, ResBody, F>(
+    fn assemble_channel_stack<B, ReqBody, ResBody, F>(
         &self,
         routing_layer: XdsRoutingLayer,
         retry_layer: RetryLayer,
-        discovery: Arc<dyn ClusterDiscovery<EndpointAddress, EpService>>,
+        cluster_factory: Arc<dyn ClusterChannelFactory<Request<ReqBody>, Response<ResBody>>>,
         to_endpoint_req: F,
         resources: Option<Arc<XdsChannelResources>>,
     ) -> XdsTransportChannel<B, ResBody>
     where
-        EpService: Service<Request<ReqBody>, Response = Response<ResBody>> + Load + Send + 'static,
-        EpService::Error: Into<BoxError>,
-        EpService::Future: Send + 'static,
-        EpService::Metric: Debug,
         F: Fn(Request<SharedBody<B>>) -> Request<ReqBody> + Clone + Send + Sync + 'static,
         B: Body + Unpin + Send + 'static,
         B::Data: Clone + Send + Sync,
@@ -614,7 +654,7 @@ impl XdsChannelBuilder {
     {
         let cluster_registry =
             Arc::new(ClusterClientRegistry::<Request<ReqBody>, Response<ResBody>>::new());
-        let lb_service = XdsLbService::new(cluster_registry, discovery);
+        let lb_service = XdsLbService::new(cluster_registry, cluster_factory);
         let inner = ServiceBuilder::new()
             .layer(routing_layer)
             .layer(retry_layer)
@@ -667,6 +707,12 @@ impl XdsChannelBuilder {
     /// responses, so a non-gRPC transport supplies its own factory to interpret
     /// `retry_on` (e.g. `5xx`, `gateway-error`) for that transport. Without a
     /// custom factory only connection-error retries take effect.
+    ///
+    /// # Outlier detection
+    ///
+    /// With [`LbBackend::XdsLb`], endpoint health is judged by a
+    /// plain-HTTP classifier — `5xx` counts as a failure and `4xx` is ignored,
+    /// since a client error reflects the request rather than upstream health.
     pub fn build_transport_channel<MC, B, ResBody>(
         &self,
         make_connector: MC,
@@ -678,7 +724,7 @@ impl XdsChannelBuilder {
                 Response = Response<ResBody>,
                 Error: Into<BoxError>,
                 Future: Send + 'static,
-            > + Load<Metric: Debug>,
+            > + Load<Metric: Debug + PartialOrd>,
         B: Body + Unpin + Send + 'static,
         B::Data: Clone + Send + Sync,
         B::Error: Clone + Send + Sync,
@@ -690,6 +736,7 @@ impl XdsChannelBuilder {
             make_connector,
             |req: Request<SharedBody<B>>| req,
             Arc::new(RetrySharedConfig::connection_default()),
+            Arc::new(HttpOutcomeClassifier),
         ))
     }
 
@@ -700,18 +747,131 @@ impl XdsChannelBuilder {
     }
 }
 
+/// The per-cluster load-balancer implementations.
+///
+/// Select one with
+/// [`XdsChannelBuilder::with_lb_backend`](XdsChannelBuilder::with_lb_backend);
+/// the default is [`TowerP2c`](Self::TowerP2c).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum LbBackend {
+    /// Tower's power-of-two-choices `Balance` over already-connected endpoints.
+    #[default]
+    TowerP2c,
+    /// This crate's own balancer, which owns the endpoint connection lifecycle
+    /// and so can eject outliers and run pluggable pickers.
+    ///
+    /// Still maturing: outlier detection is compiled in but left disabled, and
+    /// only the power-of-two-choices picker is selected, so the two backends
+    /// behave the same today.
+    XdsLb,
+}
+
+impl LbBackend {
+    /// Builds the per-cluster load balancers for the channel stack.
+    ///
+    /// `outcome_classifier` only matters to [`XdsLb`](Self::XdsLb), which is
+    /// the arm that does outlier detection.
+    fn cluster_factory<MC, ReqBody, ResBody>(
+        self,
+        cache: Arc<XdsCache>,
+        make_connector: MC,
+        #[cfg(feature = "_tls-any")] cert_registry: Arc<CertProviderRegistry>,
+        outcome_classifier: Arc<dyn OutcomeClassifier>,
+    ) -> Arc<dyn ClusterChannelFactory<Request<ReqBody>, Response<ResBody>>>
+    where
+        MC: MakeConnector,
+        MC::Service: Service<
+                Request<ReqBody>,
+                Response = Response<ResBody>,
+                Error: Into<BoxError>,
+                Future: Send + 'static,
+            > + Load<Metric: Debug + PartialOrd>,
+        ReqBody: Send + 'static,
+        ResBody: Send + 'static,
+    {
+        match self {
+            Self::TowerP2c => {
+                let discovery: Arc<dyn ClusterDiscovery<EndpointAddress, MC::Service>> =
+                    Arc::new(XdsClusterDiscovery::new(
+                        cache,
+                        make_connector,
+                        #[cfg(feature = "_tls-any")]
+                        cert_registry,
+                    ));
+                Arc::new(TowerP2cClusterChannelFactory::new(discovery))
+            }
+            Self::XdsLb => Arc::new(XdsLbClusterChannelFactory::new(
+                cache,
+                make_connector,
+                outcome_classifier,
+                #[cfg(feature = "_tls-any")]
+                cert_registry,
+            )),
+        }
+    }
+}
+
+#[cfg(test)]
+pub(crate) use test_backends::{GrpcClusterChannelFactory, LB_BACKENDS};
+
+/// Test-only helpers for exercising both load-balancer backends.
+///
+/// Production selects one via [`LbBackend::SELECTED`], so a single build only
+/// ever runs that arm. Both are always compiled, though, so tests pick
+/// explicitly and cover both in one run — going through the same
+/// [`LbBackend::cluster_factory`] production uses.
+#[cfg(test)]
+mod test_backends {
+    use super::*;
+    use tonic::body::Body as TonicBody;
+
+    /// The gRPC specialization of [`ClusterChannelFactory`].
+    pub(crate) type GrpcClusterChannelFactory =
+        Arc<dyn ClusterChannelFactory<Request<TonicBody>, Response<TonicBody>>>;
+
+    pub(crate) const LB_BACKENDS: [LbBackend; 2] = [LbBackend::TowerP2c, LbBackend::XdsLb];
+
+    impl LbBackend {
+        /// This backend's gRPC cluster-channel factory over `cache`.
+        pub(crate) fn grpc_factory(
+            self,
+            cache: Arc<XdsCache>,
+            #[cfg(feature = "_tls-any")] cert_registry: Arc<CertProviderRegistry>,
+        ) -> GrpcClusterChannelFactory {
+            self.cluster_factory::<GrpcMakeConnector, TonicBody, TonicBody>(
+                cache,
+                GrpcMakeConnector::new(),
+                #[cfg(feature = "_tls-any")]
+                cert_registry,
+                Arc::new(GrpcOutcomeClassifier),
+            )
+        }
+
+        /// An empty cert-provider registry, for the plaintext paths tests use.
+        #[cfg(feature = "_tls-any")]
+        pub(crate) fn empty_cert_registry() -> Arc<CertProviderRegistry> {
+            Arc::new(
+                CertProviderRegistry::from_bootstrap(&Default::default(), Default::default())
+                    .unwrap(),
+            )
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{XdsChannelBuilder, XdsChannelConfig};
     use crate::XdsUri;
     use crate::client::channel::XdsChannelGrpc;
+    use crate::client::channel::{GrpcClusterChannelFactory, LB_BACKENDS, LbBackend};
     use crate::client::endpoint::EndpointAddress;
     use crate::client::endpoint::EndpointChannel;
 
     fn test_config() -> XdsChannelConfig {
         XdsChannelConfig::new(XdsUri::parse("xds:///test-service").unwrap())
     }
-    use crate::client::lb::{BoxDiscover, ClusterDiscovery};
+    use crate::client::lb::{BoxDiscover, ClusterDiscovery, TowerP2cClusterChannelFactory};
     use crate::client::retry::RetrySharedConfig;
     use crate::client::route::PreRouteInterceptor;
     use crate::client::route::RouteDecision;
@@ -739,6 +899,24 @@ mod tests {
             retry: Arc<RetrySharedConfig>,
             interceptor: Option<Arc<dyn PreRouteInterceptor>>,
         ) -> XdsChannelGrpc {
+            self.build_grpc_channel_from_factory(
+                router,
+                Arc::new(TowerP2cClusterChannelFactory::new(discovery)),
+                retry,
+                interceptor,
+            )
+        }
+
+        /// Builds an `XdsChannelGrpc` over a caller-chosen load-balancer
+        /// backend, bypassing the compile-time `cluster_factory` selection so a
+        /// single test run can cover both.
+        pub(crate) fn build_grpc_channel_from_factory(
+            &self,
+            router: Arc<dyn Router>,
+            cluster_factory: GrpcClusterChannelFactory,
+            retry: Arc<RetrySharedConfig>,
+            interceptor: Option<Arc<dyn PreRouteInterceptor>>,
+        ) -> XdsChannelGrpc {
             use crate::client::retry::RetryLayer;
             use crate::client::route::XdsRoutingLayer;
             use http::Request;
@@ -747,14 +925,26 @@ mod tests {
 
             let routing_layer = XdsRoutingLayer::new(router, interceptor, self.authority());
             let retry_layer = RetryLayer::new(retry);
-            self.assemble_channel_stack::<EndpointChannel<Channel>, TonicBody, TonicBody, TonicBody, _>(
+            self.assemble_channel_stack::<TonicBody, TonicBody, TonicBody, _>(
                 routing_layer,
                 retry_layer,
-                discovery,
+                cluster_factory,
                 |req: Request<SharedBody<TonicBody>>| req.map(TonicBody::new),
                 None,
             )
         }
+    }
+
+    /// Builds the cluster-channel factory for `backend`, reading from `cache`.
+    fn grpc_cluster_factory(
+        cache: &Arc<XdsCache>,
+        backend: LbBackend,
+    ) -> GrpcClusterChannelFactory {
+        backend.grpc_factory(
+            cache.clone(),
+            #[cfg(feature = "_tls-any")]
+            LbBackend::empty_cert_registry(),
+        )
     }
 
     /// Sets up multiple gRPC test servers and returns their addresses, clients and shutdown handles.
@@ -1046,48 +1236,31 @@ mod tests {
         })
     }
 
-    /// Builds an XdsChannelGrpc using real XdsRouter and XdsClusterDiscovery
-    /// backed by the given cache.
-    async fn build_xds_channel_from_cache(cache: Arc<XdsCache>) -> XdsChannelGrpc {
-        use crate::xds::cluster_discovery::{GrpcMakeConnector, XdsClusterDiscovery};
+    /// Builds an XdsChannelGrpc using a real XdsRouter over the given cache,
+    /// load-balanced by `backend`.
+    fn build_xds_channel_from_cache(cache: &Arc<XdsCache>, backend: LbBackend) -> XdsChannelGrpc {
         use crate::xds::routing::XdsRouter;
 
-        let router: Arc<dyn Router> = Arc::new(XdsRouter::new(&cache));
-
-        #[cfg(feature = "_tls-any")]
-        let discovery: Arc<
-            dyn ClusterDiscovery<EndpointAddress, EndpointChannel<Channel>>,
-        > = {
-            use crate::xds::cert_provider::CertProviderRegistry;
-            let registry = Arc::new(
-                CertProviderRegistry::from_bootstrap(&Default::default(), Default::default())
-                    .unwrap(),
-            );
-            Arc::new(XdsClusterDiscovery::new(
-                cache,
-                GrpcMakeConnector::new(),
-                registry,
-            ))
-        };
-        #[cfg(not(feature = "_tls-any"))]
-        let discovery: Arc<
-            dyn ClusterDiscovery<EndpointAddress, EndpointChannel<Channel>>,
-        > = Arc::new(XdsClusterDiscovery::new(cache, GrpcMakeConnector::new()));
-
-        let builder = XdsChannelBuilder::new(test_config());
-        builder.build_grpc_channel_from_parts(
+        let router: Arc<dyn Router> = Arc::new(XdsRouter::new(cache));
+        XdsChannelBuilder::new(test_config()).build_grpc_channel_from_factory(
             router,
-            discovery,
+            grpc_cluster_factory(cache, backend),
             Arc::new(RetrySharedConfig::grpc_default()),
             None,
         )
     }
 
-    /// Tests the full xDS stack (XdsRouter + XdsClusterDiscovery) with a
+    /// Tests the full xDS stack (XdsRouter + cluster discovery) with a
     /// pre-populated cache, validating that requests are routed and
     /// load-balanced across real backend servers.
     #[tokio::test]
     async fn test_xds_channel_with_real_router_and_discovery() {
+        for backend in LB_BACKENDS {
+            routes_and_balances_across_servers(backend).await;
+        }
+    }
+
+    async fn routes_and_balances_across_servers(backend: LbBackend) {
         let num_servers = 3;
         let num_requests = 300;
         let cluster_name = "test-cluster";
@@ -1098,7 +1271,7 @@ mod tests {
         cache.update_cluster(cluster_name, make_test_cluster(cluster_name));
         cache.update_endpoints(cluster_name, make_test_endpoints(cluster_name, &servers));
 
-        let channel = build_xds_channel_from_cache(cache).await;
+        let channel = build_xds_channel_from_cache(&cache, backend);
         let client = GreeterClient::new(channel);
 
         let (successful, error_types, server_counts) =
@@ -1106,12 +1279,13 @@ mod tests {
 
         assert_eq!(
             successful, num_requests,
-            "Expected 100% success rate. Errors: {error_types:?}",
+            "{backend:?}: expected 100% success rate. Errors: {error_types:?}",
         );
         assert_eq!(
             server_counts.len(),
             num_servers,
-            "Expected all {num_servers} servers to receive traffic. Counts: {server_counts:?}",
+            "{backend:?}: expected all {num_servers} servers to receive traffic. \
+             Counts: {server_counts:?}",
         );
 
         for server in servers {
@@ -1120,10 +1294,16 @@ mod tests {
         }
     }
 
-    /// Tests that endpoint changes are picked up dynamically by the
-    /// XdsClusterDiscovery while the channel is serving requests.
+    /// Tests that endpoint changes are picked up dynamically while the channel
+    /// is serving requests.
     #[tokio::test]
     async fn test_xds_channel_handles_dynamic_endpoint_updates() {
+        for backend in LB_BACKENDS {
+            picks_up_dynamic_endpoint_updates(backend).await;
+        }
+    }
+
+    async fn picks_up_dynamic_endpoint_updates(backend: LbBackend) {
         let cluster_name = "test-cluster";
         let (_, servers) = setup_grpc_servers(2).await;
 
@@ -1136,31 +1316,33 @@ mod tests {
             make_test_endpoints(cluster_name, &servers[..1]),
         );
 
-        let channel = build_xds_channel_from_cache(cache.clone()).await;
+        let channel = build_xds_channel_from_cache(&cache, backend);
         let client = GreeterClient::new(channel.clone());
 
         // Phase 1: all traffic goes to server-0.
         let (successful, _, server_counts) = send_grpc_requests(client, 50).await;
-        assert_eq!(successful, 50);
+        assert_eq!(successful, 50, "{backend:?}");
         assert_eq!(
             server_counts.len(),
             1,
-            "Only 1 server should receive traffic before update. Counts: {server_counts:?}",
+            "{backend:?}: only 1 server should receive traffic before update. \
+             Counts: {server_counts:?}",
         );
 
         // Add second server.
         cache.update_endpoints(cluster_name, make_test_endpoints(cluster_name, &servers));
-        // Give the endpoint manager diff loop time to process the update.
+        // Give the endpoint diff loop time to process the update.
         tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 
         // Phase 2: traffic should go to both servers.
         let client2 = GreeterClient::new(channel);
         let (successful, _, server_counts) = send_grpc_requests(client2, 200).await;
-        assert_eq!(successful, 200);
+        assert_eq!(successful, 200, "{backend:?}");
         assert_eq!(
             server_counts.len(),
             2,
-            "Both servers should receive traffic after update. Counts: {server_counts:?}",
+            "{backend:?}: both servers should receive traffic after update. \
+             Counts: {server_counts:?}",
         );
 
         for server in servers {
@@ -1359,12 +1541,17 @@ mod tests {
         let retry_layer = RetryLayer::new(Arc::new(RetrySharedConfig::grpc_default()));
 
         let mut channel = builder.assemble_channel_stack::<
-            EndpointChannel<EchoEndpoint>,
             TestBody,
             shared_http_body::SharedBody<TestBody>,
             TestBody,
             _,
-        >(routing_layer, retry_layer, discovery, |req| req, None);
+        >(
+            routing_layer,
+            retry_layer,
+            Arc::new(TowerP2cClusterChannelFactory::new(discovery)),
+            |req| req,
+            None,
+        );
 
         let request = super::Request::new(TestBody(Some(bytes::Bytes::from_static(b"hi"))));
         let response = channel

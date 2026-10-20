@@ -24,16 +24,17 @@
 
 //! Validated ClusterLoadAssignment resource (EDS).
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
+use std::collections::HashSet;
 
 use protobuf::Parse;
+use xds_client::Error;
+use xds_client::Resource;
 use xds_client::resource::TypeUrl;
-use xds_client::{Error, Resource};
 
 use crate::generated::envoy::config::core::v3::HealthStatus as EnvoyHealthStatus;
-use crate::generated::envoy::config::endpoint::v3::{
-    ClusterLoadAssignment, lb_endpoint::HostIdentifierOneof,
-};
+use crate::generated::envoy::config::endpoint::v3::ClusterLoadAssignment;
+use crate::generated::envoy::config::endpoint::v3::lb_endpoint::HostIdentifierOneof;
 
 /// Validated ClusterLoadAssignment (EDS resource).
 #[derive(Debug, Clone)]
@@ -315,12 +316,12 @@ impl EndpointsResource {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::generated::envoy::config::core::v3::{
-        Address, Locality as EnvoyLocality, SocketAddress,
-    };
-    use crate::generated::envoy::config::endpoint::v3::{
-        Endpoint, LbEndpoint as EnvoyLbEndpoint, LocalityLbEndpoints as EnvoyLocalityLbEndpoints,
-    };
+    use crate::generated::envoy::config::core::v3::Address;
+    use crate::generated::envoy::config::core::v3::Locality as EnvoyLocality;
+    use crate::generated::envoy::config::core::v3::SocketAddress;
+    use crate::generated::envoy::config::endpoint::v3::Endpoint;
+    use crate::generated::envoy::config::endpoint::v3::LbEndpoint as EnvoyLbEndpoint;
+    use crate::generated::envoy::config::endpoint::v3::LocalityLbEndpoints as EnvoyLocalityLbEndpoints;
     use protobuf::Serialize;
     use protobuf_well_known_types::UInt32Value;
 
