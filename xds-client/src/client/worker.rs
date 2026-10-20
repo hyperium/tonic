@@ -573,7 +573,7 @@ pub(crate) enum TransportEvent {
     },
     Failed {
         /// Reports whether this stream received a successfully decoded response.
-        processed: oneshot::Sender<bool>,
+        saw_response_tx: oneshot::Sender<bool>,
     },
 }
 
@@ -732,14 +732,14 @@ where
                 self.record_healthy(&mut context.healthy);
                 self.handle_response(&active.writes, response, done)
             }
-            TransportEvent::Failed { processed } => {
+            TransportEvent::Failed { saw_response_tx } => {
                 // Dropping the handles cancels timers while the stream is unavailable.
                 self.resource_timers.clear();
                 let saw_response = context.session.take().is_some_and(|s| s.saw_response);
                 if !saw_response {
                     self.record_unhealthy(&mut context.healthy);
                 }
-                let _ = processed.send(saw_response);
+                let _ = saw_response_tx.send(saw_response);
                 Ok(())
             }
         }
@@ -1422,17 +1422,17 @@ impl<R: Runtime, TB: TransportBuilder> TransportContext<R, TB> {
                 }
             }
 
-            let (processed, completion) = oneshot::channel();
+            let (saw_response_tx, saw_response_rx) = oneshot::channel();
             if send_worker_command(
                 command_tx,
-                WorkerCommand::Transport(TransportEvent::Failed { processed }),
+                WorkerCommand::Transport(TransportEvent::Failed { saw_response_tx }),
             )
             .is_err()
             {
                 return;
             }
             // Only the actor can distinguish decoded responses from invalid bytes.
-            let Ok(saw_response) = completion.await else {
+            let Ok(saw_response) = saw_response_rx.await else {
                 return;
             };
             if saw_response {
