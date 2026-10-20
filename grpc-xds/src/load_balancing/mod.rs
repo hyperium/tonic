@@ -24,8 +24,12 @@
 
 //! xDS-specific load balancing policies.
 
+use std::sync::Once;
+
 pub(crate) mod cluster_manager;
 mod weighted_target;
+
+static START: Once = Once::new();
 
 /// Registers the xDS load balancing policies into the gRPC global LB registry.
 ///
@@ -35,6 +39,8 @@ mod weighted_target;
 /// Only the first call has an effect, any additional ones are ignored.
 #[allow(dead_code, reason = "no caller until there is an xDS resolver.")]
 pub(crate) fn register() {
-    cluster_manager::reg();
-    weighted_target::reg();
+    START.call_once(|| {
+        cluster_manager::reg();
+        weighted_target::reg();
+    });
 }

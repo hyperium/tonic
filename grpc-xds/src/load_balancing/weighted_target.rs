@@ -38,7 +38,6 @@ use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::Arc;
-use std::sync::Once;
 
 use grpc::__unstable::client::load_balancing::ChannelController;
 use grpc::__unstable::client::load_balancing::LbConfigJson;
@@ -67,7 +66,6 @@ use crate::wrr::Wrr;
 use crate::wrr::WrrBuilder;
 
 static POLICY_NAME: &str = "weighted_target_experimental";
-static START: Once = Once::new();
 
 /// Resolver attribute carrying the name of the target a child serves.
 ///
@@ -255,9 +253,7 @@ impl Picker for WeightedPicker {
 
 /// Register weighted target as an LbPolicy.
 pub(crate) fn reg() {
-    START.call_once(|| {
-        GLOBAL_LB_REGISTRY.add_builder(WeightedTargetBuilder::default());
-    });
+    GLOBAL_LB_REGISTRY.add_builder(WeightedTargetBuilder::default());
 }
 
 #[cfg(test)]
