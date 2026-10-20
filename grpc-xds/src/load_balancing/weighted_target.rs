@@ -61,6 +61,11 @@ use grpc::StatusError;
 use grpc::client::ConnectivityState;
 use serde::Deserialize;
 
+use crate::wrr::RandomWrr;
+use crate::wrr::RandomWrrBuilder;
+use crate::wrr::Wrr;
+use crate::wrr::WrrBuilder;
+
 static POLICY_NAME: &str = "weighted_target_experimental";
 static START: Once = Once::new();
 
@@ -69,22 +74,6 @@ static START: Once = Once::new();
 /// Defined in [gRFC A78](https://github.com/grpc/proposal/blob/master/A78-grpc-metrics-wrr-pf-xds.md#weighted-target-lb-policy).
 #[derive(Debug, PartialEq, Eq)]
 struct TargetName(Arc<str>);
-
-/// Produces the keys `WeightedPicker` uses to select a child. Tests supply
-/// fixed keys to choose which child is picked.
-trait RngSampler: Send + Sync + Debug {
-    /// Generates a uniform random value in the half-open range `[0, total_weight)`.
-    fn sample(&self, total_weight: u64) -> u64;
-}
-
-#[derive(Debug)]
-struct DefaultRngSampler;
-
-impl RngSampler for DefaultRngSampler {
-    fn sample(&self, total_weight: u64) -> u64 {
-        rand::random_range(0..total_weight)
-    }
-}
 
 #[derive(Debug, Deserialize)]
 struct TargetConfig {
@@ -98,23 +87,15 @@ struct WeightedTargetConfig {
     targets: BTreeMap<String, TargetConfig>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct WeightedTargetBuilder {
-    sampler: Arc<dyn RngSampler>,
-}
-
-impl Default for WeightedTargetBuilder {
-    fn default() -> Self {
-        Self {
-            sampler: Arc::new(DefaultRngSampler),
-        }
-    }
+    wrr: RandomWrrBuilder,
 }
 
 impl WeightedTargetBuilder {
     #[cfg(test)]
-    fn with_sampler(sampler: Arc<dyn RngSampler>) -> Self {
-        Self { sampler }
+    fn with_wrr(wrr: RandomWrrBuilder) -> Self {
+        Self { wrr }
     }
 }
 
@@ -125,7 +106,7 @@ impl LbPolicyBuilder for WeightedTargetBuilder {
         WeightedTargetPolicy {
             child_manager: ChildManager::new(options.runtime, options.work_scheduler),
             weights: HashMap::new(),
-            sampler: self.sampler.clone(),
+            wrr: self.wrr.clone(),
         }
     }
 
@@ -160,7 +141,7 @@ impl LbPolicyBuilder for WeightedTargetBuilder {
 struct WeightedTargetPolicy {
     child_manager: ChildManager<String>,
     weights: HashMap<String, u32>,
-    sampler: Arc<dyn RngSampler>,
+    wrr: RandomWrrBuilder,
 }
 
 impl WeightedTargetPolicy {
@@ -176,21 +157,16 @@ impl WeightedTargetPolicy {
         let _ = self.child_manager.child_updated();
 
         let connectivity_state = self.child_manager.aggregate_states();
-        let mut pickers = Vec::new();
-        let mut cumulative_weight = 0u64;
-        for (target, child) in self.child_manager.children() {
-            if child.state().connectivity_state == connectivity_state {
-                cumulative_weight += u64::from(self.weights[target]);
-                pickers.push((cumulative_weight, child.state().picker.clone()));
-            }
-        }
+        let items = self
+            .child_manager
+            .children()
+            .filter(|(_, child)| child.state().connectivity_state == connectivity_state)
+            .map(|(target, child)| (child.state().picker.clone(), self.weights[target]));
 
+        let wrr = self.wrr.build(items);
         channel_controller.update_picker(LbState {
             connectivity_state,
-            picker: Arc::new(WeightedPicker::new_with_sampler(
-                pickers,
-                self.sampler.clone(),
-            )),
+            picker: Arc::new(WeightedPicker { wrr }),
         });
     }
 }
@@ -254,30 +230,15 @@ impl LbPolicy for WeightedTargetPolicy {
     }
 }
 
-/// Picker that delegates each pick to a child picker chosen at random, in
-/// proportion to the child's weight.
+/// Picker that delegates each pick to a child picker selected by [`RandomWrr`].
 #[derive(Debug)]
 struct WeightedPicker {
-    /// (cumulative weight, picker) pairs in ascending order; the last cumulative
-    /// weight is the total. A key sampled from `[0, total)` selects the first
-    /// picker whose cumulative weight exceeds it.
-    pickers: Vec<(u64, Arc<dyn Picker>)>,
-    sampler: Arc<dyn RngSampler>,
-}
-
-impl WeightedPicker {
-    fn new_with_sampler(
-        pickers: Vec<(u64, Arc<dyn Picker>)>,
-        sampler: Arc<dyn RngSampler>,
-    ) -> Self {
-        Self { pickers, sampler }
-    }
+    wrr: RandomWrr<Arc<dyn Picker>>,
 }
 
 impl Picker for WeightedPicker {
     fn pick(&self, options: PickOptions<'_>) -> PickResult {
-        let total_weight = self.pickers.last().map_or(0, |(w, _)| *w);
-        if total_weight == 0 {
+        let Some(child_picker) = self.wrr.next() else {
             debug_assert!(
                 false,
                 "WeightedPicker constructed with empty pickers or zero total_weight"
@@ -286,11 +247,9 @@ impl Picker for WeightedPicker {
                 StatusCodeError::Internal,
                 format!("{POLICY_NAME}: picker has no weighted children"),
             ));
-        }
+        };
 
-        let key = self.sampler.sample(total_weight);
-        let index = self.pickers.partition_point(|(w, _)| *w <= key);
-        self.pickers[index].1.pick(options)
+        child_picker.pick(options)
     }
 }
 
@@ -303,7 +262,6 @@ pub(crate) fn reg() {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::VecDeque;
     use std::sync::Mutex;
 
     use grpc::__unstable::client::load_balancing::WorkScheduler;
@@ -319,6 +277,7 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+    use crate::wrr::test_utils::wrr_builder;
 
     #[test]
     fn parse_config() {
@@ -353,25 +312,6 @@ mod tests {
     }
 
     #[test]
-    fn weighted_picker_partitions_weights_correctly() {
-        let pickers: Vec<(u64, Arc<dyn Picker>)> = vec![
-            (20, mock_picker("a")),
-            (50, mock_picker("b")),
-            (100, mock_picker("c")),
-        ];
-        let picker = WeightedPicker::new_with_sampler(pickers, sampler(&[0, 19, 20, 49, 50, 99]));
-        for tag in ["a", "a", "b", "b", "c", "c"] {
-            assert_picks(&picker, tag);
-        }
-
-        let default_picker = WeightedPicker::new_with_sampler(
-            vec![(50, mock_picker("a"))],
-            Arc::new(DefaultRngSampler),
-        );
-        assert_picks(&default_picker, "a");
-    }
-
-    #[test]
     #[cfg_attr(
         debug_assertions,
         should_panic(
@@ -379,7 +319,9 @@ mod tests {
         )
     )]
     fn empty_weighted_picker_is_internal_error() {
-        let picker = WeightedPicker::new_with_sampler(Vec::new(), sampler(&[]));
+        let picker = WeightedPicker {
+            wrr: RandomWrrBuilder::default().build(Vec::new()),
+        };
         let headers = RequestHeaders::new();
         let call_options = CallOptions::new();
         match picker.pick(PickOptions::new(&headers, &call_options)) {
@@ -598,11 +540,11 @@ mod tests {
         fn new(keys: &[u64]) -> Self {
             GLOBAL_LB_REGISTRY.add_builder(MockChildBuilder);
             let scheduler = Arc::new(RecordingWorkScheduler::default());
-            let sampler = sampler(keys);
-            let policy = WeightedTargetBuilder::with_sampler(sampler).build(LbPolicyOptions {
-                work_scheduler: scheduler.clone(),
-                runtime: grpc::__unstable::rt::default_runtime(),
-            });
+            let policy =
+                WeightedTargetBuilder::with_wrr(wrr_builder(keys)).build(LbPolicyOptions {
+                    work_scheduler: scheduler.clone(),
+                    runtime: grpc::__unstable::rt::default_runtime(),
+                });
             Self {
                 policy,
                 controller: RecordingChannelController::default(),
@@ -685,27 +627,6 @@ mod tests {
         )
     }
 
-    fn sampler(keys: &[u64]) -> Arc<MockSampler> {
-        Arc::new(MockSampler(Mutex::new(keys.to_vec().into())))
-    }
-
-    /// Returns the given keys in order. Panics when the keys run out or a key
-    /// is not below the total weight, so no pick depends on an unplanned key.
-    #[derive(Debug)]
-    struct MockSampler(Mutex<VecDeque<u64>>);
-
-    impl RngSampler for MockSampler {
-        fn sample(&self, total_weight: u64) -> u64 {
-            let key = self.0.lock().unwrap().pop_front();
-            let key = key.expect("test should provide a key for every weighted pick");
-            assert!(
-                key < total_weight,
-                "key {key} should be below total weight {total_weight}"
-            );
-            key
-        }
-    }
-
     /// What a mock child's picker records in the call options.
     #[derive(Clone, Debug)]
     struct PickedChild {
@@ -728,13 +649,6 @@ mod tests {
             *slot.lock().unwrap() = Some(self.0.clone());
             PickResult::Queue
         }
-    }
-
-    fn mock_picker(tag: &str) -> Arc<dyn Picker> {
-        Arc::new(MockPicker(PickedChild {
-            tag: tag.to_string(),
-            update: ResolverUpdate::default(),
-        }))
     }
 
     const MOCK_CHILD_POLICY_NAME: &str = "test_weighted_target_mock_child";
