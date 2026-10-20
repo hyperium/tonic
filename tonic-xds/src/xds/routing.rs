@@ -170,6 +170,10 @@ fn resolve_route(
     // retry and routing act on one RDS version.
     let retry_config = rc.retry_for(route.retry_config.as_ref());
 
+    // gRFC A31: the route's max stream duration, which already includes the
+    // listener's default. Zero means no limit.
+    let max_stream_duration = route.max_stream_duration.filter(|d| !d.is_zero());
+
     // gRFC A42 ring-hash request hash. The policy list is empty for now, so
     // `request_hash` resolves to `None` and the ring-hash picker falls back to a
     // random hash.
@@ -182,6 +186,7 @@ fn resolve_route(
         cluster,
         request_hash,
         retry_config,
+        max_stream_duration,
     })
 }
 
@@ -431,6 +436,7 @@ mod tests {
             },
             action: RouteConfigAction::Cluster(cluster.into()),
             retry_config: None,
+            max_stream_duration: None,
         }
     }
 
@@ -690,6 +696,7 @@ mod tests {
                 },
                 action: RouteConfigAction::Cluster("c1".into()),
                 retry_config: None,
+                max_stream_duration: None,
             }],
         }]);
         let headers = http::HeaderMap::new();
@@ -714,6 +721,7 @@ mod tests {
                 },
                 action: RouteConfigAction::Cluster("c1".into()),
                 retry_config: None,
+                max_stream_duration: None,
             }],
         }]);
         let headers = http::HeaderMap::new();
@@ -746,6 +754,7 @@ mod tests {
                     },
                     action: RouteConfigAction::Cluster("cluster-prod".into()),
                     retry_config: None,
+                    max_stream_duration: None,
                 },
                 simple_route("/", "cluster-default"),
             ],
@@ -784,6 +793,7 @@ mod tests {
                     },
                 ]),
                 retry_config: None,
+                max_stream_duration: None,
             }],
         }]);
         let action = rc.route("host", "/", &http::HeaderMap::new()).unwrap();
@@ -805,6 +815,7 @@ mod tests {
                     },
                     action: RouteConfigAction::Cluster("never".into()),
                     retry_config: None,
+                    max_stream_duration: None,
                 },
                 simple_route("/", "fallback"),
             ],
@@ -829,6 +840,7 @@ mod tests {
                 },
                 action: RouteConfigAction::Cluster("always".into()),
                 retry_config: None,
+                max_stream_duration: None,
             }],
         }]);
         for _ in 0..100 {
@@ -859,6 +871,7 @@ mod tests {
                     },
                     action: RouteConfigAction::Cluster("versioned".into()),
                     retry_config: None,
+                    max_stream_duration: None,
                 },
                 simple_route("/", "default"),
             ],
@@ -955,6 +968,7 @@ mod tests {
                     },
                     action: RouteConfigAction::Cluster("grpc".into()),
                     retry_config: None,
+                    max_stream_duration: None,
                 },
                 simple_route("/", "fallback"),
             ],
@@ -991,6 +1005,7 @@ mod tests {
                 },
                 action: RouteConfigAction::Cluster("matched".into()),
                 retry_config: None,
+                max_stream_duration: None,
             }],
         }]);
 
@@ -1029,6 +1044,7 @@ mod tests {
                         },
                         action: RouteConfigAction::Cluster("matched".into()),
                         retry_config: None,
+                        max_stream_duration: None,
                     },
                     simple_route("/", "fallback"),
                 ],
@@ -1088,6 +1104,7 @@ mod tests {
                     },
                     action: RouteConfigAction::Cluster("matched".into()),
                     retry_config: None,
+                    max_stream_duration: None,
                 },
                 simple_route("/", "fallback"),
             ],
@@ -1130,6 +1147,7 @@ mod tests {
                     },
                     action: RouteConfigAction::Cluster("matched".into()),
                     retry_config: None,
+                    max_stream_duration: None,
                 },
                 simple_route("/", "fallback"),
             ],
@@ -1223,5 +1241,26 @@ mod tests {
             "expected the wait to span the full ready timeout, took {:?}",
             start.elapsed(),
         );
+    }
+
+    #[test]
+    fn max_stream_duration_resolution() {
+        // (route value, decision); zero means no limit.
+        for (route_msd, want) in [
+            (None, None),
+            (Some(Duration::from_secs(2)), Some(Duration::from_secs(2))),
+            (Some(Duration::ZERO), None),
+        ] {
+            let mut route = simple_route("/", "c");
+            route.max_stream_duration = route_msd;
+            let rc = Arc::new(simple_rc(vec![VirtualHostConfig {
+                name: "vh".into(),
+                domains: vec!["*".into()],
+                routes: vec![route],
+            }]));
+            let snapshot = RoutingSnapshot::new(rc, &GrpcRetryClassifierFactory);
+            let decision = resolve_route(&snapshot, "svc", "/", &http::HeaderMap::new()).unwrap();
+            assert_eq!(decision.max_stream_duration, want, "{route_msd:?}");
+        }
     }
 }

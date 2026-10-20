@@ -33,6 +33,18 @@ mod test {
     use std::collections::HashMap;
     use std::net::SocketAddr;
 
+    use envoy_types::pb::envoy::config::core::v3::HttpProtocolOptions;
+    use envoy_types::pb::envoy::config::listener::v3::Listener;
+    use envoy_types::pb::envoy::config::route::v3::RetryPolicy;
+    use envoy_types::pb::envoy::config::route::v3::RouteAction;
+    use envoy_types::pb::envoy::config::route::v3::RouteConfiguration;
+    use envoy_types::pb::envoy::config::route::v3::retry_policy::RetryBackOff;
+    use envoy_types::pb::envoy::config::route::v3::route::Action;
+    use envoy_types::pb::envoy::config::route::v3::route_action;
+    use envoy_types::pb::envoy::extensions::filters::network::http_connection_manager::v3::HttpConnectionManager;
+    use envoy_types::pb::google::protobuf::Duration as ProtoDuration;
+    use envoy_types::pb::google::protobuf::UInt32Value;
+    use prost::Message;
     use tokio::time::Duration;
     use xds_test_util::RunningControlPlane;
     use xds_test_util::XdsTestControlPlaneService;
@@ -46,7 +58,9 @@ mod test {
     use crate::client::channel::{LB_BACKENDS, LbBackend};
     use crate::testutil::grpc::GreeterClient;
     use crate::testutil::grpc::HelloRequest;
+    use crate::testutil::grpc::ScriptedGreeter;
     use crate::testutil::grpc::spawn_greeter_server;
+    use crate::testutil::grpc::spawn_scripted_server;
 
     /// Starts the fake ADS control plane on an ephemeral port. Returns the
     /// running control plane (which injects config and shuts down on drop)
@@ -413,6 +427,195 @@ mod test {
         assert_eq!(reply, "backend: world");
 
         let _ = backend.shutdown.send(());
+    }
+
+    /// gRFC A31: the listener's HCM `max_stream_duration` bounds calls whose
+    /// route sets none, a route value overrides it (0 lifts it), the
+    /// application's own deadline still applies on top, and the limit spans
+    /// the whole call, retries included.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn xds_channel_e2e_max_stream_duration() {
+        const LISTENER_MSD: Duration = Duration::from_millis(300);
+        const ROUTE_MSD: Duration = Duration::from_millis(600);
+        const SLOW_DELAY: Duration = Duration::from_secs(1);
+
+        let backend = spawn_scripted_server("backend", SLOW_DELAY)
+            .await
+            .expect("spawn backend");
+        let (control_plane, cp_addr) = start_control_plane().await;
+
+        control_plane.get_service().set_xds_config(
+            &config::AdsTypeUrl::Lds,
+            HashMap::from([(
+                "my-service".to_string(),
+                rds_listener_with_max_stream_duration("my-service", "route-config", LISTENER_MSD),
+            )]),
+        );
+        serve_route_config(
+            &control_plane,
+            config::build_route_config("route-config", "my-cluster"),
+        );
+        control_plane.get_service().set_xds_config(
+            &config::AdsTypeUrl::Cds,
+            HashMap::from([(
+                "my-cluster".to_string(),
+                config::build_cluster("my-cluster"),
+            )]),
+        );
+        control_plane.get_service().set_xds_config(
+            &config::AdsTypeUrl::Eds,
+            HashMap::from([(
+                "my-cluster".to_string(),
+                config::build_cla(
+                    "my-cluster",
+                    &[(backend.addr.ip().to_string(), backend.addr.port())],
+                ),
+            )]),
+        );
+
+        let channel = builder_for(cp_addr, "my-service")
+            .build_grpc_channel()
+            .expect("build xds channel");
+        let mut client = GreeterClient::new(channel);
+        say_hello_until_prefix(&mut client, "backend:").await;
+
+        // The route sets no limit, so the listener's applies.
+        let start = tokio::time::Instant::now();
+        let status = say(&mut client, ScriptedGreeter::SLOW, None)
+            .await
+            .expect_err("listener msd");
+        assert_eq!(status.code(), tonic::Code::DeadlineExceeded, "{status:?}");
+        assert!(start.elapsed() >= LISTENER_MSD, "{:?}", start.elapsed());
+
+        // An explicit 0 on the route disables the listener's limit.
+        let mut route_config = config::build_route_config("route-config", "my-cluster");
+        route_action_mut(&mut route_config).max_stream_duration =
+            Some(route_action::MaxStreamDuration {
+                grpc_timeout_header_max: Some(ProtoDuration::default()),
+                ..Default::default()
+            });
+        serve_route_config(&control_plane, route_config);
+        say_until(&mut client, ScriptedGreeter::SLOW, Result::is_ok).await;
+
+        // The application's deadline still bounds the call.
+        let status = say(
+            &mut client,
+            ScriptedGreeter::SLOW,
+            Some(Duration::from_millis(200)),
+        )
+        .await
+        .expect_err("app deadline");
+        assert_eq!(status.code(), tonic::Code::DeadlineExceeded, "{status:?}");
+
+        // The route's limit bounds the whole call, retry backoff included: a
+        // failing call outlives the listener's limit but ends at the route's
+        // with DEADLINE_EXCEEDED, long before its retries (whose backoff alone
+        // is >= 1.2s) would run out and surface UNAVAILABLE.
+        let mut route_config = config::build_route_config("route-config", "my-cluster");
+        let action = route_action_mut(&mut route_config);
+        action.max_stream_duration = Some(route_action::MaxStreamDuration {
+            max_stream_duration: Some(to_proto(ROUTE_MSD)),
+            ..Default::default()
+        });
+        action.retry_policy = Some(RetryPolicy {
+            retry_on: "unavailable".to_string(),
+            num_retries: Some(UInt32Value { value: 4 }),
+            retry_back_off: Some(RetryBackOff {
+                base_interval: Some(to_proto(Duration::from_millis(100))),
+                max_interval: None,
+            }),
+            ..Default::default()
+        });
+        serve_route_config(&control_plane, route_config);
+        let elapsed = say_until(
+            &mut client,
+            ScriptedGreeter::FAIL,
+            |reply| matches!(reply, Err(status) if status.code() == tonic::Code::DeadlineExceeded),
+        )
+        .await;
+        assert!(elapsed >= ROUTE_MSD, "{elapsed:?}");
+
+        let _ = backend.shutdown.send(());
+    }
+
+    /// Sends a request named `name` to the [`ScriptedGreeter`], optionally with
+    /// an application deadline.
+    async fn say(
+        client: &mut GreeterClient<XdsChannelGrpc>,
+        name: &str,
+        timeout: Option<Duration>,
+    ) -> Result<String, tonic::Status> {
+        let mut request = tonic::Request::new(HelloRequest {
+            name: name.to_string(),
+        });
+        if let Some(timeout) = timeout {
+            request.set_timeout(timeout);
+        }
+        Ok(client.say_hello(request).await?.into_inner().message)
+    }
+
+    /// Sends `name` until its reply satisfies `done` (xDS updates apply
+    /// asynchronously), returning how long that call took.
+    async fn say_until(
+        client: &mut GreeterClient<XdsChannelGrpc>,
+        name: &str,
+        done: impl Fn(&Result<String, tonic::Status>) -> bool,
+    ) -> Duration {
+        let mut last = None;
+        for _ in 0..50 {
+            let start = tokio::time::Instant::now();
+            let reply = say(client, name, None).await;
+            if done(&reply) {
+                return start.elapsed();
+            }
+            last = Some(reply);
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        panic!("never observed the expected reply to {name:?}; last seen: {last:?}");
+    }
+
+    fn serve_route_config(control_plane: &RunningControlPlane, route_config: RouteConfiguration) {
+        control_plane.get_service().set_xds_config(
+            &config::AdsTypeUrl::Rds,
+            HashMap::from([(route_config.name.clone(), route_config)]),
+        );
+    }
+
+    /// An RDS listener whose HCM sets `max_stream_duration`.
+    fn rds_listener_with_max_stream_duration(
+        name: &str,
+        rds_name: &str,
+        max_stream_duration: Duration,
+    ) -> Listener {
+        let mut listener = config::build_rds_listener(name, rds_name);
+        let any = listener
+            .api_listener
+            .as_mut()
+            .and_then(|api| api.api_listener.as_mut())
+            .expect("api listener");
+        let mut hcm = HttpConnectionManager::decode(any.value.as_slice()).expect("decode HCM");
+        hcm.common_http_protocol_options = Some(HttpProtocolOptions {
+            max_stream_duration: Some(to_proto(max_stream_duration)),
+            ..Default::default()
+        });
+        any.value = hcm.encode_to_vec();
+        listener
+    }
+
+    /// The action of the first route in `route_config`.
+    fn route_action_mut(route_config: &mut RouteConfiguration) -> &mut RouteAction {
+        let Some(Action::Route(action)) = route_config.virtual_hosts[0].routes[0].action.as_mut()
+        else {
+            panic!("expected a route action");
+        };
+        action
+    }
+
+    fn to_proto(duration: Duration) -> ProtoDuration {
+        ProtoDuration {
+            seconds: duration.as_secs() as i64,
+            nanos: duration.subsec_nanos() as i32,
+        }
     }
 }
 

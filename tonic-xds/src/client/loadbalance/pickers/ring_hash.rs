@@ -224,6 +224,7 @@ mod tests {
             cluster: "c".to_string(),
             request_hash: hash,
             retry_config: None,
+            max_stream_duration: None,
         });
         r
     }

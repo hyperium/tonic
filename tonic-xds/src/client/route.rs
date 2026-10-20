@@ -33,6 +33,7 @@ use std::collections::HashMap;
 use std::ops::Deref;
 use std::sync::Arc;
 use std::task::{Context, Poll};
+use std::time::Duration;
 use tower::{BoxError, Layer, Service};
 
 /// Represents the input for routing decisions.
@@ -62,6 +63,9 @@ pub(crate) struct RouteDecision {
     /// this decision was made on, so the retry layer applies the config for exactly
     /// the route the request took.
     pub retry_config: Option<Arc<RetrySharedConfig>>,
+    /// The matched route's xDS max stream duration (gRFC A31), with the
+    /// listener's default already applied. `None` when there is no limit.
+    pub max_stream_duration: Option<Duration>,
 }
 
 /// A hook that runs before xDS route selection.
@@ -296,6 +300,7 @@ mod tests {
                 cluster: "test-cluster".to_string(),
                 request_hash: None,
                 retry_config: None,
+                max_stream_duration: None,
             })
         }
     }
@@ -319,6 +324,7 @@ mod tests {
                 },
                 action: RouteConfigAction::Cluster(cluster.into()),
                 retry_config: None,
+                max_stream_duration: None,
             }
         }
 
@@ -442,6 +448,7 @@ mod tests {
                     },
                     action: RouteConfigAction::Cluster("c".into()),
                     retry_config: None,
+                    max_stream_duration: None,
                 }],
             }],
             metadata: RouteConfigMetadata::from_encoded(
@@ -480,6 +487,7 @@ mod tests {
                     cluster: "c".to_string(),
                     request_hash: None,
                     retry_config: None,
+                    max_stream_duration: None,
                 })
             }
         }
@@ -585,6 +593,7 @@ mod tests {
                 },
                 action: RouteConfigAction::Cluster(cluster.into()),
                 retry_config: None,
+                max_stream_duration: None,
             }
         }
 

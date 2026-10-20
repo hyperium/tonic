@@ -25,6 +25,7 @@
 pub(crate) mod channel;
 pub(crate) mod circuit_breaking;
 pub(crate) mod cluster;
+pub(crate) mod deadline;
 pub(crate) mod endpoint;
 pub(crate) mod lb;
 #[allow(dead_code)]

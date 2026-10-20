@@ -23,6 +23,7 @@
  */
 
 use crate::client::cluster::{ClusterChannelFactory, ClusterClientRegistry};
+use crate::client::deadline::{DeadlineLayer, set_grpc_timeout_header};
 use crate::client::endpoint::{EndpointAddress, MakeConnector};
 use crate::client::lb::{ClusterDiscovery, TowerP2cClusterChannelFactory, XdsLbService};
 use crate::client::loadbalance::cluster_factory::XdsLbClusterChannelFactory;
@@ -523,13 +524,16 @@ impl XdsChannelBuilder {
     /// `fallback_retry` is applied to requests that carry no per-route retry
     /// config; callers pass a transport-appropriate default (see
     /// [`RetrySharedConfig::grpc_default`] vs
-    /// [`RetrySharedConfig::connection_default`]).
+    /// [`RetrySharedConfig::connection_default`]). `deadline_layer` likewise
+    /// picks how much of the call deadline the transport can enforce (see
+    /// [`DeadlineLayer::grpc`] vs [`DeadlineLayer::headers_only`]).
     fn build_channel<MC, B, ReqBody, ResBody, F>(
         &self,
         parts: XdsRuntimeParts,
         make_connector: MC,
         to_endpoint_req: F,
         fallback_retry: Arc<RetrySharedConfig>,
+        deadline_layer: DeadlineLayer<ResBody>,
         outcome_classifier: Arc<dyn OutcomeClassifier>,
     ) -> XdsTransportChannel<B, ResBody>
     where
@@ -559,6 +563,7 @@ impl XdsChannelBuilder {
             cluster_factory,
             to_endpoint_req,
             fallback_retry,
+            deadline_layer,
         )
     }
 
@@ -571,6 +576,7 @@ impl XdsChannelBuilder {
         cluster_factory: Arc<dyn ClusterChannelFactory<Request<ReqBody>, Response<ResBody>>>,
         to_endpoint_req: F,
         fallback_retry: Arc<RetrySharedConfig>,
+        deadline_layer: DeadlineLayer<ResBody>,
     ) -> XdsTransportChannel<B, ResBody>
     where
         F: Fn(Request<SharedBody<B>>) -> Request<ReqBody> + Clone + Send + Sync + 'static,
@@ -601,6 +607,7 @@ impl XdsChannelBuilder {
         let routing_layer = XdsRoutingLayer::new(router, self.pre_route.clone(), self.authority());
         self.assemble_channel_stack::<B, ReqBody, ResBody, _>(
             routing_layer,
+            deadline_layer,
             retry_layer,
             cluster_factory,
             to_endpoint_req,
@@ -617,28 +624,33 @@ impl XdsChannelBuilder {
         self.build_channel::<GrpcMakeConnector, TonicBody, TonicBody, TonicBody, _>(
             parts,
             GrpcMakeConnector::new(),
-            |req: Request<SharedBody<TonicBody>>| req.map(TonicBody::new),
+            grpc_endpoint_request,
             Arc::new(RetrySharedConfig::grpc_default()),
+            DeadlineLayer::grpc(),
             Arc::new(GrpcOutcomeClassifier),
         )
     }
 
-    /// Assembles the routing / retry / load-balancing service stack shared by
-    /// every transport, and type-erases it into an [`XdsTransportChannel`].
+    /// Assembles the routing / deadline / retry / load-balancing service stack
+    /// shared by every transport, and type-erases it into an
+    /// [`XdsTransportChannel`].
     ///
     /// The stack is, outermost to innermost: the routing layer (stamps the
-    /// matched `RouteDecision`), the retry layer (buffers the body into
-    /// [`SharedBody`] and retries per the route's config), a `map_request` that
-    /// reconstructs the endpoint's request body from the buffered `SharedBody`,
-    /// and the load balancer that dispatches to the discovered endpoints.
+    /// matched `RouteDecision`), the deadline layer (bounds the whole call,
+    /// retries included, by the app and xDS deadlines), the retry layer (buffers
+    /// the body into [`SharedBody`] and retries per the route's config), a
+    /// `map_request` that reconstructs the endpoint's request body from the
+    /// buffered `SharedBody`, and the load balancer that dispatches to the
+    /// discovered endpoints.
     ///
     /// `to_endpoint_req` adapts `Request<SharedBody<B>>` to the endpoint's
-    /// `Request<ReqBody>`: the built-in gRPC path rewraps into [`TonicBody`],
-    /// while transport-generic callers pass the body through unchanged
-    /// (`ReqBody = SharedBody<B>`).
+    /// `Request<ReqBody>`: the built-in gRPC path rewraps into [`TonicBody`]
+    /// (and advertises the remaining deadline), while transport-generic callers
+    /// pass the body through unchanged (`ReqBody = SharedBody<B>`).
     fn assemble_channel_stack<B, ReqBody, ResBody, F>(
         &self,
         routing_layer: XdsRoutingLayer,
+        deadline_layer: DeadlineLayer<ResBody>,
         retry_layer: RetryLayer,
         cluster_factory: Arc<dyn ClusterChannelFactory<Request<ReqBody>, Response<ResBody>>>,
         to_endpoint_req: F,
@@ -657,6 +669,7 @@ impl XdsChannelBuilder {
         let lb_service = XdsLbService::new(cluster_registry, cluster_factory);
         let inner = ServiceBuilder::new()
             .layer(routing_layer)
+            .layer(deadline_layer)
             .layer(retry_layer)
             .map_request(to_endpoint_req)
             .service(lb_service);
@@ -713,6 +726,14 @@ impl XdsChannelBuilder {
     /// With [`LbBackend::XdsLb`], endpoint health is judged by a
     /// plain-HTTP classifier — `5xx` counts as a failure and `4xx` is ignored,
     /// since a client error reflects the request rather than upstream health.
+    ///
+    /// # Timeouts
+    ///
+    /// The xDS max stream duration (gRFC A31) bounds each call, retries
+    /// included, until response headers arrive; the response body is not
+    /// bounded, and a `grpc-timeout` request header is neither honored nor
+    /// rewritten. An expired call fails with a `DEADLINE_EXCEEDED`
+    /// [`tonic::Status`] error.
     pub fn build_transport_channel<MC, B, ResBody>(
         &self,
         make_connector: MC,
@@ -736,6 +757,7 @@ impl XdsChannelBuilder {
             make_connector,
             |req: Request<SharedBody<B>>| req,
             Arc::new(RetrySharedConfig::connection_default()),
+            DeadlineLayer::headers_only(),
             Arc::new(HttpOutcomeClassifier),
         ))
     }
@@ -812,6 +834,14 @@ impl LbBackend {
     }
 }
 
+/// Endpoint-request adapter for the gRPC channel: advertises the call's
+/// remaining deadline in `grpc-timeout`, then rewraps the buffered body as
+/// [`TonicBody`].
+fn grpc_endpoint_request(mut req: Request<SharedBody<TonicBody>>) -> Request<TonicBody> {
+    set_grpc_timeout_header(&mut req);
+    req.map(TonicBody::new)
+}
+
 #[cfg(test)]
 pub(crate) use test_backends::{GrpcClusterChannelFactory, LB_BACKENDS};
 
@@ -865,6 +895,7 @@ mod tests {
     use crate::XdsUri;
     use crate::client::channel::XdsChannelGrpc;
     use crate::client::channel::{GrpcClusterChannelFactory, LB_BACKENDS, LbBackend};
+    use crate::client::deadline::DeadlineLayer;
     use crate::client::endpoint::EndpointAddress;
     use crate::client::endpoint::EndpointChannel;
 
@@ -917,19 +948,19 @@ mod tests {
             retry: Arc<RetrySharedConfig>,
             interceptor: Option<Arc<dyn PreRouteInterceptor>>,
         ) -> XdsChannelGrpc {
+            use crate::client::deadline::DeadlineLayer;
             use crate::client::retry::RetryLayer;
             use crate::client::route::XdsRoutingLayer;
-            use http::Request;
-            use shared_http_body::SharedBody;
             use tonic::body::Body as TonicBody;
 
             let routing_layer = XdsRoutingLayer::new(router, interceptor, self.authority());
             let retry_layer = RetryLayer::new(retry);
             self.assemble_channel_stack::<TonicBody, TonicBody, TonicBody, _>(
                 routing_layer,
+                DeadlineLayer::grpc(),
                 retry_layer,
                 cluster_factory,
-                |req: Request<SharedBody<TonicBody>>| req.map(TonicBody::new),
+                super::grpc_endpoint_request,
                 None,
             )
         }
@@ -1002,6 +1033,7 @@ mod tests {
                 cluster: "test-cluster".to_string(),
                 request_hash: None,
                 retry_config: None,
+                max_stream_duration: None,
             })
         }
     }
@@ -1208,6 +1240,7 @@ mod tests {
                     },
                     action: RouteConfigAction::Cluster(cluster_name.to_string()),
                     retry_config: None,
+                    max_stream_duration: None,
                 }],
             }],
             metadata: Default::default(),
@@ -1521,6 +1554,7 @@ mod tests {
                 cluster: "test-cluster".to_string(),
                 request_hash: None,
                 retry_config: None,
+                max_stream_duration: None,
             })
         }
     }
@@ -1547,6 +1581,7 @@ mod tests {
             _,
         >(
             routing_layer,
+            DeadlineLayer::headers_only(),
             retry_layer,
             Arc::new(TowerP2cClusterChannelFactory::new(discovery)),
             |req| req,

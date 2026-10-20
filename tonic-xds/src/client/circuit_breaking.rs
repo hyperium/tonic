@@ -734,6 +734,7 @@ mod tests {
             cluster: CLUSTER.to_string(),
             request_hash: None,
             retry_config: None,
+            max_stream_duration: None,
         });
         request
     }

@@ -209,6 +209,7 @@ mod tests {
                     },
                     action: RouteConfigAction::Cluster("cluster-1".to_string()),
                     retry_config: None,
+                    max_stream_duration: None,
                 }],
             }],
             metadata: Default::default(),

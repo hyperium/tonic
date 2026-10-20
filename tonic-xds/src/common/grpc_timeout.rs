@@ -22,7 +22,7 @@
  *
  */
 
-//! gRPC timeout header parsing utilities.
+//! gRPC timeout header parsing and encoding utilities.
 
 use std::time::Duration;
 
@@ -98,6 +98,31 @@ pub(crate) fn extract_grpc_timeout<B>(
         .to_str()
         .map_err(GrpcTimeoutParseError::TimeoutNotAscii)?;
     parse_grpc_timeout(s).map(Some)
+}
+
+/// Encode a duration as a `grpc-timeout` header value.
+///
+/// Uses the most precise unit whose value fits in the spec's 8 digits, rounding
+/// up so the advertised timeout never ends before `duration` does.
+/// Durations beyond the largest encodable value saturate to it.
+pub(crate) fn encode_grpc_timeout(duration: Duration) -> String {
+    const MAX_VALUE: u128 = 99_999_999;
+    const UNITS: [(u128, char); 6] = [
+        (1, 'n'),
+        (1_000, 'u'),
+        (1_000_000, 'm'),
+        (1_000_000_000, 'S'),
+        (60 * 1_000_000_000, 'M'),
+        (3_600 * 1_000_000_000, 'H'),
+    ];
+    let nanos = duration.as_nanos();
+    UNITS
+        .iter()
+        .find_map(|&(unit_nanos, unit)| {
+            let value = nanos.div_ceil(unit_nanos);
+            (value <= MAX_VALUE).then(|| format!("{value}{unit}"))
+        })
+        .unwrap_or_else(|| format!("{MAX_VALUE}H"))
 }
 
 #[cfg(test)]
@@ -248,5 +273,39 @@ mod tests {
             extract_grpc_timeout(&req),
             Err(GrpcTimeoutParseError::NonDigitValue)
         ));
+    }
+
+    // --- encode_grpc_timeout tests ---
+
+    #[test]
+    fn test_encode() {
+        for (duration, want) in [
+            (Duration::ZERO, "0n"),
+            // Most precise unit that fits in 8 digits.
+            (Duration::from_nanos(82), "82n"),
+            (Duration::from_nanos(99_999_999), "99999999n"),
+            (Duration::from_millis(100), "100000u"),
+            (Duration::from_secs(10), "10000000u"),
+            (Duration::from_secs(1000), "1000000m"),
+            (Duration::from_secs(1_000_000), "1000000S"),
+            (Duration::from_secs(1_000_000_000), "16666667M"),
+            // Rounds up when the precise unit doesn't fit.
+            (Duration::from_nanos(100_000_001), "100001u"),
+            // Saturates.
+            (Duration::MAX, "99999999H"),
+        ] {
+            assert_eq!(encode_grpc_timeout(duration), want, "{duration:?}");
+        }
+    }
+
+    #[test]
+    fn test_encode_round_trips() {
+        for d in [
+            Duration::from_nanos(1),
+            Duration::from_millis(1500),
+            Duration::from_secs(3600),
+        ] {
+            assert_eq!(parse_grpc_timeout(&encode_grpc_timeout(d)).unwrap(), d);
+        }
     }
 }
