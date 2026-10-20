@@ -103,6 +103,8 @@ mod tests {
 
     use super::*;
     use crate::core::RecvMessage;
+    use crate::core::StreamEnded;
+    use crate::core::StreamError;
     use crate::core::test_connection_info;
     use crate::server::CallOptions;
     use crate::server::Handle;
@@ -123,14 +125,14 @@ mod tests {
             &mut self,
             _item: ResponseStreamItem<'_>,
             _options: SendOptions,
-        ) -> Result<(), ()> {
+        ) -> Result<(), StreamEnded> {
             Ok(())
         }
     }
 
     struct MockRecvStream;
     impl RecvStream for MockRecvStream {
-        async fn next(&mut self, _msg: &mut dyn RecvMessage) -> Option<Result<(), ()>> {
+        async fn next(&mut self, _msg: &mut dyn RecvMessage) -> Option<Result<(), StreamError>> {
             None
         }
     }

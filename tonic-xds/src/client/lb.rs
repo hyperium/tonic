@@ -22,10 +22,11 @@
  *
  */
 
-use crate::client::cluster::ClusterClientRegistry;
+use crate::client::cluster::{ClusterChannel, ClusterChannelFactory, ClusterClientRegistry};
 use crate::client::route::RouteDecision;
 use crate::common::async_util::BoxFuture;
 use http::Request;
+use std::hash::Hash;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
@@ -54,60 +55,51 @@ pub(crate) enum LoadBalancingError {
 }
 
 /// A Tower Service that performs load balancing based on routing decisions.
-pub(crate) struct XdsLbService<Req, Endpoint, S>
+pub(crate) struct XdsLbService<Req, Resp>
 where
     Req: Send + 'static,
-    S: Service<Req>,
-    S::Response: Send + 'static,
+    Resp: 'static,
 {
-    cluster_registry: Arc<ClusterClientRegistry<Req, S::Response>>,
-    cluster_discovery: Arc<dyn ClusterDiscovery<Endpoint, S>>,
+    cluster_registry: Arc<ClusterClientRegistry<Req, Resp>>,
+    cluster_factory: Arc<dyn ClusterChannelFactory<Req, Resp>>,
 }
 
-impl<Req, Endpoint, S> XdsLbService<Req, Endpoint, S>
+impl<Req, Resp> XdsLbService<Req, Resp>
 where
     Req: Send + 'static,
-    S: Service<Req>,
-    S::Response: Send + 'static,
+    Resp: 'static,
 {
-    /// Creates a new `XdsLbService` with the given cluster client registry and cluster discovery.
+    /// Creates a new `XdsLbService` with the given cluster client registry and cluster factory.
     pub(crate) fn new(
-        cluster_registry: Arc<ClusterClientRegistry<Req, S::Response>>,
-        cluster_discovery: Arc<dyn ClusterDiscovery<Endpoint, S>>,
+        cluster_registry: Arc<ClusterClientRegistry<Req, Resp>>,
+        cluster_factory: Arc<dyn ClusterChannelFactory<Req, Resp>>,
     ) -> Self {
         Self {
             cluster_registry,
-            cluster_discovery,
+            cluster_factory,
         }
     }
 }
 
-impl<Req, Endpoint, S> Clone for XdsLbService<Req, Endpoint, S>
+impl<Req, Resp> Clone for XdsLbService<Req, Resp>
 where
     Req: Send + 'static,
-    S: Service<Req>,
-    S::Response: Send + 'static,
+    Resp: 'static,
 {
     fn clone(&self) -> Self {
         Self {
             cluster_registry: self.cluster_registry.clone(),
-            cluster_discovery: self.cluster_discovery.clone(),
+            cluster_factory: self.cluster_factory.clone(),
         }
     }
 }
 
-impl<B, Endpoint, S> Service<Request<B>> for XdsLbService<Request<B>, Endpoint, S>
+impl<B, Resp> Service<Request<B>> for XdsLbService<Request<B>, Resp>
 where
     Request<B>: Send + 'static,
-    S::Response: Send + 'static,
-    Endpoint: std::hash::Hash + Eq + Clone + Send + 'static,
-    S: Service<Request<B>> + Load + Send + 'static,
-    S::Response: Send + 'static,
-    S::Error: Into<BoxError>,
-    S::Future: Send,
-    <S as tower::load::Load>::Metric: std::fmt::Debug,
+    Resp: Send + 'static,
 {
-    type Response = S::Response;
+    type Response = Resp;
     type Error = BoxError;
     type Future = BoxFuture<Result<Self::Response, Self::Error>>;
 
@@ -128,8 +120,7 @@ where
         let cluster_client = self
             .cluster_registry
             .get_cluster(&routing_decision.cluster, || {
-                self.cluster_discovery
-                    .discover_cluster(&routing_decision.cluster)
+                self.cluster_factory.make(&routing_decision.cluster)
             });
 
         // Get the transport channel for the target xDS cluster.
@@ -141,5 +132,33 @@ where
             channel.ready().await?;
             channel.call(request).await
         })
+    }
+}
+
+/// [`ClusterChannelFactory`] backed by a [`ClusterDiscovery`], balancing each
+/// cluster's endpoints with Tower's P2C balancer.
+pub(crate) struct TowerP2cClusterChannelFactory<Endpoint, S> {
+    discovery: Arc<dyn ClusterDiscovery<Endpoint, S>>,
+}
+
+impl<Endpoint, S> TowerP2cClusterChannelFactory<Endpoint, S> {
+    pub(crate) fn new(discovery: Arc<dyn ClusterDiscovery<Endpoint, S>>) -> Self {
+        Self { discovery }
+    }
+}
+
+impl<Req, Endpoint, S> ClusterChannelFactory<Req, S::Response>
+    for TowerP2cClusterChannelFactory<Endpoint, S>
+where
+    Req: Send + 'static,
+    Endpoint: Hash + Eq + Clone + Send + 'static,
+    S: Service<Req> + Load + Send + 'static,
+    S::Response: Send + 'static,
+    S::Error: Into<BoxError>,
+    S::Future: Send + 'static,
+    <S as Load>::Metric: std::fmt::Debug,
+{
+    fn make(&self, cluster_name: &str) -> ClusterChannel<Req, S::Response> {
+        ClusterChannel::from_discover(self.discovery.discover_cluster(cluster_name))
     }
 }

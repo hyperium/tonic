@@ -22,7 +22,7 @@
  *
  */
 
-//! Type-state wrappers for LbChannel lifecycle management.
+//! Type-state wrappers for endpoint channel lifecycle management.
 //!
 //! Each state is a separate struct, and transitions consume the old state (move semantics).
 //! This prevents using a channel in an invalid state at compile time.
@@ -42,10 +42,10 @@
 //! manage multiple in-flight state changes and handle cancellation by key.
 //!
 //! The state types hold the raw service `S` directly. In-flight tracking and
-//! load reporting are handled separately by [`LbChannel`] at the pool level.
+//! load reporting are the inner service's concern (see
+//! [`EndpointChannel`](crate::client::endpoint::EndpointChannel)).
 //!
 //! [`KeyedFutures`]: crate::client::loadbalance::keyed_futures::KeyedFutures
-//! [`LbChannel`]: crate::client::loadbalance::channel::LbChannel
 
 use std::future::Future;
 use std::pin::Pin;

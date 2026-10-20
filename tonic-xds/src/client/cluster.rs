@@ -127,14 +127,47 @@ where
     Req: Send + 'static,
     Resp: 'static,
 {
-    /// Creates a new `ClusterChannel` with the given service and picker.
-    pub(crate) fn from_balancer<B>(balancer: B, buffer_cap: usize) -> Self
+    /// Creates a channel that queues callers in front of `svc`, the service
+    /// that load-balances across the cluster's endpoints.
+    pub(crate) fn from_service<B>(svc: B) -> Self
     where
         B: Service<Req, Error = BoxError, Future = RespFut<Resp>> + Send + 'static,
     {
-        let svc = Buffer::new(balancer, buffer_cap);
+        let svc = Buffer::new(svc, DEFAULT_BUFFER_CAPACITY);
         Self { svc }
     }
+
+    /// Creates a channel that P2C-balances across the endpoints yielded by
+    /// `discover`.
+    pub(crate) fn from_discover<D>(discover: D) -> Self
+    where
+        D: Discover + Unpin + Send + 'static,
+        D::Key: Hash + Clone + Send,
+        D::Error: Into<BoxError>,
+        D::Service: Service<Req, Response = Resp> + Load + Send + 'static,
+        <D::Service as Load>::Metric: Debug,
+        <D::Service as Service<Req>>::Error: Into<BoxError>,
+        <D::Service as Service<Req>>::Future: Send + 'static,
+    {
+        Self::from_service(ClusterBalancer::new(discover))
+    }
+}
+
+/// Builds the load-balancing channel for a cluster, on first use.
+///
+/// The seam between the LB dispatch layer ([`XdsLbService`]) and the balancer
+/// behind it: the layer resolves a request to a cluster name and asks the
+/// factory for that cluster's channel, without knowing how endpoints are
+/// discovered or balanced.
+///
+/// [`XdsLbService`]: crate::client::lb::XdsLbService
+pub(crate) trait ClusterChannelFactory<Req, Resp>: Send + Sync + 'static
+where
+    Req: Send + 'static,
+    Resp: 'static,
+{
+    /// Builds the channel for `cluster_name`.
+    fn make(&self, cluster_name: &str) -> ClusterChannel<Req, Resp>;
 }
 
 impl<Req, Resp> Service<Req> for ClusterChannel<Req, Resp>
@@ -178,20 +211,9 @@ where
     Req: Send + 'static,
     Resp: 'static,
 {
-    /// Creates a new `ClusterClient` with the given cluster name and service discovery implementation.
-    /// Currently, `tower::discover::Discover` is used for service discovery.
-    pub(crate) fn new<D>(name: String, discover: D) -> Self
-    where
-        D: Discover + Unpin + Send + 'static,
-        D::Key: std::hash::Hash + Clone + Send,
-        D::Error: Into<BoxError>,
-        D::Service: Service<Req, Response = Resp> + Load + Send + 'static,
-        <D::Service as Load>::Metric: std::fmt::Debug,
-        <D::Service as Service<Req>>::Error: Into<BoxError>,
-        <D::Service as Service<Req>>::Future: Send + 'static,
-    {
-        let balancer = ClusterBalancer::new(discover);
-        let channel = ClusterChannel::from_balancer(balancer, DEFAULT_BUFFER_CAPACITY);
+    /// Creates a `ClusterClient` serving `name` through an already-built
+    /// load-balancing channel.
+    pub(crate) fn from_channel(name: String, channel: ClusterChannel<Req, Resp>) -> Self {
         Self { name, channel }
     }
 
@@ -228,28 +250,15 @@ where
             registry: DashMap::new(),
         }
     }
-    /// Get the client of a cluster with lazy discovery.
-    pub(crate) fn get_cluster<F, D>(
-        &self,
-        key: &str,
-        discover_fn: F,
-    ) -> Arc<ClusterClient<Req, Resp>>
+    /// Get the client of a cluster, building its channel on first use.
+    pub(crate) fn get_cluster<F>(&self, key: &str, make_channel: F) -> Arc<ClusterClient<Req, Resp>>
     where
-        F: FnOnce() -> D,
-        D: Discover + Unpin + Send + 'static,
-        D::Key: std::hash::Hash + Clone + Send,
-        D::Error: Into<BoxError>,
-        D::Service: Service<Req, Response = Resp> + Load + Send + 'static,
-        <D::Service as Load>::Metric: std::fmt::Debug,
-        <D::Service as Service<Req>>::Error: Into<BoxError>,
-        <D::Service as Service<Req>>::Future: Send + 'static,
+        F: FnOnce() -> ClusterChannel<Req, Resp>,
     {
         self.registry
             .entry(key.to_string())
             .or_insert_with(|| {
-                let name = key.to_string();
-                let discover = discover_fn();
-                Arc::new(ClusterClient::new(name, discover))
+                Arc::new(ClusterClient::from_channel(key.to_string(), make_channel()))
             })
             .clone()
     }

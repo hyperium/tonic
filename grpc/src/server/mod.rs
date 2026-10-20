@@ -54,6 +54,8 @@ use crate::async_trait;
 use crate::core::ConnectionInfo;
 use crate::core::RecvMessage;
 use crate::core::SendMessage;
+use crate::core::StreamEnded;
+use crate::core::StreamError;
 use crate::metadata::MetadataMap;
 use crate::rt::GrpcRuntime;
 use crate::send_future::SendFuture;
@@ -363,7 +365,7 @@ impl Handle for DynHandleWrapper {
 #[trait_variant::make(Send)]
 pub trait SendStream {
     /// Sends the next item on the stream. Returns `Ok(())` on success, or
-    /// `Err(())` on failure. `Err(())` is a terminal state.
+    /// [`StreamEnded`] on failure. [`StreamEnded`] is a terminal state.
     /// Calling this method after an error should be avoided and is unspecified.
     ///
     /// # Cancel safety
@@ -371,7 +373,11 @@ pub trait SendStream {
     /// This method is not intended to be cancellation safe.  If the returned
     /// future is not polled to completion, the behavior of any subsequent calls
     /// to the SendStream are undefined and data may be lost.
-    async fn send(&mut self, item: ResponseStreamItem<'_>, options: SendOptions) -> Result<(), ()>;
+    async fn send(
+        &mut self,
+        item: ResponseStreamItem<'_>,
+        options: SendOptions,
+    ) -> Result<(), StreamEnded>;
 }
 
 #[doc(hidden)]
@@ -381,7 +387,7 @@ pub trait DynSendStream: Send {
         &mut self,
         item: ResponseStreamItem<'a>,
         options: SendOptions,
-    ) -> Result<(), ()>;
+    ) -> Result<(), StreamEnded>;
 }
 
 #[async_trait]
@@ -390,19 +396,27 @@ impl<T: SendStream> DynSendStream for T {
         &mut self,
         item: ResponseStreamItem<'a>,
         options: SendOptions,
-    ) -> Result<(), ()> {
+    ) -> Result<(), StreamEnded> {
         self.send(item, options).await
     }
 }
 
 impl SendStream for &mut (dyn DynSendStream + '_) {
-    async fn send(&mut self, item: ResponseStreamItem<'_>, options: SendOptions) -> Result<(), ()> {
+    async fn send(
+        &mut self,
+        item: ResponseStreamItem<'_>,
+        options: SendOptions,
+    ) -> Result<(), StreamEnded> {
         (**self).dyn_send(item, options).await
     }
 }
 
 impl SendStream for Box<dyn DynSendStream + '_> {
-    async fn send(&mut self, item: ResponseStreamItem<'_>, options: SendOptions) -> Result<(), ()> {
+    async fn send(
+        &mut self,
+        item: ResponseStreamItem<'_>,
+        options: SendOptions,
+    ) -> Result<(), StreamEnded> {
         (**self).dyn_send(item, options).await
     }
 }
@@ -422,9 +436,9 @@ pub struct SendOptions {
 #[trait_variant::make(Send)]
 pub trait RecvStream {
     /// Returns the next message on the stream. Returns `Some(Ok(()))` on
-    /// success, `None` on normal stream end, or `Some(Err(()))` if the stream
-    /// encountered an error before the client's final request message. Both
-    /// `None` and `Some(Err(()))` are terminal states.
+    /// success, `None` on normal stream end, or `Some(Err(`[`StreamError`]`))`
+    /// if the stream encountered an error before the client's final request
+    /// message. Both `None` and `Some(Err(StreamError))` are terminal states.
     /// Calling this method again after reaching a terminal state is unspecified
     /// and should be avoided.
     ///
@@ -436,24 +450,24 @@ pub trait RecvStream {
     /// This method is not intended to be cancellation safe.  If the returned
     /// future is not polled to completion, the behavior of any subsequent calls
     /// to the RecvStream are undefined and data may be lost.
-    async fn next(&mut self, msg: &mut dyn RecvMessage) -> Option<Result<(), ()>>;
+    async fn next(&mut self, msg: &mut dyn RecvMessage) -> Option<Result<(), StreamError>>;
 }
 
 #[doc(hidden)]
 #[async_trait]
 pub trait DynRecvStream: Send {
-    async fn dyn_next(&mut self, msg: &mut dyn RecvMessage) -> Option<Result<(), ()>>;
+    async fn dyn_next(&mut self, msg: &mut dyn RecvMessage) -> Option<Result<(), StreamError>>;
 }
 
 #[async_trait]
 impl<T: RecvStream> DynRecvStream for T {
-    async fn dyn_next(&mut self, msg: &mut dyn RecvMessage) -> Option<Result<(), ()>> {
+    async fn dyn_next(&mut self, msg: &mut dyn RecvMessage) -> Option<Result<(), StreamError>> {
         self.next(msg).await
     }
 }
 
 impl RecvStream for Box<dyn DynRecvStream + '_> {
-    async fn next(&mut self, msg: &mut dyn RecvMessage) -> Option<Result<(), ()>> {
+    async fn next(&mut self, msg: &mut dyn RecvMessage) -> Option<Result<(), StreamError>> {
         (**self).dyn_next(msg).await
     }
 }
@@ -904,7 +918,7 @@ mod tests {
             &mut self,
             _item: ResponseStreamItem<'_>,
             _options: SendOptions,
-        ) -> Result<(), ()> {
+        ) -> Result<(), StreamEnded> {
             Ok(())
         }
     }
@@ -912,7 +926,7 @@ mod tests {
     struct NopRecvStream;
 
     impl RecvStream for NopRecvStream {
-        async fn next(&mut self, _msg: &mut dyn RecvMessage) -> Option<Result<(), ()>> {
+        async fn next(&mut self, _msg: &mut dyn RecvMessage) -> Option<Result<(), StreamError>> {
             None
         }
     }

@@ -54,6 +54,7 @@ use crate::async_trait;
 use crate::core::ConnectionInfo;
 use crate::core::RecvMessage;
 use crate::core::SendMessage;
+use crate::core::StreamEnded;
 use crate::metadata::MetadataMap;
 
 mod call_options;
@@ -208,8 +209,8 @@ impl<T: Invoke> InvokeOnce for &T {
 /// generated APIs (e.g.  protobuf) to perform RPCs instead.
 #[trait_variant::make(Send)]
 pub trait SendStream {
-    /// Sends `msg` on the stream.  If `Err(())` is returned, the message could
-    /// not be delivered because the stream was closed.  Future calls to
+    /// Sends `msg` on the stream.  If [`StreamEnded`] is returned, the message
+    /// could not be delivered because the stream was closed.  Future calls to
     /// SendStream will do nothing.
     ///
     /// # Cancel safety
@@ -217,25 +218,41 @@ pub trait SendStream {
     /// This method is not intended to be cancellation safe.  If the returned
     /// future is not polled to completion, the behavior of any subsequent calls
     /// to the SendStream are undefined and data may be lost.
-    async fn send(&mut self, msg: &dyn SendMessage, options: SendOptions) -> Result<(), ()>;
+    async fn send(
+        &mut self,
+        msg: &dyn SendMessage,
+        options: SendOptions,
+    ) -> Result<(), StreamEnded>;
 }
 
 /// A dyn-compatible version of [`SendStream`].
 #[async_trait]
 pub trait DynSendStream: Send {
     /// A dynamic version of [`SendStream::send`].
-    async fn dyn_send(&mut self, msg: &dyn SendMessage, options: SendOptions) -> Result<(), ()>;
+    async fn dyn_send(
+        &mut self,
+        msg: &dyn SendMessage,
+        options: SendOptions,
+    ) -> Result<(), StreamEnded>;
 }
 
 #[async_trait]
 impl<T: SendStream> DynSendStream for T {
-    async fn dyn_send(&mut self, msg: &dyn SendMessage, options: SendOptions) -> Result<(), ()> {
+    async fn dyn_send(
+        &mut self,
+        msg: &dyn SendMessage,
+        options: SendOptions,
+    ) -> Result<(), StreamEnded> {
         self.send(msg, options).await
     }
 }
 
 impl SendStream for Box<dyn DynSendStream + '_> {
-    async fn send(&mut self, msg: &dyn SendMessage, options: SendOptions) -> Result<(), ()> {
+    async fn send(
+        &mut self,
+        msg: &dyn SendMessage,
+        options: SendOptions,
+    ) -> Result<(), StreamEnded> {
         (**self).dyn_send(msg, options).await
     }
 }

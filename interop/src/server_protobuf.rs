@@ -98,7 +98,7 @@ impl TestService for InteropTestService {
 
             let payload = grpc_utils::server_payload(param.size() as usize);
             let response = proto!(StreamingOutputCallResponse { payload });
-            if responses.send(&response).await.is_err() {
+            if responses.send(response).await.is_err() {
                 break;
             }
         }
@@ -163,7 +163,7 @@ impl TestService for InteropTestService {
 
                 let payload = grpc_utils::server_payload(param.size() as usize);
                 let response = proto!(StreamingOutputCallResponse { payload: payload });
-                if responses.send(&response).await.is_err() {
+                if responses.send(response).await.is_err() {
                     return Err(ServerStatusError::new(
                         StatusCodeError::Internal,
                         "stream failure",
