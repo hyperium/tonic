@@ -35,6 +35,10 @@ use super::security::{ClusterSecurityConfig, parse_transport_socket};
 // Re-exported so other modules keep using the `cluster::LbPolicy` path.
 pub(crate) use super::lb_policy::{LbPolicy, RingHashSettings};
 
+/// Gate for accepting RING_HASH clusters. Flip to `true` once ring-hash is wired
+/// into the client; until then such clusters are NACKed.
+const RING_HASH_ENABLED: bool = false;
+
 /// Validated Cluster resource.
 #[derive(Debug, Clone)]
 pub(crate) struct ClusterResource {
@@ -79,7 +83,11 @@ impl Resource for ClusterResource {
             Ok(cluster::LbPolicy::RoundRobin) => LbPolicy::RoundRobin,
             Ok(cluster::LbPolicy::LeastRequest) => LbPolicy::LeastRequest,
             Ok(cluster::LbPolicy::RingHash) => {
-                LbPolicy::RingHash(RingHashSettings::validate(message.lb_config)?)
+                let settings = RingHashSettings::validate(message.lb_config)?;
+                if !RING_HASH_ENABLED {
+                    return Err(Error::Validation("RING_HASH is not yet supported".into()));
+                }
+                LbPolicy::RingHash(settings)
             }
             _ => {
                 return Err(Error::Validation(format!(
@@ -181,21 +189,22 @@ mod tests {
     }
 
     #[test]
-    fn test_ring_hash_lb_policy() {
-        // A RING_HASH cluster validates to LbPolicy::RingHash with the parsed
-        // (here defaulted) settings. Detailed ring_hash_lb_config validation is
-        // covered in the `lb_policy` module.
+    fn test_ring_hash_lb_policy_nacked_while_disabled() {
+        // Valid ring-hash config is still rejected until RING_HASH_ENABLED is
+        // flipped. Detailed config validation is covered in `lb_policy`.
         let cluster = Cluster {
             name: "rh-cluster".to_string(),
             lb_policy: cluster::LbPolicy::RingHash as i32,
             ..Default::default()
         };
-        let validated = ClusterResource::validate(cluster).unwrap();
-        let LbPolicy::RingHash(settings) = validated.lb_policy else {
-            panic!("expected RingHash, got {:?}", validated.lb_policy);
-        };
-        assert_eq!(settings.min_ring_size(), 1024);
-        assert_eq!(settings.max_ring_size(), 4096);
+        let result = ClusterResource::validate(cluster);
+        if RING_HASH_ENABLED {
+            let validated = result.unwrap();
+            assert!(matches!(validated.lb_policy, LbPolicy::RingHash(_)));
+        } else {
+            let err = result.unwrap_err();
+            assert!(err.to_string().contains("RING_HASH is not yet supported"));
+        }
     }
 
     #[test]
