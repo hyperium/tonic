@@ -38,12 +38,22 @@ mod test {
     use xds_test_util::XdsTestControlPlaneService;
     use xds_test_util::config;
 
+    use envoy_types::pb::envoy::admin::v3::ClientResourceStatus;
+    use envoy_types::pb::envoy::service::status::v3::client_status_discovery_service_client::ClientStatusDiscoveryServiceClient;
+    use envoy_types::pb::envoy::service::status::v3::{ClientConfig, ClientStatusRequest};
+    use tokio::net::TcpListener;
+    use tokio_stream::wrappers::TcpListenerStream;
+
+    use std::sync::Arc;
+
     use crate::BootstrapConfig;
+    use crate::CsdsService;
     use crate::XdsChannelBuilder;
     use crate::XdsChannelConfig;
     use crate::XdsChannelGrpc;
     use crate::XdsUri;
     use crate::client::channel::{LB_BACKENDS, LbBackend};
+    use crate::csds::CsdsRegistry;
     use crate::testutil::grpc::GreeterClient;
     use crate::testutil::grpc::HelloRequest;
     use crate::testutil::grpc::spawn_greeter_server;
@@ -411,6 +421,137 @@ mod test {
         .await
         .expect("oversized CDS response never routed; decoding limit not applied");
         assert_eq!(reply, "backend: world");
+
+        let _ = backend.shutdown.send(());
+    }
+
+    /// Fetches the CSDS config of every reported xDS client.
+    async fn csds_configs(
+        csds: &mut ClientStatusDiscoveryServiceClient<tonic::transport::Channel>,
+        exclude_resource_contents: bool,
+    ) -> Vec<ClientConfig> {
+        let request = ClientStatusRequest {
+            exclude_resource_contents,
+            ..Default::default()
+        };
+        csds.fetch_client_status(request)
+            .await
+            .expect("fetch client status")
+            .into_inner()
+            .config
+    }
+
+    /// CSDS reports the resources of a live xDS channel, and stops reporting
+    /// its client once the channel is dropped.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn csds_reports_channel_resources() {
+        let backend = spawn_greeter_server("backend", None, None)
+            .await
+            .expect("spawn greeter backend");
+        let backend_addr = backend.addr;
+        let (control_plane, cp_addr) = start_control_plane().await;
+        control_plane.get_service().set_xds_config(
+            &config::AdsTypeUrl::Lds,
+            HashMap::from([(
+                "csds-service".to_string(),
+                config::build_inline_listener("csds-service", "csds-cluster"),
+            )]),
+        );
+        control_plane.get_service().set_xds_config(
+            &config::AdsTypeUrl::Cds,
+            HashMap::from([(
+                "csds-cluster".to_string(),
+                config::build_cluster("csds-cluster"),
+            )]),
+        );
+        control_plane.get_service().set_xds_config(
+            &config::AdsTypeUrl::Eds,
+            HashMap::from([(
+                "csds-cluster".to_string(),
+                config::build_cla(
+                    "csds-cluster",
+                    &[(backend_addr.ip().to_string(), backend_addr.port())],
+                ),
+            )]),
+        );
+
+        // A private registry, so other tests' channels are not reported.
+        let registry = Arc::new(CsdsRegistry::default());
+        let channel = builder_for(cp_addr, "csds-service")
+            .with_csds_registry(Arc::clone(&registry))
+            .build_grpc_channel()
+            .expect("build xds channel");
+        let mut client = GreeterClient::new(channel);
+        say_hello_until_prefix(&mut client, "backend:").await;
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let csds_addr = listener.local_addr().unwrap();
+        tokio::spawn(
+            tonic::transport::Server::builder()
+                .add_service(CsdsService::with_registry(registry))
+                .serve_with_incoming(TcpListenerStream::new(listener)),
+        );
+        let mut csds = ClientStatusDiscoveryServiceClient::connect(format!("http://{csds_addr}"))
+            .await
+            .expect("connect to CSDS");
+
+        let mut configs = csds_configs(&mut csds, false).await;
+        assert_eq!(configs.len(), 1);
+        let config = configs.remove(0);
+        assert_eq!(config.client_scope, "xds:///csds-service");
+        assert_eq!(config.node.as_ref().expect("node is reported").id, "test");
+        assert!(
+            config
+                .generic_xds_configs
+                .iter()
+                .all(|r| r.xds_config.is_some())
+        );
+        let without_contents = csds_configs(&mut csds, true).await;
+        assert!(
+            without_contents[0]
+                .generic_xds_configs
+                .iter()
+                .all(|r| r.xds_config.is_none() && !r.version_info.is_empty())
+        );
+        let mut resources: Vec<(String, String, i32)> = config
+            .generic_xds_configs
+            .into_iter()
+            .map(|r| (r.type_url, r.name, r.client_status))
+            .collect();
+        resources.sort();
+        let acked = ClientResourceStatus::Acked as i32;
+        assert_eq!(
+            resources,
+            [
+                (
+                    "type.googleapis.com/envoy.config.cluster.v3.Cluster".to_string(),
+                    "csds-cluster".to_string(),
+                    acked
+                ),
+                (
+                    "type.googleapis.com/envoy.config.endpoint.v3.ClusterLoadAssignment"
+                        .to_string(),
+                    "csds-cluster".to_string(),
+                    acked
+                ),
+                (
+                    "type.googleapis.com/envoy.config.listener.v3.Listener".to_string(),
+                    "csds-service".to_string(),
+                    acked
+                ),
+            ]
+        );
+
+        drop(client);
+        let mut unregistered = false;
+        for _ in 0..50 {
+            if csds_configs(&mut csds, false).await.is_empty() {
+                unregistered = true;
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        assert!(unregistered, "dropped channel is still reported");
 
         let _ = backend.shutdown.send(());
     }
