@@ -30,7 +30,6 @@
 //! status, the last version the client accepted as received from the server,
 //! and the most recent update the client rejected.
 
-use std::sync::Arc;
 use std::time::SystemTime;
 
 use crate::message::ResourceAny;
@@ -53,6 +52,7 @@ pub enum ResourceStatus {
 
 /// The most recent version of a resource that the client accepted.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct AcceptedResource {
     /// The `version_info` of the response that carried the resource.
     pub version_info: String,
@@ -62,20 +62,52 @@ pub struct AcceptedResource {
     pub last_updated: SystemTime,
 }
 
+impl AcceptedResource {
+    /// Creates a record of an accepted resource.
+    pub fn new(
+        version_info: impl Into<String>,
+        resource: ResourceAny,
+        last_updated: SystemTime,
+    ) -> Self {
+        Self {
+            version_info: version_info.into(),
+            resource,
+            last_updated,
+        }
+    }
+}
+
 /// The most recent update to a resource that the client rejected.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct RejectedUpdate {
     /// The `version_info` of the response that carried the rejected resource.
     pub version_info: String,
-    /// Why the response was rejected. This is the error sent to the server in
-    /// the NACK, so it covers every invalid resource in the response.
+    /// Why this resource was rejected. The NACK sent to the server combines
+    /// the errors of every invalid resource in the response.
     pub details: String,
     /// When the client rejected the update.
     pub last_update_attempt: SystemTime,
 }
 
+impl RejectedUpdate {
+    /// Creates a record of a rejected update.
+    pub fn new(
+        version_info: impl Into<String>,
+        details: impl Into<String>,
+        last_update_attempt: SystemTime,
+    ) -> Self {
+        Self {
+            version_info: version_info.into(),
+            details: details.into(),
+            last_update_attempt,
+        }
+    }
+}
+
 /// A point-in-time view of one subscribed resource.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct ResourceSnapshot {
     /// The resource type URL.
     pub type_url: String,
@@ -87,7 +119,35 @@ pub struct ResourceSnapshot {
     /// removed, because a watcher may still be using it.
     pub accepted: Option<AcceptedResource>,
     /// The most recent rejected update. Set only when `status` is
-    /// [`ResourceStatus::Nacked`]. Every resource rejected in the same
-    /// response shares one update.
-    pub rejected: Option<Arc<RejectedUpdate>>,
+    /// [`ResourceStatus::Nacked`].
+    pub rejected: Option<RejectedUpdate>,
+}
+
+impl ResourceSnapshot {
+    /// Creates a snapshot with no accepted version and no rejected update.
+    pub fn new(
+        type_url: impl Into<String>,
+        name: impl Into<String>,
+        status: ResourceStatus,
+    ) -> Self {
+        Self {
+            type_url: type_url.into(),
+            name: name.into(),
+            status,
+            accepted: None,
+            rejected: None,
+        }
+    }
+
+    /// Sets the last accepted version.
+    pub fn with_accepted(mut self, accepted: AcceptedResource) -> Self {
+        self.accepted = Some(accepted);
+        self
+    }
+
+    /// Sets the most recent rejected update.
+    pub fn with_rejected(mut self, rejected: RejectedUpdate) -> Self {
+        self.rejected = Some(rejected);
+        self
+    }
 }

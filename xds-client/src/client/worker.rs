@@ -283,8 +283,8 @@ enum ResourceState {
     Requested,
     /// Resource has been successfully received and validated.
     Received,
-    /// Resource validation failed. Contains the error message.
-    NACKed(String),
+    /// Resource validation failed. Contains this resource's rejected update.
+    NACKed(RejectedUpdate),
     /// Resource does not exist (server indicated deletion or absence).
     DoesNotExist,
 }
@@ -324,9 +324,6 @@ struct CachedResource {
     /// The last accepted version as received, for snapshots. Unlike
     /// `resource`, it is kept when the resource is later rejected or removed.
     accepted: Option<AcceptedResource>,
-    /// The most recent rejected update, set only in NACKed state. Shared by
-    /// every resource rejected in the same response.
-    rejected: Option<Arc<RejectedUpdate>>,
 }
 
 impl CachedResource {
@@ -336,7 +333,6 @@ impl CachedResource {
             state: ResourceState::Requested,
             resource: None,
             accepted: None,
-            rejected: None,
         }
     }
 
@@ -346,7 +342,6 @@ impl CachedResource {
             state: ResourceState::Received,
             resource: Some(resource),
             accepted: Some(accepted),
-            rejected: None,
         }
     }
 
@@ -356,21 +351,15 @@ impl CachedResource {
             state: ResourceState::DoesNotExist,
             resource: None,
             accepted,
-            rejected: None,
         }
     }
 
     /// Create a cached resource in NACKed state.
-    fn nacked(
-        error: String,
-        accepted: Option<AcceptedResource>,
-        rejected: Arc<RejectedUpdate>,
-    ) -> Self {
+    fn nacked(rejected: RejectedUpdate, accepted: Option<AcceptedResource>) -> Self {
         Self {
-            state: ResourceState::NACKed(error),
+            state: ResourceState::NACKed(rejected),
             resource: None,
             accepted,
-            rejected: Some(rejected),
         }
     }
 
@@ -397,8 +386,8 @@ impl CachedResource {
                 result: Err(Error::ResourceDoesNotExist),
                 done,
             }),
-            ResourceState::NACKed(error) => Some(ResourceEvent::ResourceChanged {
-                result: Err(Error::Validation(error.clone())),
+            ResourceState::NACKed(rejected) => Some(ResourceEvent::ResourceChanged {
+                result: Err(Error::Validation(rejected.details.clone())),
                 done,
             }),
             ResourceState::Requested => None,
@@ -507,7 +496,10 @@ impl TypeState {
                 name: name.clone(),
                 status: cached.state.status(),
                 accepted: cached.accepted.clone(),
-                rejected: cached.rejected.clone(),
+                rejected: match &cached.state {
+                    ResourceState::NACKed(rejected) => Some(rejected.clone()),
+                    _ => None,
+                },
             })
     }
 
@@ -1101,11 +1093,11 @@ where
         for resource_any in &response.resources {
             match decoder(resource_any.value.clone()) {
                 crate::resource::DecodeResult::Success { resource, .. } => {
-                    let accepted = AcceptedResource {
-                        version_info: response.version_info.clone(),
-                        resource: resource_any.clone(),
-                        last_updated: now,
-                    };
+                    let accepted = AcceptedResource::new(
+                        response.version_info.clone(),
+                        resource_any.clone(),
+                        now,
+                    );
                     valid_resources.push((resource, accepted));
                 }
                 crate::resource::DecodeResult::ResourceError { name, error } => {
@@ -1134,22 +1126,14 @@ where
             .collect();
 
         let nack_error = nack_error_message(&top_level_errors, &per_resource_errors);
-        let rejected = nack_error.as_ref().map(|details| {
-            Arc::new(RejectedUpdate {
-                version_info: response.version_info.clone(),
-                details: details.clone(),
-                last_update_attempt: now,
-            })
-        });
 
         self.dispatch_resources(&type_url, valid_resources, &done);
 
         // Only notify watchers for per-resource errors (where we know the name).
         // Top-level errors have no associated name, so no watcher to notify.
-        if let Some(rejected) = &rejected {
-            for (resource_name, error) in &per_resource_errors {
-                self.notify_resource_error(&type_url, resource_name, error, rejected, &done);
-            }
+        for (resource_name, error) in per_resource_errors {
+            let rejected = RejectedUpdate::new(response.version_info.clone(), error, now);
+            self.notify_resource_error(&type_url, &resource_name, rejected, &done);
         }
 
         // Detect deleted resources (per A53):
@@ -1217,8 +1201,7 @@ where
         &mut self,
         type_url: &str,
         resource_name: &str,
-        error: &str,
-        rejected: &Arc<RejectedUpdate>,
+        rejected: RejectedUpdate,
         done: &ProcessingDone,
     ) {
         let type_state = match self.type_states.get_mut(type_url) {
@@ -1226,13 +1209,14 @@ where
             None => return,
         };
 
+        let error = rejected.details.clone();
         let accepted = type_state
             .cache
-            .get(resource_name)
-            .and_then(|c| c.accepted.clone());
+            .remove(resource_name)
+            .and_then(|c| c.accepted);
         type_state.cache.insert(
             resource_name.to_string(),
-            CachedResource::nacked(error.to_string(), accepted, Arc::clone(rejected)),
+            CachedResource::nacked(rejected, accepted),
         );
         let counts = type_state.resource_state_counts();
         self.recorder
@@ -1244,7 +1228,7 @@ where
 
         for event_tx in type_state.matching_watchers(resource_name) {
             let event = ResourceEvent::ResourceChanged {
-                result: Err(Error::Validation(error.to_string())),
+                result: Err(Error::Validation(error.clone())),
                 done: done.share(),
             };
             let _ = event_tx.send(event);
@@ -1282,7 +1266,7 @@ where
             .collect();
 
         for name in deleted_names {
-            let accepted = type_state.cache.get(&name).and_then(|c| c.accepted.clone());
+            let accepted = type_state.cache.remove(&name).and_then(|c| c.accepted);
             type_state
                 .cache
                 .insert(name.clone(), CachedResource::does_not_exist(accepted));
@@ -1869,7 +1853,8 @@ mod tests {
 
     /// A resource sent as `name` or `name#bad`. Unlike [`TestResource`],
     /// validity depends on the content rather than the name, so one resource
-    /// can be accepted, rejected, and accepted again.
+    /// can be accepted, rejected, and accepted again. The validation error
+    /// names the resource, so each rejection is distinct.
     #[derive(Debug, Clone)]
     struct VersionedResource;
 
@@ -1887,8 +1872,8 @@ mod tests {
         }
 
         fn validate(message: Self::Message) -> Result<Self> {
-            if message.ends_with("#bad") {
-                return Err(Error::Validation("bad resource".to_string()));
+            if let Some(name) = message.strip_suffix("#bad") {
+                return Err(Error::Validation(format!("{name} is bad")));
             }
             Ok(Self)
         }
@@ -3492,10 +3477,7 @@ mod tests {
         assert_eq!(accepted.resource.value, Bytes::from("res-0"));
         let rejected = snapshot[0].rejected.as_ref().unwrap();
         assert_eq!(rejected.version_info, "2");
-        assert_eq!(
-            rejected.details,
-            "res-0: resource validation failed: bad resource"
-        );
+        assert_eq!(rejected.details, "resource validation failed: res-0 is bad");
         assert!(rejected.last_update_attempt >= accepted.last_updated);
 
         // A later accepted version clears the rejection.
@@ -3541,21 +3523,18 @@ mod tests {
         assert_eq!(snapshot[0].status, ResourceStatus::Acked);
         assert_eq!(snapshot[0].accepted.as_ref().unwrap().version_info, "1");
 
-        // Each invalid resource reports the whole NACK error.
-        let details = "res-1: resource validation failed: bad resource; \
-                       res-2: resource validation failed: bad resource";
+        // Each invalid resource reports only its own error, not the whole
+        // NACK error.
         for rejected in &snapshot[1..] {
             assert_eq!(rejected.status, ResourceStatus::Nacked);
             assert!(rejected.accepted.is_none());
             let update = rejected.rejected.as_ref().unwrap();
             assert_eq!(update.version_info, "1");
-            assert_eq!(update.details, details);
+            assert_eq!(
+                update.details,
+                format!("resource validation failed: {} is bad", rejected.name)
+            );
         }
-        // The rejection is shared, not copied for each resource.
-        assert!(Arc::ptr_eq(
-            snapshot[1].rejected.as_ref().unwrap(),
-            snapshot[2].rejected.as_ref().unwrap()
-        ));
     }
 
     #[tokio::test]
