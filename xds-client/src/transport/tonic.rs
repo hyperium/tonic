@@ -461,6 +461,9 @@ impl Transport for TonicTransport {
             grpc = grpc.max_encoding_message_size(limit);
         }
 
+        // The worker uses new_stream() completion as its resource-timer readiness
+        // fallback. This checks service capacity, not channel connectivity or ADS
+        // stream dispatch; the streaming RPC is started when the receiver is polled.
         grpc.ready()
             .await
             .map_err(|e| Error::Connection(e.to_string()))?;

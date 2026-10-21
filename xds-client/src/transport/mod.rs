@@ -60,7 +60,9 @@ pub trait Transport: Send + Sync + 'static {
 ///
 /// Sealed for now to limit API surface.
 pub trait TransportSender: sealed::Sealed + Send + 'static {
-    /// Send serialized DiscoveryRequest bytes to the server.
+    /// Submit serialized DiscoveryRequest bytes to the transport.
+    ///
+    /// Completion does not guarantee network delivery.
     ///
     /// # Cancel safety
     ///
@@ -136,8 +138,8 @@ pub trait TransportBuilder: Send + Sync + 'static {
 
 /// In-crate mock transport for worker tests.
 ///
-/// Lives here because [`Transport`], [`TransportSender`], and [`TransportReceiver`]
-/// are sealed: test code outside this module cannot implement them.
+/// Lives here because [`TransportSender`] and [`TransportReceiver`] are sealed:
+/// test code outside this module cannot implement them.
 #[cfg(test)]
 pub(crate) mod mock {
     use super::{Transport, TransportBuilder, TransportReceiver, TransportSender, sealed};

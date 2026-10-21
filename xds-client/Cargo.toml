@@ -48,11 +48,13 @@ tokio = { version = "1", features = [
     "rt-multi-thread",
     "macros",
     "net",
+    "test-util",
 ] }
 tonic = { version = "0.14" }
 async-stream = "0.3"
 envoy-types = "0.7"
 prost = "0.14"
+xds-test-util = { path = "../xds-test-util" }
 
 [[example]]
 name = "basic"
