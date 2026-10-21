@@ -126,7 +126,7 @@ impl CascadeState {
     /// lower-level ones (CDS/EDS), avoiding wasted work on clusters
     /// about to be removed.
     async fn run(mut self, xds_client: XdsClient, cache: Arc<XdsCache>, listener_name: String) {
-        let mut lds_watcher = xds_client.watch::<ListenerResource>(&listener_name).await;
+        let mut lds_watcher = xds_client.watch::<ListenerResource>(&listener_name);
 
         loop {
             tokio::select! {
@@ -193,7 +193,7 @@ impl CascadeState {
                     RouteSource::Rds(rds_name) => {
                         if self.rds_name.as_deref() != Some(rds_name) {
                             self.rds_watcher =
-                                Some(xds_client.watch::<RouteConfigResource>(rds_name).await);
+                                Some(xds_client.watch::<RouteConfigResource>(rds_name));
                             self.rds_name = Some(rds_name.clone());
                         }
                     }
@@ -249,7 +249,7 @@ impl CascadeState {
                 if self.eds_names.get(cluster_name).map(|s| s.as_str()) != Some(&eds_name) {
                     self.eds_watchers.remove(cluster_name);
 
-                    let watcher = xds_client.watch::<EndpointsResource>(&eds_name).await;
+                    let watcher = xds_client.watch::<EndpointsResource>(&eds_name);
                     let cluster_key = cluster_name.to_string();
                     self.eds_watchers
                         .insert(cluster_key.clone(), WatcherStream(watcher));
@@ -302,7 +302,7 @@ impl CascadeState {
         }
 
         for name in new_clusters.difference(&old_clusters) {
-            let watcher = xds_client.watch::<ClusterResource>(name).await;
+            let watcher = xds_client.watch::<ClusterResource>(name);
             self.cds_watchers
                 .insert(name.clone(), WatcherStream(watcher));
         }
@@ -624,7 +624,7 @@ mod tests {
     /// references far more clusters than the xds-client worker's command
     /// channel buffers (64), reconciled through the real cascade path —
     /// `handle_rds` holds the event's `ProcessingDone` token while
-    /// `reconcile_clusters` awaits one `watch()` per cluster.
+    /// `reconcile_clusters` registers one `watch()` per cluster.
     ///
     /// Before xds-client gained ADS flow control, the worker sat inside
     /// `handle_response` awaiting that token and stopped draining commands;
@@ -667,7 +667,7 @@ mod tests {
         )
         .build();
 
-        let mut watcher = xds_client.watch::<RouteConfigResource>("rc-many").await;
+        let mut watcher = xds_client.watch::<RouteConfigResource>("rc-many");
         let event = tokio::time::timeout(Duration::from_secs(10), watcher.next())
             .await
             .expect("timed out waiting for the RDS update")
