@@ -598,17 +598,8 @@ mod tests {
         assert_eq!(state.rds_name.as_deref(), Some("rc"));
     }
 
-    /// End-to-end replica of the production Istio hang: an RDS update that
-    /// references far more clusters than the xds-client worker's command
-    /// channel buffers (64), reconciled through the real cascade path —
-    /// `handle_rds` holds the event's `ProcessingDone` token while
-    /// `reconcile_clusters` registers one `watch()` per cluster.
-    ///
-    /// Before xds-client gained ADS flow control, the worker sat inside
-    /// `handle_response` awaiting that token and stopped draining commands;
-    /// once the command channel filled, `reconcile_clusters` blocked on the
-    /// 65th watch and the client deadlocked. This test times out under that
-    /// behavior and completes under the fixed worker.
+    /// An RDS update registers all referenced clusters through the real cascade
+    /// path while holding its `ProcessingDone` token.
     #[tokio::test]
     async fn rds_referencing_many_clusters_reconciles_without_deadlock() {
         use std::time::Duration;
@@ -618,7 +609,6 @@ mod tests {
         };
         use xds_test_util::{XdsTestControlPlaneService, config};
 
-        // Well past the worker's 64-slot command channel.
         const CLUSTER_COUNT: usize = 100;
 
         let control_plane = XdsTestControlPlaneService::new()

@@ -3004,12 +3004,8 @@ mod tests {
         ));
     }
 
-    /// A watcher that issues more commands than the command channel buffers
-    /// while holding its `ProcessingDone` token must not deadlock the worker.
-    ///
-    /// Before the flow-control fix the worker awaited the token inside
-    /// `handle_response`, so it stopped draining commands; once the channel
-    /// filled, watcher and worker waited on each other forever.
+    /// Watch commands must be processed while a watcher holds `ProcessingDone`,
+    /// and response delivery must resume after the token is dropped.
     #[tokio::test]
     async fn commands_drain_while_processing_done_is_held() {
         let (client, mut watcher, server) = connected_client().await;
@@ -3030,11 +3026,16 @@ mod tests {
             panic!("expected ResourceChanged(Ok)");
         };
 
-        // More commands than the previous bounded queue could hold.
+        // Register a batch of cascading watches while response delivery is paused.
         let mut extra = Vec::new();
         for i in 1..=100 {
             extra.push(client.watch::<TestResource>(format!("res-{i}")));
         }
+
+        let snapshot = tokio::time::timeout(Duration::from_secs(5), client.resource_snapshot())
+            .await
+            .expect("watch commands stalled while ProcessingDone was held");
+        assert_eq!(snapshot.len(), 101);
 
         // The worker is still healthy end-to-end: it reads the next response
         // and delivers it.
@@ -3235,10 +3236,8 @@ mod tests {
         assert!(next_changed(&mut w1).await.0.is_ok());
     }
 
-    /// A wildcard watcher receiving a response with more resources than
-    /// the previous watcher buffer size (16) must not deadlock the worker even
-    /// before the watcher reads any events, and ADS flow control must remain
-    /// gated until all delivered tokens are dropped.
+    /// An unread wildcard response must not prevent new watches or cached
+    /// replay. The next response remains gated until all delivered tokens drop.
     #[tokio::test]
     async fn wildcard_watcher_many_resources_does_not_deadlock() {
         let (builder, mut servers) = mock_transport();
