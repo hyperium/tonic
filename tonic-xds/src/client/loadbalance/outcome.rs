@@ -108,6 +108,30 @@ impl OutcomeClassifier for GrpcOutcomeClassifier {
     }
 }
 
+/// HTTP outcome classifier. A transport error or a `5xx` status is a failure.
+/// `4xx` is ignored: a client error reflects the request, not upstream health,
+/// so counting it would eject endpoints for a caller's own mistakes. Everything
+/// else is a success.
+#[derive(Debug, Default, Clone)]
+pub(crate) struct HttpOutcomeClassifier;
+
+impl OutcomeClassifier for HttpOutcomeClassifier {
+    fn classify(&self, outcome: CallOutcome<'_>) -> HealthOutcome {
+        match outcome {
+            CallOutcome::Error => HealthOutcome::Failure,
+            CallOutcome::Response { status, .. } => {
+                if status.is_server_error() {
+                    HealthOutcome::Failure
+                } else if status.is_client_error() {
+                    HealthOutcome::Ignore
+                } else {
+                    HealthOutcome::Success
+                }
+            }
+        }
+    }
+}
+
 /// Extracts a [`CallOutcome`] from an endpoint response so the load balancer can
 /// classify outcomes while staying generic over the response body. Implemented
 /// for [`http::Response`]; the whole xDS data plane is HTTP-typed.
@@ -139,6 +163,44 @@ mod tests {
 
     fn classify(status: u16, grpc_status: Option<&str>) -> HealthOutcome {
         GrpcOutcomeClassifier.classify(response(status, grpc_status).call_outcome())
+    }
+
+    fn classify_http(status: u16) -> HealthOutcome {
+        HttpOutcomeClassifier.classify(response(status, None).call_outcome())
+    }
+
+    #[test]
+    fn http_transport_error_is_failure() {
+        assert_eq!(
+            HttpOutcomeClassifier.classify(CallOutcome::Error),
+            HealthOutcome::Failure
+        );
+    }
+
+    #[test]
+    fn http_server_error_is_failure() {
+        assert_eq!(classify_http(500), HealthOutcome::Failure);
+        assert_eq!(classify_http(503), HealthOutcome::Failure);
+    }
+
+    #[test]
+    fn http_client_error_is_ignored() {
+        assert_eq!(classify_http(400), HealthOutcome::Ignore);
+        assert_eq!(classify_http(404), HealthOutcome::Ignore);
+    }
+
+    #[test]
+    fn http_success_and_redirect_are_success() {
+        assert_eq!(classify_http(200), HealthOutcome::Success);
+        assert_eq!(classify_http(301), HealthOutcome::Success);
+    }
+
+    /// The gRPC classifier counts `4xx` as a failure, so a plain-HTTP transport
+    /// needs its own classifier rather than reusing the gRPC one.
+    #[test]
+    fn http_and_grpc_classifiers_differ_on_client_errors() {
+        assert_eq!(classify_http(404), HealthOutcome::Ignore);
+        assert_eq!(classify(404, None), HealthOutcome::Failure);
     }
 
     #[test]

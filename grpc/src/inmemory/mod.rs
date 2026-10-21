@@ -69,6 +69,8 @@ use crate::core::Address;
 use crate::core::ConnectionInfo;
 use crate::core::RecvMessage;
 use crate::core::SendMessage;
+use crate::core::StreamEnded;
+use crate::core::StreamError;
 use crate::credentials::SecurityInfo;
 use crate::credentials::SecurityLevel;
 use crate::rt::GrpcRuntime;
@@ -258,16 +260,16 @@ impl ServerSendStream for InMemoryServerSendStream {
         &mut self,
         item: ServerResponseStreamItem<'_>,
         _options: ServerSendOptions,
-    ) -> Result<(), ()> {
+    ) -> Result<(), StreamEnded> {
         let inmemory_item = match item {
             ServerResponseStreamItem::Headers(h) => InMemoryResponseStreamItem::Headers(h),
             ServerResponseStreamItem::Message(m) => {
-                let buf = m.encode().map_err(|_| ())?;
+                let buf = m.encode().map_err(|_| StreamEnded)?;
                 InMemoryResponseStreamItem::Message(buf)
             }
         };
 
-        self.tx.send(inmemory_item).map_err(|_| ())
+        self.tx.send(inmemory_item).map_err(|_| StreamEnded)
     }
 }
 
@@ -276,11 +278,11 @@ pub struct InMemoryServerRecvStream {
 }
 
 impl ServerRecvStream for InMemoryServerRecvStream {
-    async fn next(&mut self, msg: &mut dyn RecvMessage) -> Option<Result<(), ()>> {
+    async fn next(&mut self, msg: &mut dyn RecvMessage) -> Option<Result<(), StreamError>> {
         match self.rx.recv().await {
             Some(InMemoryRequestStreamItem::Message(mut buf)) => {
                 if msg.decode(&mut buf).is_err() {
-                    return Some(Err(()));
+                    return Some(Err(StreamError));
                 }
                 Some(Ok(()))
             }
@@ -343,7 +345,11 @@ pub struct InMemoryClientSendStream {
 }
 
 impl ClientSendStream for InMemoryClientSendStream {
-    async fn send(&mut self, msg: &dyn SendMessage, _options: ClientSendOptions) -> Result<(), ()> {
+    async fn send(
+        &mut self,
+        msg: &dyn SendMessage,
+        _options: ClientSendOptions,
+    ) -> Result<(), StreamEnded> {
         let buf = msg.encode().unwrap();
 
         if self
@@ -354,7 +360,7 @@ impl ClientSendStream for InMemoryClientSendStream {
             .is_err()
         {
             self.tx = None;
-            return Err(());
+            return Err(StreamEnded);
         }
         Ok(())
     }

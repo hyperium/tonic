@@ -28,8 +28,9 @@ use std::sync::Arc;
 
 use protobuf::Parse;
 use protobuf_well_known_types::Any;
+use xds_client::Error;
+use xds_client::Resource;
 use xds_client::resource::TypeUrl;
-use xds_client::{Error, Resource};
 
 use super::route::RouteConfigResource;
 use crate::generated::envoy::config::listener::v3::Listener;
@@ -161,13 +162,15 @@ impl ListenerResource {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::generated::envoy::config::core::v3::{
-        AggregatedConfigSource, ConfigSource, SelfConfigSource,
-    };
+    use crate::generated::envoy::config::core::v3::AggregatedConfigSource;
+    use crate::generated::envoy::config::core::v3::ConfigSource;
+    use crate::generated::envoy::config::core::v3::SelfConfigSource;
     use crate::generated::envoy::config::listener::v3::ApiListener;
-    use crate::generated::envoy::config::route::v3::{
-        Route, RouteAction, RouteConfiguration, RouteMatch, VirtualHost,
-    };
+    use crate::generated::envoy::config::route::v3::Route;
+    use crate::generated::envoy::config::route::v3::RouteAction;
+    use crate::generated::envoy::config::route::v3::RouteConfiguration;
+    use crate::generated::envoy::config::route::v3::RouteMatch;
+    use crate::generated::envoy::config::route::v3::VirtualHost;
     use crate::generated::envoy::extensions::filters::network::http_connection_manager::v3::Rds;
     use protobuf::Serialize;
 

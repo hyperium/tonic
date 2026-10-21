@@ -24,26 +24,18 @@
 
 //! xDS-backed [`ClusterDiscovery`] implementation.
 //!
-//! Per cluster, [`XdsClusterDiscovery::discover_cluster`] spawns a task that
-//! drives two concurrent watches:
+//! Per cluster, [`XdsClusterDiscovery::discover_cluster`] pairs two pieces:
 //!
-//! 1. The cluster resource watch — produces a fresh [`Connector`] on each
-//!    CDS update (e.g. when `transport_socket` changes). The connector is
-//!    held inside a [`ConnectorSwap`] so the diff loop reads the latest
-//!    snapshot per endpoint connection.
-//! 2. The endpoint watch — produces `Change::Insert` / `Change::Remove`
-//!    events forwarded to the LB layer.
-//!
-//! On a CDS update whose security config fails validation, the previous
-//! connector is kept and a warning is logged.
+//! 1. A [`ClusterConnector`], which tracks the cluster resource and rebuilds
+//!    the [`Connector`] on each CDS update (e.g. when `transport_socket`
+//!    changes).
+//! 2. An [`EndpointManager`], which diffs the endpoint watch into
+//!    `Change::Insert` / `Change::Remove` events for the LB layer, connecting
+//!    each new endpoint through that connector.
 
 use std::sync::Arc;
 use std::time::Duration;
 
-use arc_swap::ArcSwap;
-use tokio::sync::mpsc;
-use tokio_stream::StreamExt as _;
-use tokio_stream::wrappers::ReceiverStream;
 use tonic::transport::{Channel, Endpoint};
 use tower::BoxError;
 
@@ -57,11 +49,8 @@ use crate::common::async_util::BoxFuture;
 use crate::xds::cache::XdsCache;
 #[cfg(feature = "_tls-any")]
 use crate::xds::cert_provider::{CertProviderRegistry, CertificateProvider};
-use crate::xds::endpoint_manager::{ConnectorSwap, EndpointManager};
-
-/// Buffer capacity for the discovery channel between the spawned task and
-/// Tower's LB layer.
-const DISCOVER_CHANNEL_CAPACITY: usize = 64;
+use crate::xds::connector::ClusterConnector;
+use crate::xds::endpoint_manager::EndpointManager;
 
 /// Timeout for establishing a connection to an endpoint.
 const ENDPOINT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
@@ -102,7 +91,7 @@ pub(crate) struct XdsClusterDiscovery<MC = GrpcMakeConnector> {
     cache: Arc<XdsCache>,
     make_connector: Arc<MC>,
     #[cfg(feature = "_tls-any")]
-    registry: Arc<CertProviderRegistry>,
+    cert_registry: Arc<CertProviderRegistry>,
 }
 
 impl<MC> XdsClusterDiscovery<MC> {
@@ -110,12 +99,12 @@ impl<MC> XdsClusterDiscovery<MC> {
     pub(crate) fn new(
         cache: Arc<XdsCache>,
         make_connector: MC,
-        registry: Arc<CertProviderRegistry>,
+        cert_registry: Arc<CertProviderRegistry>,
     ) -> Self {
         Self {
             cache,
             make_connector: Arc::new(make_connector),
-            registry,
+            cert_registry,
         }
     }
 
@@ -130,67 +119,15 @@ impl<MC> XdsClusterDiscovery<MC> {
 
 impl<MC: MakeConnector> ClusterDiscovery<EndpointAddress, MC::Service> for XdsClusterDiscovery<MC> {
     fn discover_cluster(&self, cluster_name: &str) -> BoxDiscover<EndpointAddress, MC::Service> {
-        let cache = self.cache.clone();
-        let cluster_name = cluster_name.to_string();
-        let make_connector = self.make_connector.clone();
-        #[cfg(feature = "_tls-any")]
-        let registry = self.registry.clone();
+        let connector = Arc::new(ClusterConnector::spawn(
+            self.cache.clone(),
+            cluster_name.to_string(),
+            self.make_connector.clone(),
+            #[cfg(feature = "_tls-any")]
+            self.cert_registry.clone(),
+        ));
 
-        let (tx, rx) = mpsc::channel(DISCOVER_CHANNEL_CAPACITY);
-
-        tokio::spawn(async move {
-            let mut cluster_watch = cache.watch_cluster(&cluster_name);
-
-            let connector_swap: ConnectorSwap<MC::Service> = loop {
-                let Some(cluster) = cluster_watch.next().await else {
-                    return;
-                };
-                let cluster_config = ClusterConfig::from_resource(
-                    &cluster,
-                    #[cfg(feature = "_tls-any")]
-                    &registry,
-                );
-                match make_connector.make_connector(cluster_config) {
-                    Ok(c) => break Arc::new(ArcSwap::from_pointee(c)),
-                    Err(e) => tracing::warn!(
-                        cluster = %cluster_name,
-                        error = %e,
-                        "initial CDS update rejected; awaiting next update",
-                    ),
-                }
-            };
-
-            let manager = EndpointManager::new(Arc::clone(&connector_swap));
-            let mut endpoints = manager.discover_endpoints(cache.watch_endpoints(&cluster_name));
-
-            loop {
-                tokio::select! {
-                    Some(change) = endpoints.next() => {
-                        if tx.send(change).await.is_err() {
-                            return;
-                        }
-                    }
-                    Some(cluster) = cluster_watch.next() => {
-                        let cluster_config = ClusterConfig::from_resource(
-                            &cluster,
-                            #[cfg(feature = "_tls-any")]
-                            &registry,
-                        );
-                        match make_connector.make_connector(cluster_config) {
-                            Ok(new) => connector_swap.store(Arc::new(new)),
-                            Err(e) => tracing::warn!(
-                                cluster = %cluster_name,
-                                error = %e,
-                                "CDS update rejected; keeping previous connector",
-                            ),
-                        }
-                    }
-                    else => return,
-                }
-            }
-        });
-
-        Box::pin(ReceiverStream::new(rx))
+        EndpointManager::new(connector).discover_endpoints(self.cache.watch_endpoints(cluster_name))
     }
 }
 

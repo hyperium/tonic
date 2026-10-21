@@ -40,11 +40,16 @@ use crate::client::SendOptions;
 use crate::client::SendStream;
 use crate::core::RecvMessage;
 use crate::core::SendMessage;
+use crate::core::StreamEnded;
 
 /// Implements a stream that sinks writes and only returns StreamClosed.
 pub(crate) struct NopStream;
 impl SendStream for NopStream {
-    async fn send(&mut self, _item: &dyn SendMessage, _options: SendOptions) -> Result<(), ()> {
+    async fn send(
+        &mut self,
+        _item: &dyn SendMessage,
+        _options: SendOptions,
+    ) -> Result<(), StreamEnded> {
         Ok(())
     }
 }
@@ -180,12 +185,16 @@ impl Invoke for MockInvoker {
 /// Implements the SendStream for MockInvoker.
 pub(crate) struct MockSendStream(pub mpsc::Sender<(Bytes, SendOptions)>);
 impl SendStream for MockSendStream {
-    async fn send(&mut self, item: &dyn SendMessage, options: SendOptions) -> Result<(), ()> {
+    async fn send(
+        &mut self,
+        item: &dyn SendMessage,
+        options: SendOptions,
+    ) -> Result<(), StreamEnded> {
         let mut data = item.encode().unwrap();
         self.0
             .send((data.copy_to_bytes(data.remaining()), options))
             .await
-            .map_err(|_| ())
+            .map_err(|_| StreamEnded)
     }
 }
 
