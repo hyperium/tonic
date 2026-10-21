@@ -82,7 +82,7 @@ rustls-pemfile = { version = "2.1", optional = true, default-features = false, f
 ] }
 rustls-pki-types = { version = "1.8", optional = true, default-features = false }
 rustls-platform-verifier = { version = "0.7", optional = true, default-features = false }
-rustls-webpki = { version = "0.103", optional = true, default-features = false }
+rustls-webpki = { version = "0.103.16", optional = true, default-features = false }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
 socket2 = { version = "0.6", optional = true }
