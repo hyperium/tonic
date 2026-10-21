@@ -183,6 +183,7 @@ mod tests {
                     .iter()
                     .map(|s| ResolvedEndpoint {
                         address: EndpointAddress::from(s.addr),
+                        additional_addresses: vec![],
                         health_status: HealthStatus::Healthy,
                         load_balancing_weight: 1,
                     })
