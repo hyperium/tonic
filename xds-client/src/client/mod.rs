@@ -27,9 +27,10 @@
 use std::fmt;
 use std::sync::Arc;
 
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 
 use crate::client::config::ClientConfig;
+use crate::client::snapshot::ResourceSnapshot;
 use crate::client::watch::ResourceWatcher;
 use crate::client::worker::{AdsWorker, TransportContext, WatchEvent, WatcherId, WorkerCommand};
 use crate::codec::XdsCodec;
@@ -40,6 +41,7 @@ use crate::transport::TransportBuilder;
 
 pub mod config;
 pub mod retry;
+pub mod snapshot;
 pub mod watch;
 pub mod worker;
 
@@ -228,6 +230,26 @@ impl XdsClient {
             }));
 
         ResourceWatcher::new(event_rx, watcher_id, self.command_tx.clone())
+    }
+
+    /// Returns the status of every resource the client is subscribed to,
+    /// sorted by type URL and name. This is the data an xDS config dump, such
+    /// as a CSDS service (gRFC A40), reports.
+    ///
+    /// The background worker answers in order with its other queued work.
+    /// Connecting or reconnecting to the xDS server does not delay it.
+    ///
+    /// Returns an empty list if the worker has stopped.
+    pub async fn resource_snapshot(&self) -> Vec<ResourceSnapshot> {
+        let (reply, snapshot) = oneshot::channel();
+        if self
+            .command_tx
+            .send(WorkerCommand::Snapshot { reply })
+            .is_err()
+        {
+            return Vec::new();
+        }
+        snapshot.await.unwrap_or_default()
     }
 
     /// Creates a disconnected client with no backing worker.

@@ -36,13 +36,14 @@ use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use bytes::Bytes;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::client::config::{ClientConfig, ServerConfig};
 use crate::client::retry::{Backoff, RetryPolicy};
+use crate::client::snapshot::{AcceptedResource, RejectedUpdate, ResourceSnapshot, ResourceStatus};
 use crate::client::watch::{ProcessingDone, ResourceEvent};
 use crate::codec::XdsCodec;
 use crate::error::{Error, Result};
@@ -265,6 +266,14 @@ impl SubscriptionMode {
             Self::Named(names) => names.iter().cloned().collect(),
         }
     }
+
+    /// Returns true if the resource `name` is subscribed to.
+    fn includes(&self, name: &str) -> bool {
+        match self {
+            Self::Wildcard => true,
+            Self::Named(names) => names.contains(name),
+        }
+    }
 }
 
 /// State of a cached resource per gRFC A88.
@@ -274,8 +283,8 @@ enum ResourceState {
     Requested,
     /// Resource has been successfully received and validated.
     Received,
-    /// Resource validation failed. Contains the error message.
-    NACKed(String),
+    /// Resource validation failed. Contains this resource's rejected update.
+    NACKed(RejectedUpdate),
     /// Resource does not exist (server indicated deletion or absence).
     DoesNotExist,
 }
@@ -293,6 +302,15 @@ impl ResourceState {
             ResourceState::DoesNotExist => "does_not_exist",
         }
     }
+
+    fn status(&self) -> ResourceStatus {
+        match self {
+            ResourceState::Requested => ResourceStatus::Requested,
+            ResourceState::Received => ResourceStatus::Acked,
+            ResourceState::NACKed(_) => ResourceStatus::Nacked,
+            ResourceState::DoesNotExist => ResourceStatus::DoesNotExist,
+        }
+    }
 }
 
 /// A cached resource entry.
@@ -303,6 +321,9 @@ struct CachedResource {
     /// The decoded resource, if successfully received.
     /// None if state is Requested, NACKed, or DoesNotExist.
     resource: Option<Arc<DecodedResource>>,
+    /// The last accepted version as received, for snapshots. Unlike
+    /// `resource`, it is kept when the resource is later rejected or removed.
+    accepted: Option<AcceptedResource>,
 }
 
 impl CachedResource {
@@ -311,30 +332,34 @@ impl CachedResource {
         Self {
             state: ResourceState::Requested,
             resource: None,
+            accepted: None,
         }
     }
 
     /// Create a cached resource in Received state.
-    fn received(resource: Arc<DecodedResource>) -> Self {
+    fn received(resource: Arc<DecodedResource>, accepted: AcceptedResource) -> Self {
         Self {
             state: ResourceState::Received,
             resource: Some(resource),
+            accepted: Some(accepted),
         }
     }
 
     /// Create a cached resource in DoesNotExist state.
-    fn does_not_exist() -> Self {
+    fn does_not_exist(accepted: Option<AcceptedResource>) -> Self {
         Self {
             state: ResourceState::DoesNotExist,
             resource: None,
+            accepted,
         }
     }
 
     /// Create a cached resource in NACKed state.
-    fn nacked(error: String) -> Self {
+    fn nacked(rejected: RejectedUpdate, accepted: Option<AcceptedResource>) -> Self {
         Self {
-            state: ResourceState::NACKed(error),
+            state: ResourceState::NACKed(rejected),
             resource: None,
+            accepted,
         }
     }
 
@@ -361,8 +386,8 @@ impl CachedResource {
                 result: Err(Error::ResourceDoesNotExist),
                 done,
             }),
-            ResourceState::NACKed(error) => Some(ResourceEvent::ResourceChanged {
-                result: Err(Error::Validation(error.clone())),
+            ResourceState::NACKed(rejected) => Some(ResourceEvent::ResourceChanged {
+                result: Err(Error::Validation(rejected.details.clone())),
                 done,
             }),
             ResourceState::Requested => None,
@@ -461,6 +486,23 @@ impl TypeState {
             .map(|e| &e.event_tx)
     }
 
+    /// Snapshots of the subscribed resources in the cache.
+    fn snapshot(&self) -> impl Iterator<Item = ResourceSnapshot> + '_ {
+        self.cache
+            .iter()
+            .filter(|(name, _)| self.subscription.includes(name))
+            .map(|(name, cached)| ResourceSnapshot {
+                type_url: self.type_url.to_string(),
+                name: name.clone(),
+                status: cached.state.status(),
+                accepted: cached.accepted.clone(),
+                rejected: match &cached.state {
+                    ResourceState::NACKed(rejected) => Some(rejected.clone()),
+                    _ => None,
+                },
+            })
+    }
+
     /// Current number of cached resources in each `grpc.xds.cache_state`, keyed
     /// by the canonical state label. States with no resources are omitted; this
     /// is the authoritative snapshot for the `grpc.xds_client.resources` gauge.
@@ -523,6 +565,11 @@ pub(crate) enum WorkerCommand {
     Watcher(WatchEvent),
     Transport(TransportEvent),
     TransportStopped,
+    /// Report the status of every subscribed resource.
+    Snapshot {
+        /// Channel to send the snapshot to.
+        reply: oneshot::Sender<Vec<ResourceSnapshot>>,
+    },
 }
 
 /// Watcher registrations, cancellations, and resource timer expirations.
@@ -691,6 +738,10 @@ where
                 }
                 WorkerCommand::Transport(event) => self.handle_transport_event(event, &mut context),
                 WorkerCommand::TransportStopped => break,
+                WorkerCommand::Snapshot { reply } => {
+                    let _ = reply.send(self.snapshot());
+                    Ok(())
+                }
             };
             // Every protocol or write failure retires the stream the same way.
             if result.is_err()
@@ -837,6 +888,17 @@ where
             }
         }
         Ok(())
+    }
+
+    /// Snapshots of every subscribed resource, sorted by type URL and name.
+    fn snapshot(&self) -> Vec<ResourceSnapshot> {
+        let mut snapshot: Vec<ResourceSnapshot> = self
+            .type_states
+            .values()
+            .flat_map(TypeState::snapshot)
+            .collect();
+        snapshot.sort_by(|a, b| (&a.type_url, &a.name).cmp(&(&b.type_url, &b.name)));
+        snapshot
     }
 
     /// Add a watcher to the state.
@@ -1023,14 +1085,20 @@ where
         // Per A88, we categorize errors:
         // - top_level_errors: deserialization failures where name cannot be extracted
         // - per_resource_errors: validation failures where name is known
-        let mut valid_resources: Vec<DecodedResource> = Vec::new();
+        let now = SystemTime::now();
+        let mut valid_resources: Vec<(DecodedResource, AcceptedResource)> = Vec::new();
         let mut top_level_errors: Vec<String> = Vec::new();
         let mut per_resource_errors: Vec<(String, String)> = Vec::new(); // (name, error)
 
         for resource_any in &response.resources {
             match decoder(resource_any.value.clone()) {
                 crate::resource::DecodeResult::Success { resource, .. } => {
-                    valid_resources.push(resource);
+                    let accepted = AcceptedResource::new(
+                        response.version_info.clone(),
+                        resource_any.clone(),
+                        now,
+                    );
+                    valid_resources.push((resource, accepted));
                 }
                 crate::resource::DecodeResult::ResourceError { name, error } => {
                     per_resource_errors.push((name, error.to_string()));
@@ -1054,15 +1122,18 @@ where
 
         let received_names: HashSet<String> = valid_resources
             .iter()
-            .map(|r| r.name().to_string())
+            .map(|(r, _)| r.name().to_string())
             .collect();
+
+        let nack_error = nack_error_message(&top_level_errors, &per_resource_errors);
 
         self.dispatch_resources(&type_url, valid_resources, &done);
 
         // Only notify watchers for per-resource errors (where we know the name).
         // Top-level errors have no associated name, so no watcher to notify.
-        for (resource_name, error) in &per_resource_errors {
-            self.notify_resource_error(&type_url, resource_name, error, &done);
+        for (resource_name, error) in per_resource_errors {
+            let rejected = RejectedUpdate::new(response.version_info.clone(), error, now);
+            self.notify_resource_error(&type_url, &resource_name, rejected, &done);
         }
 
         // Detect deleted resources (per A53):
@@ -1070,32 +1141,16 @@ where
         // any previously-received resource not in this response is deleted.
         self.detect_deleted_resources(&type_url, &received_names, &done);
 
-        let has_errors = !top_level_errors.is_empty() || !per_resource_errors.is_empty();
-        if !has_errors {
-            // Only update version on ACK; NACK must keep the old version so the
-            // server knows which version the client is still running.
-            if let Some(ts) = self.type_states.get_mut(&type_url) {
-                ts.version_info = response.version_info.clone();
+        match nack_error {
+            None => {
+                // Only update version on ACK; NACK must keep the old version so the
+                // server knows which version the client is still running.
+                if let Some(ts) = self.type_states.get_mut(&type_url) {
+                    ts.version_info = response.version_info.clone();
+                }
+                self.send_ack(sender, &response)?;
             }
-            self.send_ack(sender, &response)?;
-        } else {
-            // Build NACK message combining both error categories
-            let mut error_parts = Vec::new();
-
-            if !top_level_errors.is_empty() {
-                error_parts.push(format!("top level errors: {}", top_level_errors.join("; ")));
-            }
-
-            if !per_resource_errors.is_empty() {
-                let per_resource_msg = per_resource_errors
-                    .iter()
-                    .map(|(name, err)| format!("{name}: {err}"))
-                    .collect::<Vec<_>>()
-                    .join("; ");
-                error_parts.push(per_resource_msg);
-            }
-
-            self.send_nack(sender, &response, error_parts.join("; "))?;
+            Some(error) => self.send_nack(sender, &response, error)?,
         }
 
         Ok(())
@@ -1108,19 +1163,19 @@ where
     fn dispatch_resources(
         &mut self,
         type_url: &str,
-        resources: Vec<DecodedResource>,
+        resources: Vec<(DecodedResource, AcceptedResource)>,
         done: &ProcessingDone,
     ) {
         let Some(type_state) = self.type_states.get_mut(type_url) else {
             return;
         };
 
-        for resource in resources {
+        for (resource, accepted) in resources {
             let resource_name = resource.name().to_string();
             let resource = Arc::new(resource);
             type_state.cache.insert(
                 resource_name.clone(),
-                CachedResource::received(Arc::clone(&resource)),
+                CachedResource::received(Arc::clone(&resource), accepted),
             );
             // Cancel the initial resource timer (gRFC A57).
             self.resource_timers
@@ -1146,7 +1201,7 @@ where
         &mut self,
         type_url: &str,
         resource_name: &str,
-        error: &str,
+        rejected: RejectedUpdate,
         done: &ProcessingDone,
     ) {
         let type_state = match self.type_states.get_mut(type_url) {
@@ -1154,9 +1209,14 @@ where
             None => return,
         };
 
+        let error = rejected.details.clone();
+        let accepted = type_state
+            .cache
+            .remove(resource_name)
+            .and_then(|c| c.accepted);
         type_state.cache.insert(
             resource_name.to_string(),
-            CachedResource::nacked(error.to_string()),
+            CachedResource::nacked(rejected, accepted),
         );
         let counts = type_state.resource_state_counts();
         self.recorder
@@ -1168,7 +1228,7 @@ where
 
         for event_tx in type_state.matching_watchers(resource_name) {
             let event = ResourceEvent::ResourceChanged {
-                result: Err(Error::Validation(error.to_string())),
+                result: Err(Error::Validation(error.clone())),
                 done: done.share(),
             };
             let _ = event_tx.send(event);
@@ -1206,9 +1266,10 @@ where
             .collect();
 
         for name in deleted_names {
+            let accepted = type_state.cache.remove(&name).and_then(|c| c.accepted);
             type_state
                 .cache
-                .insert(name.clone(), CachedResource::does_not_exist());
+                .insert(name.clone(), CachedResource::does_not_exist(accepted));
 
             for event_tx in type_state.matching_watchers(&name) {
                 let event = ResourceEvent::ResourceChanged {
@@ -1354,7 +1415,7 @@ where
 
         type_state
             .cache
-            .insert(name.to_string(), CachedResource::does_not_exist());
+            .insert(name.to_string(), CachedResource::does_not_exist(None));
         let counts = type_state.resource_state_counts();
         self.recorder
             .sync_resource_counts(&type_state.type_url, &counts);
@@ -1525,6 +1586,29 @@ fn send_worker_command(
         .ok_or(Error::StreamClosed)?
         .send(message)
         .map_err(|_| Error::StreamClosed)
+}
+
+/// The NACK error for a response, or `None` if every resource was valid.
+fn nack_error_message(
+    top_level_errors: &[String],
+    per_resource_errors: &[(String, String)],
+) -> Option<String> {
+    let mut error_parts = Vec::new();
+
+    if !top_level_errors.is_empty() {
+        error_parts.push(format!("top level errors: {}", top_level_errors.join("; ")));
+    }
+
+    if !per_resource_errors.is_empty() {
+        let per_resource_msg = per_resource_errors
+            .iter()
+            .map(|(name, err)| format!("{name}: {err}"))
+            .collect::<Vec<_>>()
+            .join("; ");
+        error_parts.push(per_resource_msg);
+    }
+
+    (!error_parts.is_empty()).then(|| error_parts.join("; "))
 }
 
 #[cfg(test)]
@@ -1739,6 +1823,7 @@ mod tests {
 
     const TEST_TYPE_URL: &str = "type.googleapis.com/test.Resource";
     const SOTW_TYPE_URL: &str = "type.googleapis.com/test.SotwResource";
+    const VERSIONED_TYPE_URL: &str = "type.googleapis.com/test.VersionedResource";
 
     /// Minimal resource: the message is the resource name itself. Names
     /// starting with `bad` fail validation (a per-resource error, per A46).
@@ -1761,6 +1846,34 @@ mod tests {
         fn validate(message: Self::Message) -> Result<Self> {
             if message.starts_with("bad") {
                 return Err(Error::Validation("bad resource".to_string()));
+            }
+            Ok(Self)
+        }
+    }
+
+    /// A resource sent as `name` or `name#bad`. Unlike [`TestResource`],
+    /// validity depends on the content rather than the name, so one resource
+    /// can be accepted, rejected, and accepted again. The validation error
+    /// names the resource, so each rejection is distinct.
+    #[derive(Debug, Clone)]
+    struct VersionedResource;
+
+    impl Resource for VersionedResource {
+        type Message = String;
+        const TYPE_URL: TypeUrl = TypeUrl::new(VERSIONED_TYPE_URL);
+        const ALL_RESOURCES_REQUIRED_IN_SOTW: bool = false;
+
+        fn deserialize(bytes: Bytes) -> Result<Self::Message> {
+            String::from_utf8(bytes.to_vec()).map_err(|e| Error::Validation(e.to_string()))
+        }
+
+        fn name(message: &Self::Message) -> &str {
+            message.split('#').next().unwrap_or_default()
+        }
+
+        fn validate(message: Self::Message) -> Result<Self> {
+            if let Some(name) = message.strip_suffix("#bad") {
+                return Err(Error::Validation(format!("{name} is bad")));
             }
             Ok(Self)
         }
@@ -3279,5 +3392,239 @@ mod tests {
         assert!(text2.contains("res-2"));
 
         drop(done);
+    }
+
+    async fn take_snapshot(client: &XdsClient) -> Vec<ResourceSnapshot> {
+        tokio::time::timeout(Duration::from_secs(5), client.resource_snapshot())
+            .await
+            .expect("timed out waiting for snapshot")
+    }
+
+    fn versioned_response(version: &str, nonce: &str, names: &[&str]) -> Bytes {
+        response_for(VERSIONED_TYPE_URL, version, nonce, names)
+    }
+
+    /// A distinct nonce for each response. These tests only check versions.
+    fn next_nonce() -> String {
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        NEXT.fetch_add(1, Ordering::Relaxed).to_string()
+    }
+
+    #[tokio::test]
+    async fn snapshot_reports_requested_resource() {
+        let (client, _watcher, _server) = connected_client().await;
+
+        let snapshot = take_snapshot(&client).await;
+        assert_eq!(snapshot.len(), 1);
+        assert_eq!(snapshot[0].type_url, TEST_TYPE_URL);
+        assert_eq!(snapshot[0].name, "res-0");
+        assert_eq!(snapshot[0].status, ResourceStatus::Requested);
+        assert!(snapshot[0].accepted.is_none());
+        assert!(snapshot[0].rejected.is_none());
+    }
+
+    #[tokio::test]
+    async fn snapshot_reports_accepted_resource() {
+        let (client, mut watcher, server) = connected_client().await;
+        let before = SystemTime::now();
+        server
+            .responses
+            .send(Ok(Some(response("1", &next_nonce(), &["res-0"]))))
+            .unwrap();
+        let (result, done) = next_changed(&mut watcher).await;
+        assert!(result.is_ok());
+
+        // Answered while the response's flow-control token is still held.
+        let snapshot = take_snapshot(&client).await;
+        drop(done);
+        assert_eq!(snapshot.len(), 1);
+        assert_eq!(snapshot[0].status, ResourceStatus::Acked);
+        let accepted = snapshot[0].accepted.as_ref().unwrap();
+        assert_eq!(accepted.version_info, "1");
+        assert_eq!(accepted.resource.type_url, TEST_TYPE_URL);
+        assert_eq!(accepted.resource.value, Bytes::from("res-0"));
+        assert!(accepted.last_updated >= before);
+        assert!(snapshot[0].rejected.is_none());
+    }
+
+    #[tokio::test]
+    async fn snapshot_keeps_accepted_version_of_rejected_resource() {
+        let (client, mut watcher, mut server) = connected_client_for::<VersionedResource>().await;
+        server
+            .responses
+            .send(Ok(Some(versioned_response("1", &next_nonce(), &["res-0"]))))
+            .unwrap();
+        assert!(next_changed(&mut watcher).await.0.is_ok());
+        let _ack = server.requests.recv().await.unwrap();
+
+        let nack_nonce = next_nonce();
+        server
+            .responses
+            .send(Ok(Some(versioned_response(
+                "2",
+                &nack_nonce,
+                &["res-0#bad"],
+            ))))
+            .unwrap();
+        assert!(next_changed(&mut watcher).await.0.is_err());
+        let nack = server.requests.recv().await.unwrap();
+        assert_eq!(parse_request(&nack), ("1".to_string(), nack_nonce));
+
+        let snapshot = take_snapshot(&client).await;
+        assert_eq!(snapshot[0].status, ResourceStatus::Nacked);
+        let accepted = snapshot[0].accepted.as_ref().unwrap();
+        assert_eq!(accepted.version_info, "1");
+        assert_eq!(accepted.resource.value, Bytes::from("res-0"));
+        let rejected = snapshot[0].rejected.as_ref().unwrap();
+        assert_eq!(rejected.version_info, "2");
+        assert_eq!(rejected.details, "resource validation failed: res-0 is bad");
+        assert!(rejected.last_update_attempt >= accepted.last_updated);
+
+        // A later accepted version clears the rejection.
+        server
+            .responses
+            .send(Ok(Some(versioned_response("3", &next_nonce(), &["res-0"]))))
+            .unwrap();
+        assert!(next_changed(&mut watcher).await.0.is_ok());
+        let snapshot = take_snapshot(&client).await;
+        assert_eq!(snapshot[0].status, ResourceStatus::Acked);
+        assert_eq!(snapshot[0].accepted.as_ref().unwrap().version_info, "3");
+        assert!(snapshot[0].rejected.is_none());
+    }
+
+    #[tokio::test]
+    async fn snapshot_of_partially_rejected_response() {
+        let (builder, mut servers) = mock_transport();
+        let config = ClientConfig::new(Node::new("test", "0"), "mock:///xds");
+        let client = XdsClient::builder(config, builder, FakeCodec, TokioRuntime).build();
+        let mut watchers = Vec::new();
+        for name in ["res-0", "res-1", "res-2"] {
+            watchers.push(client.watch::<VersionedResource>(name).await);
+        }
+        let server = servers.recv().await.unwrap();
+
+        server
+            .responses
+            .send(Ok(Some(versioned_response(
+                "1",
+                &next_nonce(),
+                &["res-0", "res-1#bad", "res-2#bad"],
+            ))))
+            .unwrap();
+        for watcher in &mut watchers {
+            let _ = next_changed(watcher).await;
+        }
+
+        let snapshot = take_snapshot(&client).await;
+        let names: Vec<&str> = snapshot.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, ["res-0", "res-1", "res-2"]);
+
+        // A valid resource is accepted even though the response was NACKed.
+        assert_eq!(snapshot[0].status, ResourceStatus::Acked);
+        assert_eq!(snapshot[0].accepted.as_ref().unwrap().version_info, "1");
+
+        // Each invalid resource reports only its own error, not the whole
+        // NACK error.
+        for rejected in &snapshot[1..] {
+            assert_eq!(rejected.status, ResourceStatus::Nacked);
+            assert!(rejected.accepted.is_none());
+            let update = rejected.rejected.as_ref().unwrap();
+            assert_eq!(update.version_info, "1");
+            assert_eq!(
+                update.details,
+                format!("resource validation failed: {} is bad", rejected.name)
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn snapshot_keeps_accepted_version_of_deleted_resource() {
+        let (client, mut watcher, server) = connected_client_for::<SotwResource>().await;
+        server
+            .responses
+            .send(Ok(Some(sotw_response("1", &next_nonce(), &["res-0"]))))
+            .unwrap();
+        assert!(next_changed(&mut watcher).await.0.is_ok());
+
+        server
+            .responses
+            .send(Ok(Some(sotw_response("2", &next_nonce(), &[]))))
+            .unwrap();
+        let (result, _done) = next_changed(&mut watcher).await;
+        assert!(matches!(result, Err(Error::ResourceDoesNotExist)));
+
+        let snapshot = take_snapshot(&client).await;
+        assert_eq!(snapshot[0].status, ResourceStatus::DoesNotExist);
+        assert_eq!(snapshot[0].accepted.as_ref().unwrap().version_info, "1");
+        assert!(snapshot[0].rejected.is_none());
+    }
+
+    #[tokio::test]
+    async fn snapshot_reports_timed_out_resource_as_does_not_exist() {
+        let (builder, mut servers) = mock_transport();
+        let config = ClientConfig::new(Node::new("test", "0"), "mock:///xds")
+            .with_resource_initial_timeout(Some(Duration::from_millis(10)));
+        let client = XdsClient::builder(config, builder, FakeCodec, TokioRuntime).build();
+        let mut watcher = client.watch::<TestResource>("res-0").await;
+        let _server = servers.recv().await.unwrap();
+
+        let (result, _done) = next_changed(&mut watcher).await;
+        assert!(matches!(result, Err(Error::ResourceDoesNotExist)));
+
+        let snapshot = take_snapshot(&client).await;
+        assert_eq!(snapshot[0].status, ResourceStatus::DoesNotExist);
+        assert!(snapshot[0].accepted.is_none());
+    }
+
+    #[tokio::test]
+    async fn snapshot_omits_unsubscribed_resources() {
+        let (client, mut watcher, mut server) = connected_client().await;
+        let other = watch_synced(&client, &mut server, "res-1").await;
+        server
+            .responses
+            .send(Ok(Some(response("1", &next_nonce(), &["res-0", "res-1"]))))
+            .unwrap();
+        assert!(next_changed(&mut watcher).await.0.is_ok());
+        let _ack = server.requests.recv().await.unwrap();
+
+        // The cache keeps res-1 after its last watcher goes away, but the
+        // client no longer subscribes to it.
+        drop(other);
+        let _unsubscribe = server.requests.recv().await.unwrap();
+
+        let names: Vec<String> = take_snapshot(&client)
+            .await
+            .into_iter()
+            .map(|s| s.name)
+            .collect();
+        assert_eq!(names, ["res-0"]);
+    }
+
+    #[tokio::test]
+    async fn snapshot_includes_resources_of_wildcard_subscription() {
+        let (client, mut watcher, mut server) = connected_client().await;
+        let mut wildcard = watch_synced(&client, &mut server, "").await;
+        server
+            .responses
+            .send(Ok(Some(response("1", &next_nonce(), &["res-0", "res-9"]))))
+            .unwrap();
+        assert!(next_changed(&mut watcher).await.0.is_ok());
+        assert!(next_changed(&mut wildcard).await.0.is_ok());
+        assert!(next_changed(&mut wildcard).await.0.is_ok());
+
+        let names: Vec<String> = take_snapshot(&client)
+            .await
+            .into_iter()
+            .map(|s| s.name)
+            .collect();
+        assert_eq!(names, ["res-0", "res-9"]);
+    }
+
+    #[tokio::test]
+    async fn snapshot_of_stopped_worker_is_empty() {
+        let (command_tx, command_rx) = mpsc::unbounded_channel();
+        drop(command_rx);
+        let client = XdsClient { command_tx };
+        assert!(take_snapshot(&client).await.is_empty());
     }
 }
