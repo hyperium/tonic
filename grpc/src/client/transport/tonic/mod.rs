@@ -372,10 +372,9 @@ impl RecvStream for TonicRecvStream {
                         None,
                     ),
                 },
-                Err(status) => {
+                Err(mut status) => {
                     // Stay closed after sending trailers (do not set self.state).
-                    let trailers = stream.trailers().await;
-                    let md = trailers.unwrap_or_default().unwrap_or_default();
+                    let md = std::mem::take(status.metadata_mut());
                     self.trailers_from_tonic_status(&status, md)
                 }
                 Ok(None) => {
