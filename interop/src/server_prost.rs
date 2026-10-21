@@ -98,7 +98,10 @@ impl pb::test_service_server::TestService for TestService {
                 tokio::time::sleep(Duration::from_micros(param.interval_us as u64)).await;
 
                 let payload = crate::server_payload(param.size as usize);
-                yield StreamingOutputCallResponse { payload: Some(payload) };
+                yield StreamingOutputCallResponse {
+                    payload: Some(payload),
+                    ..Default::default()
+                };
             }
         };
 
@@ -153,7 +156,10 @@ impl pb::test_service_server::TestService for TestService {
                         tokio::time::sleep(Duration::from_micros(param.interval_us as u64)).await;
 
                         let payload = crate::server_payload(param.size as usize);
-                        yield StreamingOutputCallResponse { payload: Some(payload) };
+                        yield StreamingOutputCallResponse {
+                            payload: Some(payload),
+                            ..Default::default()
+                        };
                     }
                 }
             };
