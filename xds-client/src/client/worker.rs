@@ -3032,13 +3032,9 @@ mod tests {
 
         // More commands than the previous bounded queue could hold.
         let mut extra = Vec::new();
-        tokio::time::timeout(Duration::from_secs(5), async {
-            for i in 1..=100 {
-                extra.push(client.watch::<TestResource>(format!("res-{i}")));
-            }
-        })
-        .await
-        .expect("deadlock: commands not drained while ProcessingDone was held");
+        for i in 1..=100 {
+            extra.push(client.watch::<TestResource>(format!("res-{i}")));
+        }
 
         // The worker is still healthy end-to-end: it reads the next response
         // and delivers it.

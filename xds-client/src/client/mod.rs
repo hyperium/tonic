@@ -172,8 +172,6 @@ impl XdsClient {
     /// Watch a resource by name.
     ///
     /// Returns a [`ResourceWatcher`] that receives events for this resource.
-    /// Registration is queued immediately without waiting for the worker or server.
-    /// Receive updates asynchronously with [`ResourceWatcher::next`].
     /// Dropping the watcher automatically unsubscribes.
     ///
     /// # Arguments
