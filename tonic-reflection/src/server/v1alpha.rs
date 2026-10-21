@@ -82,7 +82,7 @@ impl ServerReflection for ReflectionService {
                         }
                         MessageRequest::AllExtensionNumbersOfType(_) => {
                             // NOTE: Workaround. Some grpc clients (e.g. grpcurl) expect this method not to fail.
-                            // https://github.com/hyperium/tonic/issues/1077
+                            // https://github.com/grpc/grpc-rust/issues/1077
                             Ok(MessageResponse::AllExtensionNumbersResponse(
                                 ExtensionNumberResponse::default(),
                             ))

@@ -1,12 +1,12 @@
-![](https://github.com/hyperium/tonic/raw/master/.github/assets/tonic-banner.svg?sanitize=true)
+![](https://github.com/grpc/grpc-rust/raw/master/.github/assets/tonic-banner.svg?sanitize=true)
 
 
 A rust implementation of [gRPC], a high performance, open source, general
 RPC framework that puts mobile and HTTP/2 first.
 
-> **Note**: tonic's [master](https://github.com/hyperium/tonic) branch is
+> **Note**: tonic's [master](https://github.com/grpc/grpc-rust) branch is
 > currently preparing breaking changes. For the most recently *released* code,
-> look to the [0.14.x branch](https://github.com/hyperium/tonic/tree/v0.14.x).
+> look to the [0.14.x branch](https://github.com/grpc/grpc-rust/tree/v0.14.x).
 
 [`tonic`] is a gRPC over HTTP/2 implementation focused on high performance, interoperability, and flexibility. This library was created to have first class support of async/await and to act as a core building block for production systems written in Rust.
 
@@ -62,7 +62,7 @@ If the answer is not there, there is an active community in
 the [Tonic Discord channel][discord]. We would be happy to try to answer your
 question. If that doesn't work, try opening an [issue] with the question.
 
-[issue]: https://github.com/hyperium/tonic/issues/new/choose
+[issue]: https://github.com/grpc/grpc-rust/issues/new/choose
 
 ## Project Layout
 
@@ -107,11 +107,11 @@ terms or conditions.
 [`prost`]: https://github.com/tokio-rs/prost
 [`protobuf`]: https://protobuf.dev/
 [`rustls`]: https://github.com/rustls/rustls
-[`interop`]: https://github.com/hyperium/tonic/tree/master/interop
-[Examples]: https://github.com/hyperium/tonic/tree/master/examples
-[Website]: https://github.com/hyperium/tonic
+[`interop`]: https://github.com/grpc/grpc-rust/tree/master/interop
+[Examples]: https://github.com/grpc/grpc-rust/tree/master/examples
+[Website]: https://github.com/grpc/grpc-rust
 [Docs]: https://docs.rs/tonic
 [discord]: https://discord.gg/6yGkFeN
-[routeguide-tutorial]: https://github.com/hyperium/tonic/blob/master/examples/routeguide-tutorial.md
-[helloworld-tutorial]: https://github.com/hyperium/tonic/blob/master/examples/helloworld-tutorial.md
+[routeguide-tutorial]: https://github.com/grpc/grpc-rust/blob/master/examples/routeguide-tutorial.md
+[helloworld-tutorial]: https://github.com/grpc/grpc-rust/blob/master/examples/helloworld-tutorial.md
 [healthcheck]: https://grpc.io/docs/guides/health-checking/

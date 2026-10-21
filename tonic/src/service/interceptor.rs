@@ -60,8 +60,8 @@ use tower_service::Service;
 /// middleware supports gRPC out of the box.
 ///
 /// [tower]: https://crates.io/crates/tower
-/// [example]: https://github.com/hyperium/tonic/tree/master/examples/src/interceptor
-/// [tower-example]: https://github.com/hyperium/tonic/tree/master/examples/src/tower
+/// [example]: https://github.com/grpc/grpc-rust/tree/master/examples/src/interceptor
+/// [tower-example]: https://github.com/grpc/grpc-rust/tree/master/examples/src/tower
 pub trait Interceptor {
     /// Intercept a request before it is sent, optionally cancelling it.
     fn call(&mut self, request: crate::Request<()>) -> Result<crate::Request<()>, Status>;

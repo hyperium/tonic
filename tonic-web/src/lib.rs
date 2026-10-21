@@ -88,11 +88,11 @@
 //! * There is no support for web socket transports.
 //!
 //!
-//! [`tonic`]: https://github.com/hyperium/tonic
-//! [`tonic_web`]: https://github.com/hyperium/tonic
+//! [`tonic`]: https://github.com/grpc/grpc-rust
+//! [`tonic_web`]: https://github.com/grpc/grpc-rust
 //! [grpc-web]: https://github.com/grpc/grpc-web
 //! [tower]: https://github.com/tower-rs/tower
-#![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
+#![doc(issue_tracker_base_url = "https://github.com/grpc/grpc-rust/issues/")]
 
 pub use call::GrpcWebCall;
 pub use client::{GrpcWebClientLayer, GrpcWebClientService};

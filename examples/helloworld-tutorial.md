@@ -42,7 +42,7 @@ $ touch proto/helloworld.proto
 Then you define RPC methods inside your service definition, specifying their request and response
 types. gRPC lets you define four kinds of service methods, all of which are supported by Tonic. For this tutorial we will only use a simple RPC, if you would like to see a Tonic example which uses all four kinds please read the [routeguide tutorial].
 
-[routeguide tutorial]: https://github.com/hyperium/tonic/blob/master/examples/routeguide-tutorial.md
+[routeguide tutorial]: https://github.com/grpc/grpc-rust/blob/master/examples/routeguide-tutorial.md
 
 First we define our package name, which is what Tonic looks for when including your protos in the client and server applications. Lets give this one a name of `helloworld`.
 
@@ -136,7 +136,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 This tells `tonic-build` to compile your protobufs when you build your Rust project. While you can configure this build process in a number of ways, we will not get into the details in this introductory tutorial. Please see the [tonic-build] documentation for details on configuration.
 
-[tonic-build]: https://github.com/hyperium/tonic/blob/master/tonic-build/README.md
+[tonic-build]: https://github.com/grpc/grpc-rust/blob/master/tonic-build/README.md
 
 ## Writing our Server
 

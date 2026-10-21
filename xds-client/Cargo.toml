@@ -3,8 +3,8 @@ name = "xds-client"
 description = "An xDS client implementation in Rust"
 version = "0.1.0-alpha.4"
 edition = "2024"
-homepage = "https://github.com/hyperium/tonic"
-repository = "https://github.com/hyperium/tonic"
+homepage = "https://github.com/grpc/grpc-rust"
+repository = "https://github.com/grpc/grpc-rust"
 license = "MIT"
 rust-version = { workspace = true }
 publish = true
