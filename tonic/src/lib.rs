@@ -95,14 +95,14 @@
 //! memory. By default, the decoding message limit is `4MB` and the encoding limit is `usize::MAX`.
 //!
 //! [gRPC]: https://grpc.io
-//! [`tonic`]: https://github.com/hyperium/tonic
+//! [`tonic`]: https://github.com/grpc/grpc-rust
 //! [`tokio`]: https://docs.rs/tokio
 //! [`hyper`]: https://docs.rs/hyper
 //! [`tower`]: https://docs.rs/tower
 //! [`tonic-build`]: https://docs.rs/tonic-build
 //! [`ring`]: https://docs.rs/ring
 //! [`aws-lc-rs`]: https://docs.rs/aws-lc-rs
-//! [`tonic-examples`]: https://github.com/hyperium/tonic/tree/master/examples
+//! [`tonic-examples`]: https://github.com/grpc/grpc-rust/tree/master/examples
 //! [`Codec`]: codec/trait.Codec.html
 //! [`Channel`]: transport/struct.Channel.html
 //! [`Server`]: transport/struct.Server.html
@@ -119,7 +119,7 @@
 #![doc(
     html_logo_url = "https://raw.githubusercontent.com/tokio-rs/website/master/public/img/icons/tonic.svg"
 )]
-#![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
+#![doc(issue_tracker_base_url = "https://github.com/grpc/grpc-rust/issues/")]
 #![doc(test(no_crate_inject, attr(deny(rust_2018_idioms))))]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 

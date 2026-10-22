@@ -8,12 +8,12 @@ description = """
 Server Reflection module of `tonic` gRPC implementation.
 """
 edition = "2024"
-homepage = "https://github.com/hyperium/tonic"
+homepage = "https://github.com/grpc/grpc-rust"
 keywords = ["rpc", "grpc", "async", "reflection"]
 license = "MIT"
 name = "tonic-reflection"
 readme = "README.md"
-repository = "https://github.com/hyperium/tonic"
+repository = "https://github.com/grpc/grpc-rust"
 version = "0.14.6"
 rust-version = { workspace = true }
 

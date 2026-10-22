@@ -7,10 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-
-- *(codec)* respect server's enabled encodings when selecting response compression, fixing a case where a server configured with `send_compressed(Zstd)` would still gzip responses when the client listed `gzip` before `zstd` in `grpc-accept-encoding`
-
 ## [0.14.6](https://github.com/hyperium/tonic/compare/tonic-v0.14.5...tonic-v0.14.6) - 2026-05-06
 
 ### Added

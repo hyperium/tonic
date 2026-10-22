@@ -29,4 +29,4 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 See [the examples folder][example] for a server and client example.
 
-[example]: https://github.com/hyperium/tonic/tree/master/examples/src/grpc-web
+[example]: https://github.com/grpc/grpc-rust/tree/master/examples/src/grpc-web
