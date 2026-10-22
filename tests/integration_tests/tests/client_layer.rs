@@ -67,7 +67,7 @@ async fn connect_supports_standard_tower_layers() {
         .unwrap()
         .connect_lazy();
 
-    // prior to https://github.com/hyperium/tonic/pull/974
+    // prior to https://github.com/grpc/grpc-rust/pull/974
     // this would not compile. (specifically the `TraceLayer`)
     let mut client = TestClient::new(
         ServiceBuilder::new()

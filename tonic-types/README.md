@@ -126,12 +126,12 @@ more direct way of extracting a [`BadRequest`] error message from
 [gRPC Richer Error Model]: https://www.grpc.io/docs/guides/error/
 [`pb`]: https://docs.rs/tonic-types/latest/tonic_types/pb/index.html
 [`StatusExt`]: https://docs.rs/tonic-types/latest/tonic_types/trait.StatusExt.html
-[examples]: https://github.com/hyperium/tonic/tree/master/examples
+[examples]: https://github.com/grpc/grpc-rust/tree/master/examples
 [`ErrorDetails`]: https://docs.rs/tonic-types/latest/tonic_types/struct.ErrorDetails.html
 [error_details.proto]: https://github.com/googleapis/googleapis/blob/master/google/rpc/error_details.proto
 [`ErrorDetail`]: https://docs.rs/tonic-types/latest/tonic_types/enum.ErrorDetail.html
 [`StatusExt::with_error_details_vec`]: https://docs.rs/tonic-types/latest/tonic_types/trait.StatusExt.html#tymethod.with_error_details_vec
 [`StatusExt::get_error_details_vec`]: https://docs.rs/tonic-types/latest/tonic_types/trait.StatusExt.html#tymethod.get_error_details_vec
-[Richer Error example]: https://github.com/hyperium/tonic/tree/master/examples/src/richer-error
+[Richer Error example]: https://github.com/grpc/grpc-rust/tree/master/examples/src/richer-error
 [`StatusExt::get_details_bad_request`]: https://docs.rs/tonic-types/latest/tonic_types/trait.StatusExt.html#tymethod.get_details_bad_request
 [`BadRequest`]: https://docs.rs/tonic-types/latest/tonic_types/struct.BadRequest.html

@@ -7,7 +7,7 @@ otherwise, it may not get included in a relase for a long time.
 
 Bug fixes and new features should include tests.
 
-Contributors guide: https://github.com/hyperium/tonic/blob/master/CONTRIBUTING.md
+Contributors guide: https://github.com/grpc/grpc-rust/blob/master/CONTRIBUTING.md
 -->
 
 ## Motivation

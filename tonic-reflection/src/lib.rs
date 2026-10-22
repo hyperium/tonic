@@ -25,9 +25,9 @@
 //! A `tonic` based gRPC Server Reflection implementation.
 
 #![doc(
-    html_logo_url = "https://github.com/hyperium/tonic/raw/master/.github/assets/tonic-docs.png"
+    html_logo_url = "https://github.com/grpc/grpc-rust/raw/master/.github/assets/tonic-docs.png"
 )]
-#![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
+#![doc(issue_tracker_base_url = "https://github.com/grpc/grpc-rust/issues/")]
 #![doc(test(no_crate_inject, attr(deny(rust_2018_idioms))))]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 

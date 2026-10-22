@@ -3,8 +3,8 @@ name = "tonic-xds"
 version = "0.1.0-alpha.4"
 edition = "2024"
 rust-version.workspace = true
-homepage = "https://github.com/hyperium/tonic"
-repository = "https://github.com/hyperium/tonic"
+homepage = "https://github.com/grpc/grpc-rust"
+repository = "https://github.com/grpc/grpc-rust"
 authors = [
     "Ankur Mittal <ankurmit2006@gmail.com>",
     "Jeff Jiang <guokeno0@gmail.com>",

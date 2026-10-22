@@ -160,14 +160,14 @@
 //! [`tonic::Status`]: https://docs.rs/tonic/latest/tonic/struct.Status.html
 //! [`tonic`]: https://docs.rs/tonic/latest/tonic/
 //! [gRPC Richer Error Model]: https://www.grpc.io/docs/guides/error/
-//! [examples]: https://github.com/hyperium/tonic/tree/master/examples
+//! [examples]: https://github.com/grpc/grpc-rust/tree/master/examples
 //! [error_details.proto]: https://github.com/googleapis/googleapis/blob/master/google/rpc/error_details.proto
-//! [Richer Error example]: https://github.com/hyperium/tonic/tree/master/examples/src/richer-error
+//! [Richer Error example]: https://github.com/grpc/grpc-rust/tree/master/examples/src/richer-error
 
 #![doc(
     html_logo_url = "https://raw.githubusercontent.com/tokio-rs/website/master/public/img/icons/tonic.svg"
 )]
-#![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
+#![doc(issue_tracker_base_url = "https://github.com/grpc/grpc-rust/issues/")]
 
 mod generated {
     #![allow(unreachable_pub)]

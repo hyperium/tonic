@@ -15,5 +15,5 @@ This crate is typically used through the main `tonic` crate with the `prost` fea
 tonic = "0.14"
 ```
 
-[tonic]: https://github.com/hyperium/tonic
+[tonic]: https://github.com/grpc/grpc-rust
 [prost]: https://github.com/tokio-rs/prost
