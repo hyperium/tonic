@@ -22,7 +22,7 @@
  *
  */
 
-use super::{AddOrigin, Reconnect, SharedExec, UserAgent};
+use super::{AddOrigin, Reconnect, SharedExec, UserAgent, reconnect::ReconnectMode};
 use crate::{
     body::Body,
     transport::{Endpoint, channel::BoxFuture, service::GrpcTimeout},
@@ -49,7 +49,7 @@ pub(crate) struct Connection {
 }
 
 impl Connection {
-    fn new<C>(connector: C, endpoint: Endpoint, is_lazy: bool) -> Self
+    fn new<C>(connector: C, endpoint: Endpoint, mode: ReconnectMode) -> Self
     where
         C: Service<Uri> + Send + 'static,
         C::Error: Into<crate::BoxError> + Send,
@@ -102,7 +102,12 @@ impl Connection {
         let make_service =
             MakeSendRequestService::new(connector, endpoint.executor.clone(), settings);
 
-        let conn = Reconnect::new(make_service, endpoint.uri().clone(), is_lazy);
+        let conn = Reconnect::new(
+            make_service,
+            endpoint.uri().clone(),
+            mode,
+            endpoint.reconnect_delay,
+        );
 
         Self {
             inner: BoxService::new(stack.layer(conn)),
@@ -119,7 +124,9 @@ impl Connection {
         C::Future: Unpin + Send,
         C::Response: rt::Read + rt::Write + Unpin + Send + 'static,
     {
-        Self::new(connector, endpoint, false).ready_oneshot().await
+        Self::new(connector, endpoint, ReconnectMode::Eager)
+            .ready_oneshot()
+            .await
     }
 
     pub(crate) fn lazy<C>(connector: C, endpoint: Endpoint) -> Self
@@ -129,7 +136,17 @@ impl Connection {
         C::Future: Send,
         C::Response: rt::Read + rt::Write + Unpin + Send + 'static,
     {
-        Self::new(connector, endpoint, true)
+        Self::new(connector, endpoint, ReconnectMode::Lazy)
+    }
+
+    pub(crate) fn balanced<C>(connector: C, endpoint: Endpoint) -> Self
+    where
+        C: Service<Uri> + Send + 'static,
+        C::Error: Into<crate::BoxError> + Send,
+        C::Future: Send,
+        C::Response: rt::Read + rt::Write + Unpin + Send + 'static,
+    {
+        Self::new(connector, endpoint, ReconnectMode::Balanced)
     }
 }
 

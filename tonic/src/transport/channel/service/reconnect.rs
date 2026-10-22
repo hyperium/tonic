@@ -24,6 +24,7 @@
 
 use pin_project::pin_project;
 use std::fmt;
+use std::time::Duration;
 use std::{
     future::Future,
     pin::Pin,
@@ -32,6 +33,15 @@ use std::{
 use tower::make::MakeService;
 use tower_service::Service;
 use tracing::trace;
+
+pub(crate) const DEFAULT_RECONNECT_DELAY: Duration = Duration::from_millis(100);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ReconnectMode {
+    Eager,
+    Lazy,
+    Balanced,
+}
 
 pub(crate) struct Reconnect<M, Target>
 where
@@ -43,7 +53,8 @@ where
     target: Target,
     error: Option<crate::BoxError>,
     has_been_connected: bool,
-    is_lazy: bool,
+    mode: ReconnectMode,
+    reconnect_delay: Duration,
 }
 
 #[derive(Debug)]
@@ -51,6 +62,7 @@ enum State<F, S> {
     Idle,
     Connecting(F),
     Connected(S),
+    Backoff(Pin<Box<tokio::time::Sleep>>),
 }
 
 impl<M, Target> Reconnect<M, Target>
@@ -58,14 +70,20 @@ where
     M: Service<Target>,
     M::Error: Into<crate::BoxError>,
 {
-    pub(crate) fn new(mk_service: M, target: Target, is_lazy: bool) -> Self {
+    pub(crate) fn new(
+        mk_service: M,
+        target: Target,
+        mode: ReconnectMode,
+        reconnect_delay: Option<Duration>,
+    ) -> Self {
         Reconnect {
             mk_service,
             state: State::Idle,
             target,
             error: None,
             has_been_connected: false,
-            is_lazy,
+            mode,
+            reconnect_delay: reconnect_delay.unwrap_or(DEFAULT_RECONNECT_DELAY),
         }
     }
 }
@@ -119,15 +137,25 @@ where
                         Poll::Ready(Err(e)) => {
                             trace!("poll_ready; error");
 
-                            state = State::Idle;
-
-                            if !(self.has_been_connected || self.is_lazy) {
-                                return Poll::Ready(Err(e.into()));
-                            } else {
-                                let error = e.into();
-                                tracing::debug!("reconnect::poll_ready: {:?}", error);
-                                self.error = Some(error);
-                                break;
+                            match self.mode {
+                                ReconnectMode::Eager => {
+                                    self.state = State::Idle;
+                                    return Poll::Ready(Err(e.into()));
+                                }
+                                ReconnectMode::Lazy => {
+                                    state = State::Idle;
+                                    let error = e.into();
+                                    tracing::debug!("reconnect::poll_ready: {:?}", error);
+                                    self.error = Some(error);
+                                    break;
+                                }
+                                ReconnectMode::Balanced => {
+                                    trace!("poll_ready; balanced backoff");
+                                    self.state = State::Backoff(Box::pin(tokio::time::sleep(
+                                        self.reconnect_delay,
+                                    )));
+                                    continue;
+                                }
                             }
                         }
                     }
@@ -148,7 +176,31 @@ where
                         }
                         Poll::Ready(Err(_)) => {
                             trace!("poll_ready; error");
-                            state = State::Idle;
+                            match self.mode {
+                                ReconnectMode::Balanced => {
+                                    self.state = State::Backoff(Box::pin(tokio::time::sleep(
+                                        self.reconnect_delay,
+                                    )));
+                                    continue;
+                                }
+                                _ => {
+                                    state = State::Idle;
+                                }
+                            }
+                        }
+                    }
+                }
+                State::Backoff(ref mut sleep) => {
+                    trace!("poll_ready; backoff");
+                    match Pin::new(sleep).poll(cx) {
+                        Poll::Pending => {
+                            trace!("poll_ready; backoff pending");
+                            return Poll::Pending;
+                        }
+                        Poll::Ready(()) => {
+                            trace!("poll_ready; backoff elapsed");
+                            self.state = State::Idle;
+                            continue;
                         }
                     }
                 }
@@ -240,5 +292,130 @@ where
                 Poll::Ready(Err(e))
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::time::Duration;
+    use tower::service_fn;
+
+    #[derive(Clone)]
+    struct FailingMakeService {
+        attempts: Arc<AtomicUsize>,
+        fail_times: usize,
+    }
+
+    impl Service<()> for FailingMakeService {
+        type Response = tower::util::BoxService<(), (), crate::BoxError>;
+        type Error = crate::BoxError;
+        type Future = std::future::Ready<Result<Self::Response, Self::Error>>;
+
+        fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+            Poll::Ready(Ok(()))
+        }
+
+        fn call(&mut self, _: ()) -> Self::Future {
+            let attempt = self.attempts.fetch_add(1, Ordering::SeqCst);
+            if attempt < self.fail_times {
+                std::future::ready(Err("connection failed".into()))
+            } else {
+                std::future::ready(Ok(tower::util::BoxService::new(service_fn(|()| async {
+                    Ok(())
+                }))))
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_reconnect_mode_eager() {
+        let attempts = Arc::new(AtomicUsize::new(0));
+        let mk_svc = FailingMakeService {
+            attempts: attempts.clone(),
+            fail_times: 1,
+        };
+
+        let mut reconnect = Reconnect::new(mk_svc, (), ReconnectMode::Eager, None);
+
+        let poll = std::future::poll_fn(|cx| reconnect.poll_ready(cx)).await;
+        assert!(
+            poll.is_err(),
+            "Eager mode should return Err on connect failure"
+        );
+        assert_eq!(attempts.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn test_reconnect_mode_lazy() {
+        let attempts = Arc::new(AtomicUsize::new(0));
+        let mk_svc = FailingMakeService {
+            attempts: attempts.clone(),
+            fail_times: 1,
+        };
+
+        let mut reconnect = Reconnect::new(mk_svc, (), ReconnectMode::Lazy, None);
+
+        let poll = std::future::poll_fn(|cx| reconnect.poll_ready(cx)).await;
+        assert!(
+            poll.is_ok(),
+            "Lazy mode should return Ready(Ok) on connect failure"
+        );
+        assert_eq!(attempts.load(Ordering::SeqCst), 1);
+
+        let res = reconnect.call(()).await;
+        assert!(res.is_err(), "Lazy mode should return error from call");
+
+        // Subsequent poll should reconnect and succeed
+        let poll2 = std::future::poll_fn(|cx| reconnect.poll_ready(cx)).await;
+        assert!(poll2.is_ok());
+        assert_eq!(attempts.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn test_reconnect_mode_balanced_backs_off() {
+        tokio::time::pause();
+
+        let attempts = Arc::new(AtomicUsize::new(0));
+        let mk_svc = FailingMakeService {
+            attempts: attempts.clone(),
+            fail_times: 2,
+        };
+
+        let delay = Duration::from_millis(100);
+        let mut reconnect = Reconnect::new(mk_svc, (), ReconnectMode::Balanced, Some(delay));
+
+        let waker = std::task::Waker::noop();
+        let mut cx = Context::from_waker(waker);
+
+        let p1 = reconnect.poll_ready(&mut cx);
+        assert!(
+            p1.is_pending(),
+            "Balanced mode must return Pending on connect failure"
+        );
+        assert_eq!(attempts.load(Ordering::SeqCst), 1);
+
+        // Advance time partially (50ms): should still be pending
+        tokio::time::advance(Duration::from_millis(50)).await;
+        let p2 = reconnect.poll_ready(&mut cx);
+        assert!(p2.is_pending());
+        assert_eq!(attempts.load(Ordering::SeqCst), 1);
+
+        // Advance past delay: next poll attempts and fails again
+        tokio::time::advance(Duration::from_millis(60)).await;
+        let p3 = reconnect.poll_ready(&mut cx);
+        assert!(p3.is_pending());
+        assert_eq!(attempts.load(Ordering::SeqCst), 2);
+
+        // Advance past second delay: next poll attempts and succeeds
+        tokio::time::advance(Duration::from_millis(110)).await;
+        let p4 = reconnect.poll_ready(&mut cx);
+        assert!(
+            matches!(p4, Poll::Ready(Ok(()))),
+            "Balanced mode should return Ready(Ok) once connection succeeds"
+        );
+        assert_eq!(attempts.load(Ordering::SeqCst), 3);
     }
 }

@@ -60,7 +60,7 @@ impl<K: Hash + Eq + Clone> Stream for DynamicServiceStream<K> {
             Poll::Pending | Poll::Ready(None) => Poll::Pending,
             Poll::Ready(Some(change)) => match change {
                 Change::Insert(k, endpoint) => {
-                    let connection = Connection::lazy(endpoint.http_connector(), endpoint);
+                    let connection = Connection::balanced(endpoint.http_connector(), endpoint);
                     Poll::Ready(Some(Ok(TowerChange::Insert(k, connection))))
                 }
                 Change::Remove(k) => Poll::Ready(Some(Ok(TowerChange::Remove(k)))),
