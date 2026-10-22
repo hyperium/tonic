@@ -25,7 +25,7 @@ grpc = { version = "0.10.0", path = "../grpc", default-features = false, feature
 serde = { version = "1.0", default-features = false, features = ["derive", "std"] }
 xds-client = { version = "0.1.0-alpha.4", path = "../xds-client", default-features = false }
 regex = "1"
-rand = "0.10"
+rand = { version = "0.10", default-features = false, features = ["thread_rng"] }
 
 [dev-dependencies]
 serde_json = "1.0"
