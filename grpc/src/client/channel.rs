@@ -364,10 +364,10 @@ impl Invoke for Arc<ActiveChannel> {
         headers: RequestHeaders,
         options: CallOptions,
     ) -> (Self::SendStream, Self::RecvStream) {
+        // Fast path: snapshot the latest LB state without locking and pick
+        // with its picker.
+        let mut snapshot = self.lb_watcher.snapshot();
         loop {
-            // Fast path: snapshot the latest LB state without locking and pick
-            // with its picker.
-            let snapshot = self.lb_watcher.snapshot();
             match snapshot
                 .value()
                 .picker
@@ -391,8 +391,8 @@ impl Invoke for Arc<ActiveChannel> {
                 }
             }
             // Queued: wait for this snapshot to be superseded, then retry the
-            // RPC with the newest state.
-            snapshot.expired().await;
+            // pick with the newest state.
+            snapshot = snapshot.next().await;
         }
     }
 }
@@ -536,14 +536,14 @@ pub(crate) struct Todo;
 //
 // The producer calls update(). Consumers call snapshot() to take a lock-free
 // copy of the latest value; if that value is not usable they await
-// Snapshot::expired(), which resolves once the Watcher holds a different value,
-// and then call snapshot() again for the newer value. A consumer waiting on a
-// snapshot is never woken for the value it already holds.
+// Snapshot::next(), which resolves with a snapshot of the latest value once the
+// Watcher holds a different value. A consumer waiting on a snapshot is never
+// woken for the value it already holds.
 pub(crate) struct Watcher<T> {
     // Latest value, for lock-free reads.
     current: ArcSwap<T>,
     // Signalled after every update to wake consumers waiting in
-    // [`Snapshot::expired`].
+    // [`Snapshot::next`].
     updated: Notify,
 }
 
@@ -566,10 +566,11 @@ impl<T> Watcher<T> {
     /// Publishes a new value and wakes every [`Snapshot`] taken against an
     /// older one.
     fn update(&self, item: T) {
-        // Publish the new value before signalling so that woken waiters
-        // always observe it.
-        self.current.store(Arc::new(item));
+        // Publish the new value before signalling so that woken waiters always
+        // observe it.
+        let old = self.current.swap(Arc::new(item));
         self.updated.notify_waiters();
+        drop(old);
     }
 }
 
@@ -581,23 +582,27 @@ pub(crate) struct Snapshot<'a, T> {
     value: Arc<T>,
 }
 
-impl<T> Snapshot<'_, T> {
+impl<'a, T> Snapshot<'a, T> {
     /// Returns the value captured when this snapshot was taken.
     pub(crate) fn value(&self) -> &T {
         &self.value
     }
 
     /// Resolves once the [`Watcher`] holds a different value than this
-    /// snapshot. Returns immediately if that is already the case.
-    pub(crate) async fn expired(&self) {
+    /// snapshot, returning a snapshot of the latest value. Intermediate values
+    /// published while waiting are skipped. Resolves immediately if this
+    /// snapshot is already stale.
+    pub(crate) async fn next(mut self) -> Snapshot<'a, T> {
         loop {
             // Register before checking: a `Notified` receives every
             // `notify_waiters()` call made after it is created, and update()
             // stores before notifying, so an update that the check misses
             // still wakes this waiter.
             let notified = self.watcher.updated.notified();
-            if !Arc::ptr_eq(&self.watcher.current.load(), &self.value) {
-                return;
+            let current = self.watcher.current.load_full();
+            if !Arc::ptr_eq(&current, &self.value) {
+                self.value = current;
+                return self;
             }
             // The waking update may be one this snapshot already holds (if it
             // was taken between that update's store and notify), so check
@@ -696,11 +701,23 @@ mod tests {
         assert_ne!(channel.inner.get_state(false), ConnectivityState::Idle);
     }
 
-    // Fails the test instead of hanging if expired() never resolves.
-    async fn assert_expires<T>(snapshot: &Snapshot<'_, T>) {
-        tokio::time::timeout(Duration::from_secs(5), snapshot.expired())
+    // Fails the test instead of hanging if next() never resolves.
+    async fn assert_next<'a, T: 'a>(
+        next: impl Future<Output = Snapshot<'a, T>>,
+    ) -> Snapshot<'a, T> {
+        tokio::time::timeout(Duration::from_secs(5), next)
             .await
-            .expect("expired() did not resolve");
+            .expect("next() did not resolve")
+    }
+
+    // Fails the test if next() resolves without a further update.
+    async fn assert_no_next<'a, T: 'a>(next: impl Future<Output = Snapshot<'a, T>>) {
+        assert!(
+            tokio::time::timeout(Duration::from_millis(10), next)
+                .await
+                .is_err(),
+            "next() resolved without an update"
+        );
     }
 
     #[test]
@@ -712,60 +729,56 @@ mod tests {
     }
 
     // Covers the handoff in ActiveChannel::invoke: an update that lands after
-    // snapshot() was called must expire that snapshot, even if nobody was
-    // awaiting expired() at the time.
+    // snapshot() was called must be returned by next(), even if nobody was
+    // awaiting next() at the time.
     #[tokio::test]
-    async fn snapshot_expires_after_update() {
+    async fn next_returns_update_made_before_await() {
         let watcher = Watcher::new(1u32);
         let snapshot = watcher.snapshot();
         assert_eq!(*snapshot.value(), 1);
         watcher.update(2);
-        assert_expires(&snapshot).await;
-        // The expired snapshot still holds its original value.
-        assert_eq!(*snapshot.value(), 1);
-        assert_eq!(*watcher.snapshot().value(), 2);
+        let snapshot = assert_next(snapshot.next()).await;
+        assert_eq!(*snapshot.value(), 2);
     }
 
+    // next() consumes the snapshot, so the same pinned future is polled both
+    // before and after the update.
     #[tokio::test]
-    async fn snapshot_waits_for_update() {
+    async fn next_waits_for_update() {
         let watcher = Arc::new(Watcher::new(1u32));
-        let snapshot = watcher.snapshot();
-        assert!(
-            tokio::time::timeout(Duration::from_millis(50), snapshot.expired())
-                .await
-                .is_err(),
-            "expired() resolved without an update"
-        );
+        let mut next = std::pin::pin!(watcher.snapshot().next());
+        assert_no_next(&mut next).await;
 
         let updater = {
             let watcher = watcher.clone();
             tokio::spawn(async move { watcher.update(2) })
         };
-        assert_expires(&snapshot).await;
+        let snapshot = assert_next(next).await;
         updater.await.unwrap();
-        assert_eq!(*watcher.snapshot().value(), 2);
+        assert_eq!(*snapshot.value(), 2);
     }
 
-    // A snapshot taken on an already superseded value is unaffected by later
-    // updates: expired() keeps resolving immediately.
+    // next() skips intermediate values and returns the latest one. The
+    // returned snapshot is current, so it waits for a further update.
     #[tokio::test]
-    async fn stale_snapshot_stays_expired() {
+    async fn next_skips_to_latest_value() {
         let watcher = Watcher::new(1u32);
         let snapshot = watcher.snapshot();
         watcher.update(2);
         watcher.update(3);
-        assert_expires(&snapshot).await;
-        assert_expires(&snapshot).await;
-        assert_eq!(*watcher.snapshot().value(), 3);
+        let snapshot = assert_next(snapshot.next()).await;
+        assert_eq!(*snapshot.value(), 3);
+        assert_no_next(snapshot.next()).await;
     }
 
-    // Expiry tracks updates, not value equality: publishing an equal value
-    // still expires older snapshots.
+    // next() tracks updates, not value equality: publishing an equal value
+    // still supersedes older snapshots.
     #[tokio::test]
-    async fn equal_value_update_expires_snapshot() {
+    async fn equal_value_update_resolves_next() {
         let watcher = Watcher::new(1u32);
         let snapshot = watcher.snapshot();
         watcher.update(1);
-        assert_expires(&snapshot).await;
+        let snapshot = assert_next(snapshot.next()).await;
+        assert_eq!(*snapshot.value(), 1);
     }
 }
