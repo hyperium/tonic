@@ -382,18 +382,15 @@ mod test {
         }
     }
 
-    // Returns a resolver update containing a single endpoint with one address.
-    fn update_with_address(addr: &str) -> ResolverUpdate {
-        ResolverUpdate {
-            endpoints: Ok(vec![Endpoint {
-                addresses: vec![Address {
-                    address: addr.to_string().into(),
-                    ..Default::default()
-                }],
+    // Returns a single-endpoint list containing one address.
+    fn endpoints_with_address(addr: &str) -> Vec<Endpoint> {
+        vec![Endpoint {
+            addresses: vec![Address {
+                address: addr.to_string().into(),
                 ..Default::default()
-            }]),
+            }],
             ..Default::default()
-        }
+        }]
     }
 
     // Tests that the gracefulswitch policy correctly sets a child and sends
@@ -416,9 +413,8 @@ mod test {
         let mut env = new_env();
         let parsed_config = stub_lb_config("stub-gracefulswitch_successful_first_update-one");
 
-        let update = update_with_address("127.0.0.1:1234");
-        env.policy
-            .resolver_update(update.clone(), &parsed_config, &mut env.tcc)
+        let endpoints = endpoints_with_address("127.0.0.1:1234");
+        env.send_resolver_update_with_config(endpoints, &parsed_config)
             .unwrap();
 
         let subchannel = env.expect_new_subchannel();
@@ -446,10 +442,9 @@ mod test {
 
         let parsed_config = stub_lb_config("stub-gracefulswitch_switching_to_resolver_update-one");
 
-        let update = update_with_address("127.0.0.1:1234");
+        let endpoints = endpoints_with_address("127.0.0.1:1234");
 
-        env.policy
-            .resolver_update(update.clone(), &parsed_config, &mut env.tcc)
+        env.send_resolver_update_with_config(endpoints.clone(), &parsed_config)
             .unwrap();
 
         // Subchannel creation and ready
@@ -462,8 +457,7 @@ mod test {
         // 2. Switch to mock_policy_two as pending
         let new_parsed_config =
             stub_lb_config("stub-gracefulswitch_switching_to_resolver_update-two");
-        env.policy
-            .resolver_update(update.clone(), &new_parsed_config, &mut env.tcc)
+        env.send_resolver_update_with_config(endpoints, &new_parsed_config)
             .unwrap();
 
         // Simulate subchannel creation and ready for pending
@@ -484,20 +478,17 @@ mod test {
             create_funcs_for_gracefulswitch_tests("stub-gracefulswitch_two_policies_same_type-one"),
         );
         let parsed_config = stub_lb_config("stub-gracefulswitch_two_policies_same_type-one");
-        let update = update_with_address("127.0.0.1:1234");
-        env.policy
-            .resolver_update(update.clone(), &parsed_config, &mut env.tcc)
+        let endpoints = endpoints_with_address("127.0.0.1:1234");
+        env.send_resolver_update_with_config(endpoints.clone(), &parsed_config)
             .unwrap();
         let subchannel = env.expect_new_subchannel();
         env.send_subchannel_update(&subchannel, &SubchannelState::ready());
         env.verify_correct_picker("stub-gracefulswitch_two_policies_same_type-one");
 
         let parsed_config2 = stub_lb_config("stub-gracefulswitch_two_policies_same_type-one");
-        env.policy
-            .resolver_update(update.clone(), &parsed_config2, &mut env.tcc)
+        env.send_resolver_update_with_config(endpoints, &parsed_config2)
             .unwrap();
-        let subchannel = env.expect_new_subchannel();
-        assert_eq!(&*subchannel.address().address, "127.0.0.1:1234");
+        env.expect_new_subchannel_for("127.0.0.1:1234");
         env.expect_no_events();
     }
 
@@ -522,21 +513,19 @@ mod test {
         let parsed_config =
             stub_lb_config("stub-gracefulswitch_current_not_ready_pending_update-one");
 
-        let update = update_with_address("127.0.0.1:1234");
+        let endpoints = endpoints_with_address("127.0.0.1:1234");
 
         // Switch to first one (current)
-        env.policy
-            .resolver_update(update.clone(), &parsed_config, &mut env.tcc)
+        env.send_resolver_update_with_config(endpoints, &parsed_config)
             .unwrap();
 
         env.expect_new_subchannel();
         env.expect_no_events();
 
-        let second_update = update_with_address("0.0.0.0.0");
+        let second_endpoints = endpoints_with_address("0.0.0.0.0");
         let new_parsed_config =
             stub_lb_config("stub-gracefulswitch_current_not_ready_pending_update-two");
-        env.policy
-            .resolver_update(second_update.clone(), &new_parsed_config, &mut env.tcc)
+        env.send_resolver_update_with_config(second_endpoints, &new_parsed_config)
             .unwrap();
 
         let second_subchannel = env.expect_new_subchannel();
@@ -562,20 +551,18 @@ mod test {
         );
         let parsed_config = stub_lb_config("stub-gracefulswitch_current_leaving_ready-one");
 
-        let update = update_with_address("127.0.0.1:1234");
+        let endpoints = endpoints_with_address("127.0.0.1:1234");
 
         // Switch to first one (current)
-        env.policy
-            .resolver_update(update.clone(), &parsed_config, &mut env.tcc)
+        env.send_resolver_update_with_config(endpoints, &parsed_config)
             .unwrap();
 
         let current_subchannel = env.expect_new_subchannel();
         env.send_subchannel_update(&current_subchannel, &SubchannelState::ready());
         env.verify_correct_picker("stub-gracefulswitch_current_leaving_ready-one");
-        let new_update = update_with_address("127.0.0.1:1235");
+        let new_endpoints = endpoints_with_address("127.0.0.1:1235");
         let new_parsed_config = stub_lb_config("stub-gracefulswitch_current_leaving_ready-two");
-        env.policy
-            .resolver_update(new_update.clone(), &new_parsed_config, &mut env.tcc)
+        env.send_resolver_update_with_config(new_endpoints, &new_parsed_config)
             .unwrap();
 
         let pending_subchannel = env.expect_new_subchannel();
@@ -601,21 +588,19 @@ mod test {
             create_funcs_for_gracefulswitch_tests("stub-gracefulswitch_current_leaving_ready-two"),
         );
         let parsed_config = stub_lb_config("stub-gracefulswitch_current_leaving_ready-one");
-        let update = update_with_address("127.0.0.1:1234");
+        let endpoints = endpoints_with_address("127.0.0.1:1234");
 
         // Switch to first one (current)
-        env.policy
-            .resolver_update(update.clone(), &parsed_config, &mut env.tcc)
+        env.send_resolver_update_with_config(endpoints, &parsed_config)
             .unwrap();
 
         let current_subchannel = env.expect_new_subchannel();
         env.send_subchannel_update(&current_subchannel, &SubchannelState::ready());
         env.verify_correct_picker("stub-gracefulswitch_current_leaving_ready-one");
-        let new_update = update_with_address("127.0.0.1:1235");
+        let new_endpoints = endpoints_with_address("127.0.0.1:1235");
         let new_parsed_config = stub_lb_config("stub-gracefulswitch_current_leaving_ready-two");
 
-        env.policy
-            .resolver_update(new_update.clone(), &new_parsed_config, &mut env.tcc)
+        env.send_resolver_update_with_config(new_endpoints, &new_parsed_config)
             .unwrap();
 
         let pending_subchannel = env.expect_new_subchannel();
@@ -649,9 +634,8 @@ mod test {
         let parsed_config = stub_lb_config(
             "stub-gracefulswitch_subchannels_removed_after_current_child_swapped-one",
         );
-        let update = update_with_address("127.0.0.1:1234");
-        env.policy
-            .resolver_update(update.clone(), &parsed_config, &mut env.tcc)
+        let endpoints = endpoints_with_address("127.0.0.1:1234");
+        env.send_resolver_update_with_config(endpoints, &parsed_config)
             .unwrap();
 
         let current_subchannel = env.expect_new_subchannel();
@@ -659,12 +643,11 @@ mod test {
         env.verify_correct_picker(
             "stub-gracefulswitch_subchannels_removed_after_current_child_swapped-one",
         );
-        let second_update = update_with_address("127.0.0.1:1235");
+        let second_endpoints = endpoints_with_address("127.0.0.1:1235");
         let new_parsed_config = stub_lb_config(
             "stub-gracefulswitch_subchannels_removed_after_current_child_swapped-two",
         );
-        env.policy
-            .resolver_update(second_update.clone(), &new_parsed_config, &mut env.tcc)
+        env.send_resolver_update_with_config(second_endpoints, &new_parsed_config)
             .unwrap();
         let pending_subchannel = env.expect_new_subchannel();
         println!("moving subchannel to idle");
@@ -723,9 +706,8 @@ mod test {
         reg_stub_policy(name_two, create_funcs_requesting_resolution(name_two));
 
         let mut env = new_env();
-        let update = update_with_address("127.0.0.1:1234");
-        env.policy
-            .resolver_update(update.clone(), &stub_lb_config(name_one), &mut env.tcc)
+        let endpoints = endpoints_with_address("127.0.0.1:1234");
+        env.send_resolver_update_with_config(endpoints, &stub_lb_config(name_one))
             .unwrap();
         let active_subchannel = env.expect_new_subchannel();
 
@@ -735,9 +717,8 @@ mod test {
         env.verify_correct_picker(name_one);
 
         // Create a pending child.
-        let second_update = update_with_address("127.0.0.1:1235");
-        env.policy
-            .resolver_update(second_update, &stub_lb_config(name_two), &mut env.tcc)
+        let second_endpoints = endpoints_with_address("127.0.0.1:1235");
+        env.send_resolver_update_with_config(second_endpoints, &stub_lb_config(name_two))
             .unwrap();
         let pending_subchannel = env.expect_new_subchannel();
         env.expect_no_events();
@@ -787,23 +768,21 @@ mod test {
         );
 
         let mut env = new_env();
-        let update = update_with_address("127.0.0.1:1234");
+        let endpoints = endpoints_with_address("127.0.0.1:1234");
 
         // Before any config is received, exit_idle does nothing.
         env.policy.exit_idle(&mut env.tcc);
         assert!(calls.lock().unwrap().is_empty());
 
         // With only an active child, the active child is woken.
-        env.policy
-            .resolver_update(update.clone(), &stub_lb_config(name_one), &mut env.tcc)
+        env.send_resolver_update_with_config(endpoints.clone(), &stub_lb_config(name_one))
             .unwrap();
         env.policy.exit_idle(&mut env.tcc);
         assert_eq!(*calls.lock().unwrap(), vec![name_one]);
         calls.lock().unwrap().clear();
 
         // With a pending child, only the pending child is woken.
-        env.policy
-            .resolver_update(update, &stub_lb_config(name_two), &mut env.tcc)
+        env.send_resolver_update_with_config(endpoints, &stub_lb_config(name_two))
             .unwrap();
         env.policy.exit_idle(&mut env.tcc);
         assert_eq!(*calls.lock().unwrap(), vec![name_two]);
@@ -822,17 +801,15 @@ mod test {
         reg_stub_policy(name_two, create_funcs_for_gracefulswitch_tests(name_two));
 
         let mut env = new_env();
-        let update = update_with_address("127.0.0.1:1234");
-        env.policy
-            .resolver_update(update.clone(), &stub_lb_config(name_one), &mut env.tcc)
+        let endpoints = endpoints_with_address("127.0.0.1:1234");
+        env.send_resolver_update_with_config(endpoints, &stub_lb_config(name_one))
             .unwrap();
         let active_subchannel = env.expect_new_subchannel();
 
         // The first child has not produced a picker yet, but it is already the
         // active child, so this config becomes a pending child.
-        let second_update = update_with_address("127.0.0.1:1235");
-        env.policy
-            .resolver_update(second_update, &stub_lb_config(name_two), &mut env.tcc)
+        let second_endpoints = endpoints_with_address("127.0.0.1:1235");
+        env.send_resolver_update_with_config(second_endpoints, &stub_lb_config(name_two))
             .unwrap();
         let pending_subchannel = env.expect_new_subchannel();
         env.expect_no_events();
@@ -860,26 +837,23 @@ mod test {
         reg_stub_policy(name_two, create_funcs_for_gracefulswitch_tests(name_two));
 
         let mut env = new_env();
-        let update = update_with_address("127.0.0.1:1234");
-        env.policy
-            .resolver_update(update.clone(), &stub_lb_config(name_one), &mut env.tcc)
+        let endpoints = endpoints_with_address("127.0.0.1:1234");
+        env.send_resolver_update_with_config(endpoints.clone(), &stub_lb_config(name_one))
             .unwrap();
         let active_subchannel = env.expect_new_subchannel();
         env.send_subchannel_update(&active_subchannel, &SubchannelState::ready());
         env.verify_correct_picker(name_one);
 
         // Create a pending child.
-        let second_update = update_with_address("127.0.0.1:1235");
-        env.policy
-            .resolver_update(second_update, &stub_lb_config(name_two), &mut env.tcc)
+        let second_endpoints = endpoints_with_address("127.0.0.1:1235");
+        env.send_resolver_update_with_config(second_endpoints, &stub_lb_config(name_two))
             .unwrap();
         let pending_subchannel = env.expect_new_subchannel();
         env.expect_no_events();
 
         // Switch back to the active policy's type, which drops the pending
         // child.  The active child receives the update.
-        env.policy
-            .resolver_update(update, &stub_lb_config(name_one), &mut env.tcc)
+        env.send_resolver_update_with_config(endpoints, &stub_lb_config(name_one))
             .unwrap();
         let active_subchannel = env.expect_new_subchannel();
         env.expect_no_events();
