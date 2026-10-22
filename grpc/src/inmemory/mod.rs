@@ -627,7 +627,9 @@ mod tests {
                 _: impl RecvStream + 'static,
             ) -> Trailers {
                 self.0.store(true, Ordering::SeqCst);
-                tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+                GrpcRuntime::default()
+                    .sleep(std::time::Duration::from_secs(60))
+                    .await;
                 self.1.store(true, Ordering::SeqCst);
                 Trailers::new(Ok(()))
             }
@@ -653,14 +655,16 @@ mod tests {
         // Poll the serving connection briefly to start the handler.
         tokio::select! {
             _ = &mut serving_conn => {}
-            _ = tokio::time::sleep(std::time::Duration::from_millis(20)) => {}
+            _ = GrpcRuntime::default().sleep(std::time::Duration::from_millis(20)) => {}
         }
         assert!(handler_started.load(Ordering::SeqCst));
 
         // Now DROP `serving_conn` (simulating what watch() does on `break`).
         drop(serving_conn);
 
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        GrpcRuntime::default()
+            .sleep(std::time::Duration::from_millis(50))
+            .await;
         // With the inline fix, dropping the connection future drops the handler future immediately -> handler never finishes.
         assert!(!handler_finished.load(Ordering::SeqCst));
     }
