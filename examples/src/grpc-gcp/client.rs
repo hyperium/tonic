@@ -35,9 +35,9 @@ use generated::api::ListTopicsRequest;
 use generated::api::publisher_client::PublisherClient;
 use grpc::client::Channel;
 use grpc::credentials::CompositeChannelCredentials;
-use grpc::credentials::rustls::client::ClientTlsConfig;
-use grpc::credentials::rustls::client::RustlsChannelCredentials;
 use grpc_google::GcpCallCredentials;
+use grpc_rustls::client::ClientTlsConfig;
+use grpc_rustls::client::RustlsChannelCredentials;
 use protobuf::proto;
 
 const ENDPOINT: &str = "dns:///pubsub.googleapis.com";

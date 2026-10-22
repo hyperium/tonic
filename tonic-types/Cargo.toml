@@ -8,12 +8,12 @@ description = """
 A collection of useful protobuf types that can be used with `tonic`.
 """
 edition = "2024"
-homepage = "https://github.com/hyperium/tonic"
+homepage = "https://github.com/grpc/grpc-rust"
 keywords = ["rpc", "grpc", "protobuf"]
 license = "MIT"
 name = "tonic-types"
 readme = "README.md"
-repository = "https://github.com/hyperium/tonic"
+repository = "https://github.com/grpc/grpc-rust"
 version = "0.14.6"
 rust-version = { workspace = true }
 

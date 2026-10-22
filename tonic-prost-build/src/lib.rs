@@ -51,7 +51,7 @@
     html_logo_url = "https://raw.githubusercontent.com/tokio-rs/website/master/public/img/icons/tonic.svg"
 )]
 #![doc(html_root_url = "https://docs.rs/tonic-prost-build/0.14.0")]
-#![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
+#![doc(issue_tracker_base_url = "https://github.com/grpc/grpc-rust/issues/")]
 
 use proc_macro2::TokenStream;
 use prost_build::{Method, Service};

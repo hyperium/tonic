@@ -111,7 +111,7 @@ impl InteropTest for TestClient {
         let mut stream = self.streaming_input_call().await;
 
         for request in REQUEST_LENGTHS.iter().map(make_streaming_input_request) {
-            let _ = stream.send(&request).await;
+            let _ = stream.send(request).await;
         }
 
         let result = stream.close_and_recv().await;

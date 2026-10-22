@@ -109,7 +109,7 @@ fn max_message_send_size() {
         // Set client send limit to 1024
         client_send_max: Some(1024),
         // TODO: This should return OutOfRange
-        // https://github.com/hyperium/tonic/issues/1334
+        // https://github.com/grpc/grpc-rust/issues/1334
         expected_code: Some(Code::Internal),
         ..Default::default()
     });

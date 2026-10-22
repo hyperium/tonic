@@ -503,22 +503,6 @@ impl Debug for Pick {
     }
 }
 
-/// OneSubchannelPicker always returns a single subchannel.
-#[derive(Debug)]
-pub(crate) struct OneSubchannelPicker {
-    sc: Arc<dyn Subchannel>,
-}
-
-impl Picker for OneSubchannelPicker {
-    fn pick(&self, _: PickOptions<'_>) -> PickResult {
-        PickResult::Pick(Pick {
-            subchannel: self.sc.clone(),
-            metadata: MetadataMap::new(),
-            on_complete: None,
-        })
-    }
-}
-
 /// QueuingPicker always returns Queue.  LB policies that are not actively
 /// Connecting should not use this picker.
 #[derive(Debug)]

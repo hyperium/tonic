@@ -25,11 +25,13 @@
 //! Validated Cluster resource (CDS).
 
 use protobuf::Parse;
+use xds_client::Error;
+use xds_client::Resource;
 use xds_client::resource::TypeUrl;
-use xds_client::{Error, Resource};
 
+use crate::generated::envoy::config::cluster::v3::Cluster;
+use crate::generated::envoy::config::cluster::v3::cluster::ClusterDiscoveryTypeOneof;
 use crate::generated::envoy::config::cluster::v3::cluster::DiscoveryType;
-use crate::generated::envoy::config::cluster::v3::{Cluster, cluster::ClusterDiscoveryTypeOneof};
 use crate::generated::envoy::extensions::clusters::aggregate::v3::ClusterConfig as AggregateClusterConfig;
 
 /// Extension name and `typed_config` type for gRFC A37 aggregate clusters.
@@ -262,15 +264,16 @@ fn validate_aggregate_discovery(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::generated::envoy::config::cluster::v3::cluster::{
-        CustomClusterType, EdsClusterConfig,
-    };
-    use crate::generated::envoy::config::core::v3::{
-        Address, AggregatedConfigSource, ConfigSource, SocketAddress,
-    };
-    use crate::generated::envoy::config::endpoint::v3::{
-        ClusterLoadAssignment, Endpoint, LbEndpoint, LocalityLbEndpoints,
-    };
+    use crate::generated::envoy::config::cluster::v3::cluster::CustomClusterType;
+    use crate::generated::envoy::config::cluster::v3::cluster::EdsClusterConfig;
+    use crate::generated::envoy::config::core::v3::Address;
+    use crate::generated::envoy::config::core::v3::AggregatedConfigSource;
+    use crate::generated::envoy::config::core::v3::ConfigSource;
+    use crate::generated::envoy::config::core::v3::SocketAddress;
+    use crate::generated::envoy::config::endpoint::v3::ClusterLoadAssignment;
+    use crate::generated::envoy::config::endpoint::v3::Endpoint;
+    use crate::generated::envoy::config::endpoint::v3::LbEndpoint;
+    use crate::generated::envoy::config::endpoint::v3::LocalityLbEndpoints;
     use protobuf::Serialize;
     use protobuf_well_known_types::Any;
 

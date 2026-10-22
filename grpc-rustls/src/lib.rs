@@ -22,8 +22,12 @@
  *
  */
 
-//! gRPC [`ChannelCredentials`](super::ChannelCredentials) implemented for
+//! gRPC [`ChannelCredentials`](grpc::credentials::ChannelCredentials) and
+//! [`ServerCredentials`](grpc::credentials::ServerCredentials) implemented for
 //! [`rustls`](https://docs.rs/rustls).
+//!
+//! > NOTE: This version is a preview and not recommended for any production
+//! > use.  All APIs are unstable.  Proceed at your own risk.
 
 use std::io::BufReader;
 
@@ -32,8 +36,8 @@ use rustls::pki_types::PrivateKeyDer;
 use rustls_pki_types::CertificateDer;
 use tokio::sync::watch;
 
-use crate::credentials::ProtocolInfo;
-use crate::private;
+use grpc::__unstable::Internal;
+use grpc::credentials::ProtocolInfo;
 
 pub mod client;
 mod key_log;
@@ -102,7 +106,7 @@ pub trait Provider<T> {
     /// This allows the consumer to observe the current value and await
     /// future updates.
     #[doc(hidden)]
-    fn get_receiver(self, _token: private::Internal) -> watch::Receiver<T>;
+    fn get_receiver(self, _token: Internal) -> watch::Receiver<T>;
 }
 
 /// A provider that supplies a constant, immutable value.
@@ -118,7 +122,7 @@ impl<T> StaticProvider<T> {
 }
 
 impl<T> Provider<T> for StaticProvider<T> {
-    fn get_receiver(self, _token: private::Internal) -> watch::Receiver<T> {
+    fn get_receiver(self, _token: Internal) -> watch::Receiver<T> {
         // We drop the sender (_) immediately.
         // This ensures the receiver sees the initial value but knows
         // no future updates will arrive.
@@ -133,13 +137,11 @@ pub type StaticRootCertificatesProvider = StaticProvider<RootCertificates>;
 /// A provider for a single, fixed identity.
 pub type StaticIdentityProvider = StaticProvider<Identity>;
 
-static TLS_PROTO_INFO: ProtocolInfo = ProtocolInfo {
-    security_protocol: "tls",
-};
+static TLS_PROTO_INFO: ProtocolInfo = ProtocolInfo::unstable_new("tls");
 
 fn sanitize_crypto_provider(mut crypto_provider: CryptoProvider) -> Result<CryptoProvider, String> {
     crypto_provider.cipher_suites.retain(|suite| match suite {
-        rustls::SupportedCipherSuite::Tls13(suite) => true,
+        rustls::SupportedCipherSuite::Tls13(_) => true,
         rustls::SupportedCipherSuite::Tls12(suite) => {
             matches!(
                 suite.common.suite,

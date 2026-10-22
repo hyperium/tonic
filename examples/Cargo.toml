@@ -288,7 +288,7 @@ h2c = ["dep:hyper", "dep:tower", "dep:http", "dep:hyper-util"]
 cancellation = ["dep:tokio-util"]
 tower = ["dep:tower", "dep:http"]
 grpc-gcp = [ "dep:protobuf", "dep:grpc-protobuf", "dep:grpc", "dep:grpc-google",
-"dep:rustls", "dep:protobuf-well-known-types" ]
+"dep:grpc-rustls", "dep:rustls", "dep:protobuf-well-known-types" ]
 grpc-routeguide = ["dep:grpc", "dep:grpc-protobuf", "dep:protobuf", "dep:rand"]
 grpc-helloworld = ["dep:grpc", "dep:grpc-protobuf", "dep:protobuf"]
 default = ["gcp", "routeguide", "reflection", "autoreload", "health", "grpc-web",
@@ -333,6 +333,7 @@ grpc-google = { path = "../grpc-google", optional = true}
 grpc-protobuf = { path = "../grpc-protobuf", optional = true }
 protobuf = { version = "4.35.1-release", optional = true }
 grpc = { path = "../grpc", optional = true }
+grpc-rustls = { path = "../grpc-rustls", optional = true }
 rustls = { version = "0.23", default-features = false, features = ["ring"], optional = true}
 protobuf-well-known-types = { version = "4.35.1-release", optional = true }
 

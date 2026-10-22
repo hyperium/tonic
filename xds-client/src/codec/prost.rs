@@ -26,7 +26,7 @@
 
 use crate::codec::XdsCodec;
 use crate::error::{Error, Result};
-use crate::message::{DiscoveryRequest, DiscoveryResponse, MetadataValue, ResourceAny};
+use crate::message::{DiscoveryRequest, DiscoveryResponse, MetadataValue, Node, ResourceAny};
 use bytes::Bytes;
 use prost::Message;
 
@@ -34,43 +34,23 @@ use prost::Message;
 #[derive(Debug, Clone, Copy, Default)]
 pub struct ProstCodec;
 
+impl ProstCodec {
+    /// Encodes `node` as an `envoy.config.core.v3.Node` message, exactly as it
+    /// is sent in ADS requests. A config dump such as CSDS (gRFC A40) reports
+    /// this node.
+    pub fn encode_node(&self, node: &Node) -> Bytes {
+        node_to_proto(node).encode_to_vec().into()
+    }
+}
+
 impl XdsCodec for ProstCodec {
     fn encode_request(&self, request: &DiscoveryRequest<'_>) -> Result<Bytes> {
-        use envoy_types::pb::envoy::config::core::v3 as core;
         use envoy_types::pb::envoy::service::discovery::v3 as discovery;
-        use envoy_types::pb::google::protobuf::Struct;
         use envoy_types::pb::google::rpc::Status;
-
-        let metadata = if request.node.metadata.is_empty() {
-            None
-        } else {
-            Some(Struct {
-                fields: request
-                    .node
-                    .metadata
-                    .iter()
-                    .map(|(k, v)| (k.clone(), metadata_to_proto(v)))
-                    .collect(),
-            })
-        };
 
         let proto_request = discovery::DiscoveryRequest {
             version_info: request.version_info.to_owned(),
-            node: Some(core::Node {
-                id: request.node.id.clone().unwrap_or_default(),
-                cluster: request.node.cluster.clone().unwrap_or_default(),
-                user_agent_name: request.node.user_agent_name.clone(),
-                user_agent_version_type: Some(core::node::UserAgentVersionType::UserAgentVersion(
-                    request.node.user_agent_version.clone(),
-                )),
-                locality: request.node.locality.as_ref().map(|l| core::Locality {
-                    region: l.region.clone(),
-                    zone: l.zone.clone(),
-                    sub_zone: l.sub_zone.clone(),
-                }),
-                metadata,
-                ..Default::default()
-            }),
+            node: Some(node_to_proto(request.node)),
             resource_names: request.resource_names.to_vec(),
             type_url: request.type_url.to_owned(),
             response_nonce: request.response_nonce.to_owned(),
@@ -103,6 +83,40 @@ impl XdsCodec for ProstCodec {
             type_url: proto_response.type_url,
             nonce: proto_response.nonce,
         })
+    }
+}
+
+/// Convert a [`Node`] to its `envoy.config.core.v3.Node` wire form.
+fn node_to_proto(node: &Node) -> envoy_types::pb::envoy::config::core::v3::Node {
+    use envoy_types::pb::envoy::config::core::v3 as core;
+    use envoy_types::pb::google::protobuf::Struct;
+
+    let metadata = if node.metadata.is_empty() {
+        None
+    } else {
+        Some(Struct {
+            fields: node
+                .metadata
+                .iter()
+                .map(|(k, v)| (k.clone(), metadata_to_proto(v)))
+                .collect(),
+        })
+    };
+
+    core::Node {
+        id: node.id.clone().unwrap_or_default(),
+        cluster: node.cluster.clone().unwrap_or_default(),
+        user_agent_name: node.user_agent_name.clone(),
+        user_agent_version_type: Some(core::node::UserAgentVersionType::UserAgentVersion(
+            node.user_agent_version.clone(),
+        )),
+        locality: node.locality.as_ref().map(|l| core::Locality {
+            region: l.region.clone(),
+            zone: l.zone.clone(),
+            sub_zone: l.sub_zone.clone(),
+        }),
+        metadata,
+        ..Default::default()
     }
 }
 
@@ -387,5 +401,40 @@ mod tests {
         let error = proto_request.error_detail.unwrap();
         assert_eq!(error.code, 3);
         assert_eq!(error.message, "validation failed");
+    }
+
+    #[test]
+    fn test_encode_node_matches_request_node() {
+        use std::collections::HashMap;
+
+        use envoy_types::pb::envoy::config::core::v3 as core;
+        use envoy_types::pb::envoy::service::discovery::v3 as discovery;
+
+        let codec = ProstCodec;
+        let node = Node::new("grpc", "1.0")
+            .with_id("node-1")
+            .with_cluster("cluster-1")
+            .with_locality(Locality {
+                region: "us-west".to_string(),
+                zone: "us-west-1a".to_string(),
+                sub_zone: "rack-1".to_string(),
+            })
+            .with_metadata(HashMap::from([(
+                "key".to_string(),
+                MetadataValue::String("value".to_string()),
+            )]));
+        let request = DiscoveryRequest {
+            version_info: "",
+            node: &node,
+            type_url: "type.googleapis.com/envoy.config.cluster.v3.Cluster",
+            resource_names: &[],
+            response_nonce: "",
+            error_detail: None,
+        };
+
+        let request =
+            discovery::DiscoveryRequest::decode(codec.encode_request(&request).unwrap()).unwrap();
+        let encoded = core::Node::decode(codec.encode_node(&node)).unwrap();
+        assert_eq!(Some(encoded), request.node);
     }
 }

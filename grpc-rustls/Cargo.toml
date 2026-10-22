@@ -1,0 +1,57 @@
+[package]
+name = "grpc-rustls"
+version = "0.10.0"
+authors = ["gRPC authors"]
+license = "MIT"
+homepage = "https://grpc.io"
+repository = "https://github.com/grpc/grpc-rust"
+description = """
+rustls-based TLS credentials for gRPC-Rust.
+"""
+readme = "README.md"
+keywords = ["rpc", "grpc", "tls", "rustls"]
+categories = ["web-programming", "network-programming", "asynchronous"]
+rust-version = { workspace = true }
+edition = "2024"
+publish = false
+
+[package.metadata.cargo_check_external_types]
+allowed_external_types = [
+    "grpc::*",
+    "tokio::sync::watch::*",
+]
+
+[dependencies]
+grpc = { version = "0.10.0", path = "../grpc", default-features = false, features = [
+    "__unstable",
+] }
+rustls = { version = "0.23", default-features = false, features = [
+    "tls12",
+    "logging",
+    "std",
+] }
+rustls-pemfile = { version = "2.1", default-features = false, features = [
+    "std",
+] }
+rustls-pki-types = { version = "1.8", default-features = false }
+rustls-platform-verifier = { version = "0.7", default-features = false }
+rustls-webpki = { version = "0.103.16", default-features = false }
+tokio = { version = "1.37.0", features = ["sync"] }
+tokio-rustls = { version = "0.26", default-features = false }
+
+[dev-dependencies]
+bytes = "1.10.1"
+grpc = { version = "0.10.0", path = "../grpc", features = ["__unstable"] }
+prost = "0.14.0"
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
+tempfile = "3.26"
+tokio = { version = "1.37.0", features = ["macros", "net", "rt-multi-thread", "io-util"] }
+tokio-stream = { version = "0.1.17", default-features = false, features = ["net"] }
+tonic = { version = "0.14.6", path = "../tonic", default-features = false, features = [
+    "codegen",
+    "server",
+    "router",
+    "tls-ring",
+] }
+tonic-prost = { version = "0.14.6", path = "../tonic-prost" }
+

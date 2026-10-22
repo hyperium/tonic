@@ -22,16 +22,12 @@
  *
  */
 
-use std::fs;
 use std::net::SocketAddr;
-use std::path::PathBuf;
 use std::pin::Pin;
 use std::result::Result;
 use std::sync::Arc;
-use std::sync::Once;
 use std::time::Duration;
 
-use crate::async_trait;
 use bytes::Buf;
 use bytes::Bytes;
 use h2::Reason;
@@ -56,6 +52,7 @@ use tonic_prost::prost::Message as ProstMessage;
 
 use crate::StatusCodeError;
 use crate::StatusError;
+use crate::async_trait;
 use crate::attributes::Attributes;
 use crate::client::CallOptions;
 use crate::client::Channel;
@@ -87,10 +84,6 @@ use crate::credentials::client::ClientHandshakeInfo;
 use crate::credentials::client::HandshakeOutput;
 use crate::credentials::client::ValidateAuthority;
 use crate::credentials::common::Authority;
-use crate::credentials::rustls::RootCertificates;
-use crate::credentials::rustls::StaticProvider;
-use crate::credentials::rustls::client::ClientTlsConfig;
-use crate::credentials::rustls::client::RustlsChannelCredentials;
 use crate::echo_pb::EchoRequest;
 use crate::echo_pb::EchoResponse;
 use crate::echo_pb::echo_server::Echo;
@@ -312,6 +305,7 @@ async fn grpc_invoke_tonic_unary() {
 mod unix_tests {
     use std::path::Component;
     use std::path::Path;
+    use std::path::PathBuf;
 
     use tempfile::tempdir;
     use tokio::net::UnixListener;
@@ -455,109 +449,6 @@ mod unix_tests {
 
         Ok(relative_path)
     }
-}
-
-static INIT: Once = Once::new();
-
-fn init_provider() {
-    INIT.call_once(|| {
-        let _ = rustls::crypto::ring::default_provider().install_default();
-    });
-}
-
-#[tokio::test]
-async fn grpc_invoke_tonic_unary_tls() {
-    init_provider();
-
-    let certs_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .join("examples/data/tls");
-
-    let server_cert = fs::read(certs_path.join("server.pem")).expect("failed to read server.pem");
-    let server_key = fs::read(certs_path.join("server.key")).expect("failed to read server.key");
-    let ca_cert = fs::read(certs_path.join("ca.pem")).expect("failed to read ca.pem");
-
-    let identity = tonic::transport::Identity::from_pem(server_cert, server_key);
-    let tls_config = tonic::transport::ServerTlsConfig::new().identity(identity);
-
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-    let shutdown_notify = Arc::new(Notify::new());
-    let shutdown_notify_copy = shutdown_notify.clone();
-
-    // Spawn a task for the server.
-    let server_handle = tokio::spawn(async move {
-        let echo_server = EchoService {
-            response_headers: None,
-            response_error: None,
-        };
-        let svc = EchoServer::new(echo_server);
-        let _ = Server::builder()
-            .tls_config(tls_config)
-            .expect("failed to set tls config")
-            .add_service(svc)
-            .serve_with_incoming_shutdown(
-                TcpListenerStream::new(listener),
-                shutdown_notify_copy.notified(),
-            )
-            .await;
-    });
-
-    // Create the channel.
-    let root_certs = RootCertificates::from_pem(ca_cert);
-    let root_provider = StaticProvider::new(root_certs);
-    let config = ClientTlsConfig::new().with_root_certificates_provider(root_provider);
-    let creds = RustlsChannelCredentials::new(config).unwrap();
-    let call_creds = Arc::new(MockCallCredentials {
-        metadata: vec![("x-test-metadata", "test-value")],
-        min_security_level: SecurityLevel::PrivacyAndIntegrity,
-        should_fail: None,
-    });
-    let composite_creds = CompositeChannelCredentials::new(creds, call_creds);
-
-    let target = format!("dns:///{}", addr);
-    let channel = Channel::builder(&target, Arc::new(composite_creds)).build();
-
-    let (headers, resp, trailers) = perform_unary_echo(&channel, "hello interop tls").await;
-
-    assert_eq!(
-        headers.metadata().get("x-test-metadata-echo").unwrap(),
-        "test-value"
-    );
-    assert_eq!(resp.message, "hello interop tls");
-
-    let connection_info = headers.connection_info();
-    assert_eq!(
-        connection_info.local_address().network_type,
-        TCP_IP_NETWORK_TYPE
-    );
-    let local_addr: SocketAddr = connection_info.local_address().address.parse().unwrap();
-    assert_eq!(local_addr.ip(), addr.ip());
-    assert_eq!(
-        connection_info.remote_address().network_type,
-        TCP_IP_NETWORK_TYPE
-    );
-    assert_eq!(
-        connection_info.remote_address().address.to_string(),
-        addr.to_string()
-    );
-    assert_eq!(connection_info.security_info().security_protocol(), "tls");
-
-    assert!(
-        trailers.connection_info().is_none(),
-        "trailers should not contain connection_info when headers were present; had {:?}",
-        trailers.connection_info().as_ref().unwrap()
-    );
-
-    assert!(
-        trailers.status().is_ok(),
-        "RPC failed: {:?}",
-        trailers.status()
-    );
-
-    shutdown_notify.notify_one();
-    server_handle.await.unwrap();
 }
 
 #[tokio::test]

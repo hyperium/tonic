@@ -17,7 +17,7 @@ workspace = true
 [dependencies]
 envoy-types = "0.7"
 prost = "0.14"
-tonic = { version = "0.14", features = ["server"] }
+tonic = { version = "0.14.6", features = ["server"] }
 tokio = { version = "1", features = ["sync", "rt", "net"] }
 tokio-stream = { version = "0.1", features = ["net"] }
 strum = { version = "0.28.0", features = ["derive"] }

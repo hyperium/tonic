@@ -2,7 +2,7 @@
 
 A `tonic` based gRPC healthcheck implementation. It closely follows the official [health checking protocol](https://github.com/grpc/grpc/blob/master/doc/health-checking.md), although it may not implement all features described in the specs.
 
-Please follow the example in the [main repo](https://github.com/hyperium/tonic/tree/master/examples/src/health) to see how it works.
+Please follow the example in the [main repo](https://github.com/grpc/grpc-rust/tree/master/examples/src/health) to see how it works.
 
 ## Features
 

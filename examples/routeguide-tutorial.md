@@ -39,12 +39,12 @@ To run the sample code and walk through the tutorial, the only prerequisite is R
 Clone or download Tonic's repository:
 
 ```shell
-$ git clone https://github.com/hyperium/tonic.git
+$ git clone https://github.com/grpc/grpc-rust.git
 ```
 
 Change your current directory to Tonic's repository root:
 ```shell
-$ cd tonic
+$ cd grpc-rust
 ```
 
 Run the server
@@ -159,7 +159,7 @@ message Point {
 }
 ```
 
-[routeguide-proto]: https://github.com/hyperium/tonic/blob/master/examples/proto/routeguide/route_guide.proto
+[routeguide-proto]: https://github.com/grpc/grpc-rust/blob/master/examples/proto/routeguide/route_guide.proto
 
 ## Generating client and server code
 
@@ -226,7 +226,7 @@ There are two parts to making our `RouteGuide` service do its job:
 You can find our example `RouteGuide` server in
 [examples/src/routeguide/server.rs][routeguide-server].
 
-[routeguide-server]: https://github.com/hyperium/tonic/blob/master/examples/src/routeguide/server.rs
+[routeguide-server]: https://github.com/grpc/grpc-rust/blob/master/examples/src/routeguide/server.rs
 
 ### Implementing the RouteGuide server trait
 
@@ -339,9 +339,9 @@ Lastly, we need implement two helper functions: `in_range` and `calc_distance`. 
 when performing feature lookups. You can find them in
 [examples/src/routeguide/server.rs][in-range-fn].
 
-[route-guide-db]: https://github.com/hyperium/tonic/blob/master/examples/data/route_guide_db.json
-[data-module]: https://github.com/hyperium/tonic/blob/master/examples/src/routeguide/data.rs
-[in-range-fn]: https://github.com/hyperium/tonic/blob/master/examples/src/routeguide/server.rs#L174
+[route-guide-db]: https://github.com/grpc/grpc-rust/blob/master/examples/data/route_guide_db.json
+[data-module]: https://github.com/grpc/grpc-rust/blob/master/examples/src/routeguide/data.rs
+[in-range-fn]: https://github.com/grpc/grpc-rust/blob/master/examples/src/routeguide/server.rs#L174
 
 #### Request and Response types
 All our service methods receive a `tonic::Request<T>` and return a
@@ -539,7 +539,7 @@ methods.
 
 [Tower]: https://github.com/tower-rs
 [hyper]: https://github.com/hyperium/hyper
-[authentication-example]: https://github.com/hyperium/tonic/blob/master/examples/src/authentication/server.rs#L56
+[authentication-example]: https://github.com/grpc/grpc-rust/blob/master/examples/src/authentication/server.rs#L56
 
 <a name="client"></a>
 ## Creating the client
@@ -592,7 +592,7 @@ create a client in our main function, passing the server's full URL to `RouteGui
 Our client is now ready to make service calls. Note that `client` is mutable, this is because it
 needs to manage internal state.
 
-[routeguide-client]: https://github.com/hyperium/tonic/blob/master/examples/src/routeguide/client.rs
+[routeguide-client]: https://github.com/grpc/grpc-rust/blob/master/examples/src/routeguide/client.rs
 
 
 ### Calling service methods

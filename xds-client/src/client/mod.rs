@@ -27,11 +27,12 @@
 use std::fmt;
 use std::sync::Arc;
 
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 
 use crate::client::config::ClientConfig;
+use crate::client::snapshot::ResourceSnapshot;
 use crate::client::watch::ResourceWatcher;
-use crate::client::worker::{AdsWorker, WatcherId, WorkerCommand};
+use crate::client::worker::{AdsWorker, TransportContext, WatchEvent, WatcherId, WorkerCommand};
 use crate::codec::XdsCodec;
 use crate::metrics::MetricsRecorder;
 use crate::resource::{DecodedResource, DecoderFn, Resource};
@@ -40,6 +41,7 @@ use crate::transport::TransportBuilder;
 
 pub mod config;
 pub mod retry;
+pub mod snapshot;
 pub mod watch;
 pub mod worker;
 
@@ -112,22 +114,27 @@ where
     /// Build the client and start the background worker.
     ///
     /// This spawns a background task that manages the ADS stream.
-    /// The task runs until all `XdsClient` handles are dropped.
+    /// The task runs until all client handles and watchers are dropped.
     pub fn build(self) -> XdsClient {
-        let (command_tx, command_rx) = mpsc::channel(COMMAND_CHANNEL_BUFFER_SIZE);
+        let (command_tx, command_rx) = mpsc::unbounded_channel();
 
         let worker = AdsWorker::new(
-            self.transport_builder,
             self.codec,
             self.runtime.clone(),
-            self.config,
+            &self.config,
             command_tx.clone(),
             command_rx,
             self.recorder,
         );
+        let transport_context = TransportContext::new(
+            self.runtime.clone(),
+            self.transport_builder,
+            self.config.servers,
+            self.config.retry_policy,
+        );
 
         self.runtime.spawn(async move {
-            worker.run().await;
+            worker.run(transport_context).await;
         });
 
         XdsClient { command_tx }
@@ -139,24 +146,12 @@ where
 /// This is a handle to the background worker that manages the ADS stream.
 /// Cloning this handle creates a new reference to the same worker.
 ///
-/// When all `XdsClient` handles are dropped, the background worker shuts down.
+/// When all client handles and watchers are dropped, the background worker shuts down.
 #[derive(Clone, Debug)]
 pub struct XdsClient {
     /// Channel to send commands to the worker.
-    command_tx: mpsc::Sender<WorkerCommand>,
+    command_tx: mpsc::UnboundedSender<WorkerCommand>,
 }
-
-/// Buffer size for the command channel between [`XdsClient`] handles and the worker.
-///
-/// Commands are lightweight (watch/unwatch/timer), so a modest buffer suffices.
-/// The channel provides backpressure if the worker is temporarily busy processing
-/// a response.
-const COMMAND_CHANNEL_BUFFER_SIZE: usize = 64;
-
-/// Default buffer size for watcher event channels.
-///
-/// This provides backpressure when watchers are slow to process events.
-const WATCHER_CHANNEL_BUFFER_SIZE: usize = 16;
 
 impl XdsClient {
     /// Create a new builder with the given configuration, transport builder, codec, and runtime.
@@ -206,7 +201,7 @@ impl XdsClient {
     pub async fn watch<T: Resource>(&self, name: impl Into<String>) -> ResourceWatcher<T> {
         let name = name.into();
         let watcher_id = WatcherId::new();
-        let (event_tx, event_rx) = mpsc::channel(WATCHER_CHANNEL_BUFFER_SIZE);
+        let (event_tx, event_rx) = mpsc::unbounded_channel();
 
         let decoder: DecoderFn = Box::new(|bytes| match crate::resource::decode::<T>(bytes) {
             crate::resource::DecodeResult::Success { name, resource } => {
@@ -225,17 +220,36 @@ impl XdsClient {
 
         let _ = self
             .command_tx
-            .send(WorkerCommand::Watch {
+            .send(WorkerCommand::Watcher(WatchEvent::Watch {
                 type_url: T::TYPE_URL.as_str(),
                 name,
                 watcher_id,
                 event_tx,
                 decoder,
                 all_resources_required_in_sotw: T::ALL_RESOURCES_REQUIRED_IN_SOTW,
-            })
-            .await;
+            }));
 
         ResourceWatcher::new(event_rx, watcher_id, self.command_tx.clone())
+    }
+
+    /// Returns the status of every resource the client is subscribed to,
+    /// sorted by type URL and name. This is the data an xDS config dump, such
+    /// as a CSDS service (gRFC A40), reports.
+    ///
+    /// The background worker answers in order with its other queued work.
+    /// Connecting or reconnecting to the xDS server does not delay it.
+    ///
+    /// Returns an empty list if the worker has stopped.
+    pub async fn resource_snapshot(&self) -> Vec<ResourceSnapshot> {
+        let (reply, snapshot) = oneshot::channel();
+        if self
+            .command_tx
+            .send(WorkerCommand::Snapshot { reply })
+            .is_err()
+        {
+            return Vec::new();
+        }
+        snapshot.await.unwrap_or_default()
     }
 
     /// Creates a disconnected client with no backing worker.
@@ -246,7 +260,7 @@ impl XdsClient {
     /// Requires the `test-util` feature.
     #[cfg(feature = "test-util")]
     pub fn disconnected() -> Self {
-        let (tx, _rx) = mpsc::channel(1);
+        let (tx, _rx) = mpsc::unbounded_channel();
         Self { command_tx: tx }
     }
 }

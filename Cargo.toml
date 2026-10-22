@@ -15,6 +15,7 @@ members = [
   "grpc-google",
   "grpc-protobuf",
   "grpc-protobuf-build",
+  "grpc-rustls",
   "grpc-xds",
   "protoc-gen-rust-grpc",
   "xds-client",

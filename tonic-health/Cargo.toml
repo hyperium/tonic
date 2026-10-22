@@ -5,12 +5,12 @@ description = """
 Health Checking module of `tonic` gRPC implementation.
 """
 edition = "2024"
-homepage = "https://github.com/hyperium/tonic"
+homepage = "https://github.com/grpc/grpc-rust"
 keywords = ["rpc", "grpc", "async", "healthcheck"]
 license = "MIT"
 name = "tonic-health"
 readme = "README.md"
-repository = "https://github.com/hyperium/tonic"
+repository = "https://github.com/grpc/grpc-rust"
 version = "0.14.6"
 rust-version = { workspace = true }
 

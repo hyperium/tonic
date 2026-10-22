@@ -27,10 +27,10 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use grpc::credentials::LocalChannelCredentials;
-use grpc::credentials::rustls::RootCertificates;
-use grpc::credentials::rustls::StaticProvider;
-use grpc::credentials::rustls::client::ClientTlsConfig as GrpcClientTlsConfig;
-use grpc::credentials::rustls::client::RustlsChannelCredentials;
+use grpc_rustls::RootCertificates;
+use grpc_rustls::StaticProvider;
+use grpc_rustls::client::ClientTlsConfig as GrpcClientTlsConfig;
+use grpc_rustls::client::RustlsChannelCredentials;
 use interop::client::InteropTest;
 use interop::client::InteropTestUnimplemented;
 use interop::client_prost;
