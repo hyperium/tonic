@@ -16,9 +16,9 @@ edition = "2024"
 allowed_external_types = ["protobuf_codegen::Dependency"]
 
 [dependencies]
-prettyplease = "0.2.35"
+prettyplease = "0.3"
 protobuf-codegen = { version = "4.35.1-release" }
-syn = "2.0.104"
+syn = { version = "3", features = ["full"] }
 which = "8.0"
 protoc-gen-rust-grpc = { version = "0.10.0", path = "../protoc-gen-rust-grpc", optional = true }
 

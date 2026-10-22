@@ -21,10 +21,10 @@ cleanup-markdown = ["prost-build/cleanup-markdown"]
 tonic-build = { version = "0.14.6", path = "../tonic-build", default-features = false }
 prost-build = { version = "0.14" }
 prost-types = { version = "0.14" }
-prettyplease = { version = "0.2" }
+prettyplease = { version = "0.3" }
 proc-macro2 = "1.0"
 quote = "1.0"
-syn = "2.0"
+syn = { version = "3", features = ["full"] }
 tempfile = "3.0"
 
 [dev-dependencies]

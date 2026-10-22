@@ -7,8 +7,8 @@ rust-version = { workspace = true }
 
 [dependencies]
 protox = "0.9"
-prettyplease = "0.2"
+prettyplease = "0.3"
 quote = "1"
-syn = "2"
+syn = { version = "3", features = ["full"] }
 tempfile = "3.8.0"
 tonic-prost-build = {path = "../tonic-prost-build", default-features = false, features = ["cleanup-markdown"]}
