@@ -102,10 +102,12 @@ impl Runtime for TokioRuntime {
         }
     }
 
+    #[allow(clippy::disallowed_methods)] // This is Tokio's runtime implementation.
     fn sleep(&self, duration: Duration) -> Pin<Box<dyn Sleep>> {
         Box::pin(tokio::time::sleep(duration))
     }
 
+    #[allow(clippy::disallowed_methods)] // This is Tokio's runtime implementation.
     fn now(&self) -> Instant {
         // Use tokio's clock so that a paused/advanced test clock is respected.
         tokio::time::Instant::now().into_std()

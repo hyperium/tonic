@@ -477,6 +477,11 @@ pub struct GrpcRuntime {
     inner: Arc<dyn Runtime>,
 }
 
+/// Error returned by [`GrpcRuntime::timeout`] when the deadline elapses.
+#[cfg(test)]
+#[derive(Debug)]
+pub(crate) struct Elapsed;
+
 impl Default for GrpcRuntime {
     fn default() -> Self {
         default_runtime()
@@ -507,6 +512,22 @@ impl GrpcRuntime {
 
     pub fn now(&self) -> Instant {
         self.inner.now()
+    }
+
+    /// Awaits `fut`, returning `Err(Elapsed)` if it does not complete within
+    /// `duration` according to this runtime's clock.
+    #[cfg(test)]
+    pub(crate) async fn timeout<F: Future>(
+        &self,
+        duration: Duration,
+        fut: F,
+    ) -> Result<F::Output, Elapsed> {
+        let sleep = self.sleep(duration);
+        ::tokio::select! {
+            biased;
+            out = fut => Ok(out),
+            _ = sleep => Err(Elapsed),
+        }
     }
 
     pub fn tcp_stream(
