@@ -22,9 +22,19 @@
  *
  */
 
-//! A utility which helps parent LB policies manage multiple children for the
-//! purposes of forwarding channel updates.
+//! Utilities which help parent LB policies manage child LB policies.
+//!
+//! [`Child`] wraps a single child LB policy.  It hides the routing of work
+//! items to the child and records the child's most recent [`LbState`] instead
+//! of forwarding it to the channel.  Use this directly when the parent has a
+//! small, fixed set of children that it wants to drive individually.
+//!
+//! [`ChildManager`] manages a dynamic set of [`Child`]ren derived from the
+//! contents of each resolver update, and forwards channel updates to all of
+//! them.  Use this when the children are a pure function of the most recent
+//! update (e.g. round robin, which creates one child per endpoint).
 
+use std::any::TypeId;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::Debug;
@@ -34,6 +44,7 @@ use std::sync::Arc;
 
 use crate::client::ConnectivityState;
 use crate::client::load_balancing::ChannelController;
+use crate::client::load_balancing::DynLbPolicy;
 use crate::client::load_balancing::DynLbPolicyBuilder;
 use crate::client::load_balancing::LbPolicy;
 use crate::client::load_balancing::LbPolicyBuilder;
@@ -51,20 +62,157 @@ use crate::rt::GrpcRuntime;
 #[derive(Debug)]
 pub struct ChildManager<T: Debug, B: LbPolicyBuilder = Arc<DynLbPolicyBuilder>> {
     handle_to_child_idx: HashMap<ChildHandle, usize>,
-    children: Vec<Child<T, B>>,
+    children: Vec<(T, Child<B::LbPolicy>)>,
+    children_changed: bool,
     runtime: GrpcRuntime,
-    updated: bool, // Set when any child updates its picker; cleared when accessed.
     work_scheduler: Arc<dyn WorkScheduler>,
 }
 
-#[non_exhaustive]
+/// A wrapper around a single child LB policy.
+///
+/// `Child` wraps the [`WorkScheduler`] given to the child so that work items
+/// can be routed back to it, and exposes methods mirroring the [`LbPolicy`]
+/// API (though it does not implement the trait, as `work()` differs slightly).
+///
+/// Pickers produced by the child are *not* forwarded to the
+/// [`ChannelController`] passed to each method.  Instead, the most recent one
+/// is recorded and available via [`state`](Child::state), and
+/// [`take_updated`](Child::take_updated) reports whether a new one was
+/// produced.  Resolution requests can also be suppressed via
+/// [`set_suppress_resolution`](Child::set_suppress_resolution).  All other
+/// controller calls are forwarded.  This allows the parent to decide what
+/// picker, if any, to report to the channel.
 #[derive(Debug)]
-pub struct Child<T, B: LbPolicyBuilder = Arc<DynLbPolicyBuilder>> {
-    pub identifier: T,
-    pub builder: B,
-    pub state: LbState,
-    policy: B::LbPolicy,
-    work_scheduler: Arc<ChildWorkScheduler>,
+pub struct Child<P: LbPolicy = Box<DynLbPolicy>> {
+    name: &'static str,
+    policy: P,
+    handle: ChildHandle,
+    state: LbState,
+    updated: bool,
+    suppress_resolution: bool,
+}
+
+impl<P: LbPolicy> Child<P> {
+    /// Creates a new child LB policy using the builder.
+    pub fn new<B>(builder: &B, options: LbPolicyOptions) -> Self
+    where
+        B: LbPolicyBuilder<LbPolicy = P> + ?Sized,
+    {
+        Self::from_fn(builder.name(), options, |options| builder.build(options))
+    }
+
+    /// Creates a new child LB policy using `build` to construct the policy from
+    /// the wrapped [`LbPolicyOptions`].
+    pub fn from_fn(
+        name: &'static str,
+        mut options: LbPolicyOptions,
+        build: impl FnOnce(LbPolicyOptions) -> P,
+    ) -> Self {
+        let handle = ChildHandle(Arc::new(()));
+        options.work_scheduler = Arc::new(ChildWorkScheduler {
+            work_scheduler: options.work_scheduler,
+            handle: handle.clone(),
+        });
+        let policy = build(options);
+        Self {
+            name,
+            policy,
+            handle,
+            state: LbState::initial(),
+            updated: false,
+            suppress_resolution: false,
+        }
+    }
+
+    /// Returns the name of the builder that created this child's policy.
+    pub fn name(&self) -> &'static str {
+        self.name
+    }
+
+    /// Returns the most recent state produced by this child, or
+    /// [`LbState::initial`] if it has not yet produced a picker.
+    pub fn state(&self) -> &LbState {
+        &self.state
+    }
+
+    /// Returns true if the child has produced a picker since the last call.
+    pub fn take_updated(&mut self) -> bool {
+        mem::take(&mut self.updated)
+    }
+
+    /// Sets whether resolution requests from this child are dropped instead of
+    /// forwarded to the channel controller.
+    pub fn set_suppress_resolution(&mut self, suppress: bool) {
+        self.suppress_resolution = suppress;
+    }
+
+    /// Calls [`LbPolicy::resolver_update`] on the child, recording any picker
+    /// it produces.
+    pub fn resolver_update(
+        &mut self,
+        update: ResolverUpdate,
+        config: &P::LbConfig,
+        channel_controller: &mut dyn ChannelController,
+    ) -> Result<(), String> {
+        let (policy, mut channel_controller) = self.split(channel_controller);
+        policy.resolver_update(update, config, &mut channel_controller)
+    }
+
+    /// Calls [`LbPolicy::work`] on the child, recording any picker it produces,
+    /// if `data` was a work item scheduled by this child's [`WorkScheduler`].
+    /// Otherwise, returns `data` back to the caller.  The caller should ensure
+    /// the only possible [`WorkData`] passed is intended for a [`Child`] --
+    /// that is, it should handle any work items it produced before attempting
+    /// to pass it to a child.
+    pub fn try_work(
+        &mut self,
+        data: WorkData,
+        channel_controller: &mut dyn ChannelController,
+    ) -> Result<(), WorkData> {
+        debug_assert_eq!(data.type_id(), TypeId::of::<ChildWorkItem>());
+        let item = data.downcast::<ChildWorkItem>()?;
+        if item.handle != self.handle {
+            // This work item belongs to another child.
+            return Err(item);
+        }
+        self.work_item(item.data, channel_controller);
+        Ok(())
+    }
+
+    /// Calls [`LbPolicy::exit_idle`] on the child, recording any picker it
+    /// produces.
+    pub fn exit_idle(&mut self, channel_controller: &mut dyn ChannelController) {
+        let (policy, mut channel_controller) = self.split(channel_controller);
+        policy.exit_idle(&mut channel_controller);
+    }
+
+    /// Calls work on the child with the unwrapped data from a work item known
+    /// to belong to it.
+    fn work_item(
+        &mut self,
+        data: Option<WorkData>,
+        channel_controller: &mut dyn ChannelController,
+    ) {
+        let (policy, mut channel_controller) = self.split(channel_controller);
+        policy.work(data, &mut channel_controller);
+    }
+
+    /// Returns the child's policy along with a controller to pass to it that
+    /// records the pickers it produces.
+    fn split<'a>(
+        &'a mut self,
+        channel_controller: &'a mut dyn ChannelController,
+    ) -> (&'a mut P, WrappedController<'a>) {
+        (
+            &mut self.policy,
+            WrappedController {
+                channel_controller,
+                child_state: &mut self.state,
+                updated: &mut self.updated,
+                suppress_resolution: self.suppress_resolution,
+            },
+        )
+    }
 }
 
 /// A collection of data sent to a child of the ChildManager.
@@ -94,15 +242,15 @@ where
         Self {
             handle_to_child_idx: Default::default(),
             children: Default::default(),
+            children_changed: false,
             runtime,
             work_scheduler,
-            updated: false,
         }
     }
 
-    /// Returns data for all current children.
-    pub fn children(&self) -> impl Iterator<Item = &Child<T, B>> {
-        self.children.iter()
+    /// Returns the identifiers and data for all current children.
+    pub fn children(&self) -> impl Iterator<Item = (&T, &Child<B::LbPolicy>)> {
+        self.children.iter().map(|(id, child)| (id, child))
     }
 
     /// Aggregates states from child policies.
@@ -115,7 +263,7 @@ where
         let mut is_connecting = false;
         let mut is_idle = false;
 
-        for child in &self.children {
+        for (_, child) in &self.children {
             match child.state.connectivity_state {
                 ConnectivityState::Ready => {
                     return ConnectivityState::Ready;
@@ -140,43 +288,30 @@ where
         }
     }
 
-    /// Returns true if any child has updated its picker since the last call to
-    /// child_updated.
+    /// Returns true if any child has updated its picker, or if any children
+    /// were added or removed, since the last call to `child_updated`.
     pub fn child_updated(&mut self) -> bool {
-        mem::take(&mut self.updated)
-    }
-
-    /// Retains only the child policies specified by the iterator.
-    ///
-    /// If an ID is provided that does not exist in the ChildManager, it will be
-    /// ignored.
-    pub fn retain_children(&mut self, ids_builders: impl IntoIterator<Item = (T, B)>) {
-        self.reset_children(ids_builders, true);
+        // Every child's flag must be cleared, so avoid short-circuiting.
+        let children_changed = mem::take(&mut self.children_changed);
+        self.children
+            .iter_mut()
+            .fold(children_changed, |updated, (_, child)| {
+                child.take_updated() | updated
+            })
     }
 
     /// Resets the children and all state related to tracking them in accordance
-    /// with the iterator provided.  When retain_only is true, any entry in
-    /// ids_builders that is not in the current set of children will be ignored;
-    /// otherwise a new child will be built for it.
-    fn reset_children(
-        &mut self,
-        ids_builders: impl IntoIterator<Item = (T, B)>,
-        retain_only: bool,
-    ) {
+    /// with the iterator provided.  Existing children are retained if they
+    /// appear in ids_builders; otherwise a new child will be built.
+    fn reset_children(&mut self, ids_builders: impl IntoIterator<Item = (T, B)>) {
         // Replace self.children with an empty vec.
         let old_children = mem::take(&mut self.children);
 
         // Build a map of the old children from their IDs for efficient lookups.
-        // The builder is not retained: the one from ids_builders is used for any
-        // child that is transferred.
-        let mut old_children: HashMap<(&'static str, T), _> = old_children
+        // The builder name is effectively part of the identifier.
+        let mut old_children: HashMap<(&'static str, T), Child<B::LbPolicy>> = old_children
             .into_iter()
-            .map(|e| {
-                (
-                    (e.builder.name(), e.identifier),
-                    (e.state, e.policy, e.work_scheduler),
-                )
-            })
+            .map(|(id, child)| ((child.name(), id), child))
             .collect();
 
         // Clear handle index map.
@@ -186,38 +321,23 @@ where
         // update, and create new children.
         for (identifier, builder) in ids_builders {
             let k = (builder.name(), identifier);
-            if let Some((state, policy, work_scheduler)) = old_children.remove(&k) {
-                let new_child_idx = self.children.len();
-                self.handle_to_child_idx
-                    .insert(work_scheduler.handle.clone(), new_child_idx);
-                self.children.push(Child {
-                    builder,
-                    identifier: k.1,
-                    state,
-                    policy,
-                    work_scheduler,
-                });
-            } else if !retain_only {
-                let handle = ChildHandle(Arc::new(()));
-                let new_child_idx = self.children.len();
-                self.handle_to_child_idx
-                    .insert(handle.clone(), new_child_idx);
-                let work_scheduler = Arc::new(ChildWorkScheduler {
-                    work_scheduler: self.work_scheduler.clone(),
-                    handle,
-                });
-                let policy = builder.build(LbPolicyOptions {
-                    work_scheduler: work_scheduler.clone(),
-                    runtime: self.runtime.clone(),
-                });
-                self.children.push(Child {
-                    builder,
-                    identifier: k.1,
-                    state: LbState::initial(),
-                    policy,
-                    work_scheduler,
-                });
-            }
+            let child = old_children.remove(&k).unwrap_or_else(|| {
+                self.children_changed = true;
+                Child::new(
+                    &builder,
+                    LbPolicyOptions {
+                        work_scheduler: self.work_scheduler.clone(),
+                        runtime: self.runtime.clone(),
+                    },
+                )
+            });
+            self.handle_to_child_idx
+                .insert(child.handle.clone(), self.children.len());
+            self.children.push((k.1, child));
+        }
+
+        if !old_children.is_empty() {
+            self.children_changed = true;
         }
         // Anything left in old_children will just be Dropped and cleaned up.
     }
@@ -241,21 +361,15 @@ where
             .map(|e| ((e.child_identifier, e.child_policy_builder), e.child_update))
             .unzip();
 
-        self.reset_children(ids_builders, false);
+        self.reset_children(ids_builders);
 
         // Call resolver_update on all children.
-        for (child, child_update) in self.children.iter_mut().zip(updates) {
+        for ((id, child), child_update) in self.children.iter_mut().zip(updates) {
             let Some((resolver_update, config)) = child_update else {
                 continue;
             };
-            let mut channel_controller =
-                WrappedController::new(channel_controller, &mut child.state, &mut self.updated);
-            if let Err(err) =
-                child
-                    .policy
-                    .resolver_update(resolver_update, config, &mut channel_controller)
-            {
-                errs.push(format!("child {:?}: {err}", child.identifier));
+            if let Err(err) = child.resolver_update(resolver_update, config, channel_controller) {
+                errs.push(format!("child {:?}: {err}", id));
             }
         }
         if errs.is_empty() {
@@ -275,14 +389,10 @@ where
         channel_controller: &mut dyn ChannelController,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
         let mut errs = Vec::with_capacity(self.children.len());
-        for child in &mut self.children {
-            let mut channel_controller =
-                WrappedController::new(channel_controller, &mut child.state, &mut self.updated);
-            if let Err(err) = child.policy.resolver_update(
-                resolver_update.clone(),
-                config,
-                &mut channel_controller,
-            ) {
+        for (_, child) in &mut self.children {
+            if let Err(err) =
+                child.resolver_update(resolver_update.clone(), config, channel_controller)
+            {
                 errs.push(err);
             }
         }
@@ -314,44 +424,30 @@ where
                 return;
             }
         };
+        // Look up the child directly rather than offering the item to each
+        // child in turn.  Items for removed children are dropped.
         if let Some(&child_idx) = self.handle_to_child_idx.get(&child_work_item.handle) {
-            let child = &mut self.children[child_idx];
-            let mut channel_controller =
-                WrappedController::new(channel_controller, &mut child.state, &mut self.updated);
-            child
-                .policy
-                .work(child_work_item.data, &mut channel_controller);
+            let (_, child) = &mut self.children[child_idx];
+            child.work_item(child_work_item.data, channel_controller);
         }
     }
 
     /// Calls exit_idle on all children.
     pub fn exit_idle(&mut self, channel_controller: &mut dyn ChannelController) {
-        for child in &mut self.children {
-            let mut channel_controller =
-                WrappedController::new(channel_controller, &mut child.state, &mut self.updated);
-            child.policy.exit_idle(&mut channel_controller);
+        for (_, child) in &mut self.children {
+            child.exit_idle(channel_controller);
         }
     }
 }
 
+/// Wraps a [`ChannelController`] for a [`Child`].  Records the child's pickers
+/// instead of forwarding them, optionally suppresses resolution requests, and
+/// forwards all other calls.
 struct WrappedController<'a> {
     channel_controller: &'a mut dyn ChannelController,
     child_state: &'a mut LbState,
     updated: &'a mut bool,
-}
-
-impl<'a> WrappedController<'a> {
-    fn new(
-        channel_controller: &'a mut dyn ChannelController,
-        child_state: &'a mut LbState,
-        updated: &'a mut bool,
-    ) -> Self {
-        Self {
-            channel_controller,
-            child_state,
-            updated,
-        }
-    }
+    suppress_resolution: bool,
 }
 
 impl ChannelController for WrappedController<'_> {
@@ -370,7 +466,9 @@ impl ChannelController for WrappedController<'_> {
     }
 
     fn request_resolution(&mut self) {
-        self.channel_controller.request_resolution();
+        if !self.suppress_resolution {
+            self.channel_controller.request_resolution();
+        }
     }
 }
 
@@ -771,8 +869,8 @@ mod test {
         });
         child_manager.update(updates.clone(), &mut tcc).unwrap();
 
-        let child1_handle = child_manager.children[0].work_scheduler.handle.clone();
-        let child2_handle = child_manager.children[1].work_scheduler.handle.clone();
+        let child1_handle = child_manager.children[0].1.handle.clone();
+        let child2_handle = child_manager.children[1].1.handle.clone();
 
         // Confirm that child one has requested work.
         let data = rx_work.recv().unwrap();
@@ -838,5 +936,43 @@ mod test {
         // Call work for child 2.
         child_manager.work(child2_work, &mut tcc);
         assert!(*work_called.lock().unwrap().get(name2).unwrap_or(&false));
+    }
+
+    #[test]
+    fn childmanager_child_updated() {
+        let test_name = "stub-childmanager_child_updated";
+        let mut env = new_env(create_verifying_funcs_for_aggregate_tests(), test_name);
+        let builder: Arc<DynLbPolicyBuilder> = GLOBAL_LB_REGISTRY.get_policy(test_name).unwrap();
+        let endpoints = create_n_endpoints_with_k_addresses(2, 1);
+
+        assert!(!env.policy.child_updated());
+
+        // Adding children marks child_updated true even when resolver_update
+        // does not produce a picker.
+        env.send_resolver_update(endpoints.clone(), builder.clone())
+            .unwrap();
+        let subchannels = env.verify_subchannel_creation(2);
+        assert!(env.policy.child_updated());
+        assert!(!env.policy.child_updated());
+
+        // Updating with the same set of children without producing a picker
+        // leaves child_updated false.
+        env.send_resolver_update(endpoints.clone(), builder.clone())
+            .unwrap();
+        let _ = env.verify_subchannel_creation(2);
+        assert!(!env.policy.child_updated());
+
+        // A child producing a picker marks child_updated true.
+        env.send_subchannel_update(&subchannels[0], &SubchannelState::ready());
+        assert!(env.policy.child_updated());
+        assert!(!env.policy.child_updated());
+
+        // Removing a child marks child_updated true even when the remaining
+        // child does not produce a new picker.
+        env.send_resolver_update(vec![endpoints[1].clone()], builder)
+            .unwrap();
+        let _ = env.verify_subchannel_creation(1);
+        assert!(env.policy.child_updated());
+        assert!(!env.policy.child_updated());
     }
 }

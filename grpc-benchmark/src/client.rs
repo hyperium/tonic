@@ -31,10 +31,10 @@ use std::time::Instant;
 use grpc::client::Channel;
 use grpc::credentials::ChannelCredentials;
 use grpc::credentials::LocalChannelCredentials;
-use grpc::credentials::rustls::RootCertificates;
-use grpc::credentials::rustls::StaticRootCertificatesProvider;
-use grpc::credentials::rustls::client::ClientTlsConfig;
-use grpc::credentials::rustls::client::RustlsChannelCredentials;
+use grpc_rustls::RootCertificates;
+use grpc_rustls::StaticRootCertificatesProvider;
+use grpc_rustls::client::ClientTlsConfig;
+use grpc_rustls::client::RustlsChannelCredentials;
 use hdrhistogram::Histogram;
 use protobuf::proto;
 use tokio::sync::mpsc;
@@ -418,13 +418,13 @@ async fn blocking_streaming(mut opts: RpcOptions) {
         }
         let start = Instant::now();
         // Perform a single ping-pong.
-        if let Err(()) = tx.send(req.clone()).await {
+        if tx.send(&req).await.is_err() {
             println!("Stream closed with status: {:?}", rx.status().await);
             return;
         }
 
-        if let Err(status) = rx.recv_into(&mut resp).await {
-            println!("Stream failed with status: {:?}", status);
+        if rx.recv_into(&mut resp).await.is_err() {
+            println!("Stream failed with status: {:?}", rx.status().await);
             return;
         };
         let elapsed = Instant::now().duration_since(start);

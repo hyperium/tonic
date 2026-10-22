@@ -33,6 +33,7 @@ use grpc::client::ResponseStreamItem;
 use grpc::client::SendOptions;
 use grpc::client::SendStream;
 use grpc::client::stream_util::RecvStreamValidator;
+use grpc::core::StreamEnded;
 use protobuf::AsMut;
 use protobuf::AsView;
 use protobuf::Message;
@@ -137,8 +138,8 @@ where
     /// Note: success does *not* indicate successful transmission of the request
     /// or successful receipt of the request by the server.  Success only
     /// indicates that the stream has not yet terminated.
-    pub async fn send(&mut self, message: &impl AsView<Proxied = Req>) -> Result<(), ()> {
-        let msg = ProtoSendMessage::from_view(message);
+    pub async fn send(&mut self, message: impl AsView<Proxied = Req>) -> Result<(), StreamEnded> {
+        let msg = ProtoSendMessage::from_view(&message);
         self.tx.send(&msg, SendOptions::default()).await
     }
 

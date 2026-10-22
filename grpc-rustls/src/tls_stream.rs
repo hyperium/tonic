@@ -32,9 +32,9 @@ use tokio::io::AsyncWrite;
 use tokio::io::ReadBuf;
 use tokio_rustls::TlsStream as RustlsStream;
 
-use crate::private;
-use crate::rt::EndpointIoStream;
-use crate::rt::GrpcEndpoint;
+use grpc::__unstable::Internal;
+use grpc::__unstable::rt::EndpointIoStream;
+use grpc::__unstable::rt::GrpcEndpoint;
 
 pub struct TlsStream<T> {
     inner: RustlsStream<EndpointIoStream<T>>,
@@ -69,7 +69,7 @@ where
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &mut ReadBuf<'_>,
-        _token: private::Internal,
+        _token: Internal,
     ) -> Poll<std::io::Result<()>> {
         let pinned = Pin::new(&mut self.get_mut().inner);
         pinned.poll_read(cx, buf)
@@ -79,7 +79,7 @@ where
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &[u8],
-        _token: private::Internal,
+        _token: Internal,
     ) -> Poll<Result<usize, std::io::Error>> {
         let pinned = Pin::new(&mut self.get_mut().inner);
         pinned.poll_write(cx, buf)
@@ -88,7 +88,7 @@ where
     fn poll_flush_private(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-        _token: private::Internal,
+        _token: Internal,
     ) -> Poll<Result<(), std::io::Error>> {
         let pinned = Pin::new(&mut self.get_mut().inner);
         pinned.poll_flush(cx)
@@ -97,7 +97,7 @@ where
     fn poll_shutdown_private(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-        _token: private::Internal,
+        _token: Internal,
     ) -> Poll<Result<(), std::io::Error>> {
         let pinned = Pin::new(&mut self.get_mut().inner);
         pinned.poll_shutdown(cx)
@@ -107,13 +107,13 @@ where
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         bufs: &[IoSlice<'_>],
-        _token: private::Internal,
+        _token: Internal,
     ) -> Poll<Result<usize, std::io::Error>> {
         let pinned = Pin::new(&mut self.get_mut().inner);
         pinned.poll_write_vectored(cx, bufs)
     }
 
-    fn is_write_vectored_private(&self, _token: private::Internal) -> bool {
+    fn is_write_vectored_private(&self, _token: Internal) -> bool {
         self.inner.is_write_vectored()
     }
 }
@@ -123,6 +123,7 @@ impl<T: GrpcEndpoint> TlsStream<T> {
         Self { inner }
     }
 
+    #[cfg(test)]
     pub(crate) fn inner(&self) -> &RustlsStream<EndpointIoStream<T>> {
         &self.inner
     }

@@ -3,8 +3,8 @@ name = "tonic-xds"
 version = "0.1.0-alpha.4"
 edition = "2024"
 rust-version.workspace = true
-homepage = "https://github.com/hyperium/tonic"
-repository = "https://github.com/hyperium/tonic"
+homepage = "https://github.com/grpc/grpc-rust"
+repository = "https://github.com/grpc/grpc-rust"
 authors = [
     "Ankur Mittal <ankurmit2006@gmail.com>",
     "Jeff Jiang <guokeno0@gmail.com>",
@@ -21,7 +21,7 @@ publish = true
 exclude = ["proto/test/*"]
 
 [dependencies]
-tonic = "0.14"
+tonic = "0.14.6"
 http = "1"
 http-body = "1"
 pin-project-lite = "0.2"
@@ -51,7 +51,7 @@ tokio-stream = { version = "0.1", features = ["sync"] }
 tokio-util = "0.7"
 backoff = "0.4"
 shared_http_body = "0.1"
-tonic-prost = { version = "0.14", optional = true }
+tonic-prost = { version = "0.14.6", optional = true }
 rustls = { version = "0.23", default-features = false, features = ["std", "tls12"], optional = true }
 rustls-pemfile = { version = "2", optional = true }
 x509-parser = { version = "0.17", optional = true }
@@ -65,9 +65,9 @@ workspace = true
 xds-client = { version = "0.1.0-alpha.4", path = "../xds-client", features = ["test-util"] }
 xds-test-util = { path = "../xds-test-util", features = ["tls-ring"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "test-util"] }
-tonic = { version = "0.14", features = [ "server", "channel", "tls-ring" ] }
-tonic-prost = "0.14"
-tonic-prost-build = "0.14"
+tonic = { version = "0.14.6", features = [ "server", "channel", "tls-ring" ] }
+tonic-prost = "0.14.6"
+tonic-prost-build = "0.14.6"
 async-stream = "0.3"
 tempfile = "3.27.0"
 rcgen = "0.14"

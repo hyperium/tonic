@@ -47,7 +47,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-For further details how to use the generated client/server, see the [examples here](https://github.com/hyperium/tonic/tree/master/examples) or the Google APIs example below.
+For further details how to use the generated client/server, see the [examples here](https://github.com/grpc/grpc-rust/tree/master/examples) or the Google APIs example below.
 
 
 ## NixOS related hints
@@ -126,4 +126,4 @@ pub mod google {
     }
 }
 ```
-See [the example here](https://github.com/hyperium/tonic/tree/master/examples/src/gcp)
+See [the example here](https://github.com/grpc/grpc-rust/tree/master/examples/src/gcp)

@@ -36,10 +36,13 @@ use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
 
-use crate::resource::{
-    ClusterResource, EndpointAddress, EndpointsResource, ListenerResource, RouteConfigResource,
-    RouteSource, VirtualHost,
-};
+use crate::resource::ClusterResource;
+use crate::resource::EndpointAddress;
+use crate::resource::EndpointsResource;
+use crate::resource::ListenerResource;
+use crate::resource::RouteConfigResource;
+use crate::resource::RouteSource;
+use crate::resource::VirtualHost;
 
 /// The atomic xDS configuration snapshot for a channel.
 #[derive(Debug, Clone)]
@@ -189,6 +192,7 @@ pub(crate) enum LeafEndpointSource {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::resource::DomainMatcher;
 
     fn route_config() -> Arc<RouteConfigResource> {
         Arc::new(RouteConfigResource {
@@ -196,12 +200,12 @@ mod tests {
             virtual_hosts: vec![
                 VirtualHost {
                     name: "first".into(),
-                    domains: vec!["first.example.com".into()],
+                    domains: vec![DomainMatcher::Exact("first.example.com".into())],
                     routes: Vec::new(),
                 },
                 VirtualHost {
                     name: "second".into(),
-                    domains: vec!["second.example.com".into()],
+                    domains: vec![DomainMatcher::Exact("second.example.com".into())],
                     routes: Vec::new(),
                 },
             ],

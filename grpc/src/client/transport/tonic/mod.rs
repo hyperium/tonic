@@ -88,6 +88,7 @@ use crate::core::Address;
 use crate::core::ConnectionInfo;
 use crate::core::RecvMessage;
 use crate::core::SendMessage;
+use crate::core::StreamEnded;
 use crate::private;
 use crate::rt::BoxedTaskHandle;
 use crate::rt::GrpcRuntime;
@@ -217,7 +218,11 @@ struct TonicSendStream {
 }
 
 impl SendStream for TonicSendStream {
-    async fn send(&mut self, msg: &dyn SendMessage, options: SendOptions) -> Result<(), ()> {
+    async fn send(
+        &mut self,
+        msg: &dyn SendMessage,
+        options: SendOptions,
+    ) -> Result<(), StreamEnded> {
         if let Ok(tx) = &self.sender
             && let Ok(buf) = msg.encode()
             && tx.send(buf).await.is_ok()
@@ -227,7 +232,7 @@ impl SendStream for TonicSendStream {
             }
             return Ok(());
         }
-        Err(())
+        Err(StreamEnded)
     }
 }
 

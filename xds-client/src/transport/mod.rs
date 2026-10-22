@@ -54,7 +54,9 @@ pub trait Transport: Send + Sync + 'static {
 
 /// Sending half of a bidirectional xDS ADS stream.
 pub trait TransportSender: Send + 'static {
-    /// Send serialized DiscoveryRequest bytes to the server.
+    /// Submit serialized DiscoveryRequest bytes to the transport.
+    ///
+    /// Completion does not guarantee network delivery.
     ///
     /// # Cancel safety
     ///

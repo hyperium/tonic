@@ -28,6 +28,7 @@
 //! - ADS stream management (connection, reconnection, etc.)
 //! - Resource subscription and watching
 //! - Version/nonce tracking and ACK/NACK
+//! - Snapshots of the resource cache for config dumps such as CSDS (gRFC A40)
 //!
 //! It does NOT contain gRPC-specific logic such as:
 //! - LDS -> RDS -> CDS -> EDS cascading
@@ -86,6 +87,7 @@ pub mod transport;
 
 pub use client::config::{ClientConfig, ServerConfig};
 pub use client::retry::{Backoff, RetryPolicy};
+pub use client::snapshot::{AcceptedResource, RejectedUpdate, ResourceSnapshot, ResourceStatus};
 pub use client::watch::{ProcessingDone, ResourceEvent, ResourceWatcher};
 pub use client::{XdsClient, XdsClientBuilder};
 pub use codec::XdsCodec;

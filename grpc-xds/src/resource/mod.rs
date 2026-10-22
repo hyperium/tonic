@@ -36,13 +36,28 @@ mod cluster;
 mod endpoint;
 mod listener;
 mod route;
+mod safe_regex;
+mod string_matcher;
 
-pub(crate) use cluster::{ClusterDiscovery, ClusterResource};
-pub(crate) use endpoint::{
-    EndpointAddress, EndpointsResource, HealthStatus, LbEndpoint, Locality, LocalityLbEndpoints,
-};
-pub(crate) use listener::{ListenerResource, RouteSource};
-pub(crate) use route::{
-    HeaderMatchSpecifier, HeaderMatcher, PathSpecifier, Route, RouteAction, RouteConfigResource,
-    RouteMatch, StringMatcher, VirtualHost, WeightedCluster,
-};
+pub(crate) use cluster::ClusterDiscovery;
+pub(crate) use cluster::ClusterResource;
+pub(crate) use endpoint::EndpointAddress;
+pub(crate) use endpoint::EndpointsResource;
+pub(crate) use endpoint::HealthStatus;
+pub(crate) use endpoint::LbEndpoint;
+pub(crate) use endpoint::Locality;
+pub(crate) use endpoint::LocalityLbEndpoints;
+pub(crate) use listener::ListenerResource;
+pub(crate) use listener::RouteSource;
+pub(crate) use route::DomainMatcher;
+pub(crate) use route::HeaderMatchSpecifier;
+pub(crate) use route::HeaderMatcher;
+pub(crate) use route::PathSpecifier;
+pub(crate) use route::Route;
+pub(crate) use route::RouteAction;
+pub(crate) use route::RouteConfigResource;
+pub(crate) use route::RouteMatch;
+pub(crate) use route::VirtualHost;
+pub(crate) use route::WeightedCluster;
+pub(crate) use safe_regex::SafeRegex;
+pub(crate) use string_matcher::StringMatcher;

@@ -29,10 +29,10 @@ use std::sync::Arc;
 
 use crate::StatusCodeError;
 use crate::StatusError;
-use crate::client::RequestHeaders;
 use crate::client::load_balancing::ChannelController;
 use crate::client::load_balancing::LbPolicy;
 use crate::client::load_balancing::LbState;
+use crate::client::load_balancing::PickOptions;
 use crate::client::load_balancing::PickResult;
 use crate::client::load_balancing::Picker;
 use crate::client::load_balancing::WorkData;
@@ -353,8 +353,8 @@ impl UnwrapPicker {
 }
 
 impl Picker for UnwrapPicker {
-    fn pick(&self, request: &RequestHeaders) -> PickResult {
-        let result = self.delegate.pick(request);
+    fn pick(&self, options: PickOptions<'_>) -> PickResult {
+        let result = self.delegate.pick(options);
         match result {
             PickResult::Pick(mut pick) => {
                 let Some(subchannel) = pick.subchannel.downcast_ref::<SharedSubchannel>() else {
@@ -382,6 +382,7 @@ mod tests {
     use std::sync::mpsc;
 
     use super::*;
+    use crate::client::CallOptions;
     use crate::client::ConnectivityState;
     use crate::client::load_balancing::DynLbConfig;
     use crate::client::load_balancing::LbPolicy;
@@ -739,7 +740,7 @@ mod tests {
                     sc: Arc<dyn Subchannel>,
                 }
                 impl Picker for MockPicker {
-                    fn pick(&self, _req: &RequestHeaders) -> PickResult {
+                    fn pick(&self, _options: PickOptions<'_>) -> PickResult {
                         PickResult::Pick(Pick {
                             subchannel: self.sc.clone(),
                             metadata: MetadataMap::new(),
@@ -761,7 +762,9 @@ mod tests {
         let state = env.expect_picker_update();
 
         let req = new_request_headers();
-        let result = state.picker.pick(&req);
+        let result = state
+            .picker
+            .pick(PickOptions::new(&req, &CallOptions::new()));
         let PickResult::Pick(pick) = result else {
             panic!("expected Pick")
         };

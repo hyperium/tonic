@@ -5,12 +5,12 @@ description = """
 grpc-web protocol translation for tonic services.
 """
 edition = "2024"
-homepage = "https://github.com/hyperium/tonic"
+homepage = "https://github.com/grpc/grpc-rust"
 keywords = ["rpc", "grpc", "grpc-web"]
 license = "MIT"
 name = "tonic-web"
 readme = "README.md"
-repository = "https://github.com/hyperium/tonic"
+repository = "https://github.com/grpc/grpc-rust"
 version = "0.14.6"
 rust-version = { workspace = true }
 

@@ -76,7 +76,7 @@ async fn test_http_max_header_list_size_and_long_errors() {
         .unwrap()
         // Increase the max header list size to 2x the default value. If this is
         // not set, this test will hang. See
-        // <https://github.com/hyperium/tonic/issues/1834>.
+        // <https://github.com/grpc/grpc-rust/issues/1834>.
         .http2_max_header_list_size(u32::try_from(N * 2).unwrap())
         .connect()
         .await

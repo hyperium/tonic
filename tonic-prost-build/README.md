@@ -23,6 +23,6 @@ fn main() {
 - `transport`: Enables transport layer code generation
 - `cleanup-markdown`: Enables markdown cleanup in generated documentation
 
-[tonic]: https://github.com/hyperium/tonic
+[tonic]: https://github.com/grpc/grpc-rust
 [prost]: https://github.com/tokio-rs/prost
 [prost-build]: https://github.com/tokio-rs/prost

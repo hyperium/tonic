@@ -22,14 +22,9 @@
  *
  */
 
-use std::fs;
 use std::net::SocketAddr;
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::sync::Once;
 
 use http::HeaderValue;
-use rustls::crypto::ring;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
@@ -39,70 +34,23 @@ use crate::client::transport::ProxyOptions;
 use crate::client::transport::http_connect::HttpConnectHandshaker;
 use crate::credentials::ChannelCredentials;
 use crate::credentials::LocalChannelCredentials;
-use crate::credentials::ServerCredentials;
 use crate::credentials::client::ClientHandshakeInfo;
 use crate::credentials::client::HandshakeOutput;
 use crate::credentials::common::Authority;
-use crate::credentials::rustls::Identity;
-use crate::credentials::rustls::RootCertificates;
-use crate::credentials::rustls::StaticProvider;
-use crate::credentials::rustls::client::ClientTlsConfig;
-use crate::credentials::rustls::client::RustlsChannelCredentials;
-use crate::credentials::rustls::server::RustlsServerCredentials;
-use crate::credentials::rustls::server::ServerTlsConfig;
 use crate::private;
 use crate::rt::EndpointIoStream;
 use crate::rt::GrpcRuntime;
 use crate::rt::StreamEndpoint;
 use crate::rt::tokio::TokioRuntime;
 
-static INIT: Once = Once::new();
-
-fn init_provider() {
-    INIT.call_once(|| {
-        let _ = ring::default_provider().install_default();
-    });
-}
-
-fn tls_credentials() -> (RustlsServerCredentials, RustlsChannelCredentials) {
-    init_provider();
-
-    let certs_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .join("examples/data/tls");
-
-    let server_cert = fs::read(certs_path.join("server.pem")).expect("failed to read server.pem");
-    let server_key = fs::read(certs_path.join("server.key")).expect("failed to read server.key");
-    let ca_cert = fs::read(certs_path.join("ca.pem")).expect("failed to read ca.pem");
-
-    let identity = Identity::from_pem(server_cert, server_key);
-    let identity_provider = StaticProvider::new(vec![identity]);
-    let server_tls_config = ServerTlsConfig::new(identity_provider);
-    let server_creds = RustlsServerCredentials::new(server_tls_config).unwrap();
-
-    let root_certs = RootCertificates::from_pem(ca_cert);
-    let root_provider = StaticProvider::new(root_certs);
-    let tls_client_config = ClientTlsConfig::new().with_root_certificates_provider(root_provider);
-    let rustls_creds = RustlsChannelCredentials::new(tls_client_config).unwrap();
-
-    (server_creds, rustls_creds)
-}
-
-async fn run_mock_tls_server(listener: TcpListener, creds: RustlsServerCredentials) {
-    let (stream, _) = listener.accept().await.unwrap();
-    let stream = StreamEndpoint::new_from_tcp(stream).unwrap();
-    let runtime = GrpcRuntime::new(TokioRuntime::default());
-    let handshake_res = creds
-        .accept(Box::new(stream), runtime, private::Internal)
-        .await
-        .unwrap();
-
-    let mut tls_stream = EndpointIoStream::new(handshake_res.endpoint);
+/// Runs a mock target server which expects to read "hello" and replies with
+/// "world".
+async fn run_mock_server(listener: TcpListener) {
+    let (mut stream, _) = listener.accept().await.unwrap();
     let mut buf = vec![0u8; 5];
-    tls_stream.read_exact(&mut buf).await.unwrap();
+    stream.read_exact(&mut buf).await.unwrap();
     assert_eq!(buf, b"hello");
-    tls_stream.write_all(b"world").await.unwrap();
+    stream.write_all(b"world").await.unwrap();
 }
 
 async fn perform_handshake(
@@ -156,12 +104,12 @@ async fn run_client_handshake_fail(
 
 #[tokio::test]
 async fn test_proxy_success_no_auth() {
-    let (server_creds, rustls_creds) = tls_credentials();
+    let local_creds = LocalChannelCredentials::new_arc();
 
     let server_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let server_addr = server_listener.local_addr().unwrap();
 
-    let server_handle = tokio::spawn(run_mock_tls_server(server_listener, server_creds));
+    let server_handle = tokio::spawn(run_mock_server(server_listener));
 
     // Start Proxy
     let target_host = format!("localhost:{}", server_addr.port());
@@ -175,7 +123,7 @@ async fn test_proxy_success_no_auth() {
 
     // Connect Client via Proxy using HttpConnectHandshaker directly.
     let proxy_options = ProxyOptions::new(target_host, None);
-    let handshaker = HttpConnectHandshaker::new(Arc::new(rustls_creds), &proxy_options);
+    let handshaker = HttpConnectHandshaker::new(local_creds, &proxy_options);
 
     verify_client_handshake(&handshaker, proxy_addr, server_addr.port()).await;
     server_handle.await.unwrap();
@@ -183,12 +131,12 @@ async fn test_proxy_success_no_auth() {
 
 #[tokio::test]
 async fn test_proxy_success_with_auth() {
-    let (server_creds, rustls_creds) = tls_credentials();
+    let local_creds = LocalChannelCredentials::new_arc();
 
     let server_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let server_addr = server_listener.local_addr().unwrap();
 
-    let server_handle = tokio::spawn(run_mock_tls_server(server_listener, server_creds));
+    let server_handle = tokio::spawn(run_mock_server(server_listener));
 
     // Start Proxy (expects Basic auth).
     let target_host = format!("localhost:{}", server_addr.port());
@@ -204,7 +152,7 @@ async fn test_proxy_success_with_auth() {
     // Connect Client via Proxy with Auth Header.
     let auth_header = HeaderValue::from_str(expected_auth).unwrap();
     let proxy_options = ProxyOptions::new(target_host, Some(auth_header));
-    let handshaker = HttpConnectHandshaker::new(Arc::new(rustls_creds), &proxy_options);
+    let handshaker = HttpConnectHandshaker::new(local_creds, &proxy_options);
 
     verify_client_handshake(&handshaker, proxy_addr, server_addr.port()).await;
     server_handle.await.unwrap();
@@ -212,7 +160,7 @@ async fn test_proxy_success_with_auth() {
 
 #[tokio::test]
 async fn test_proxy_failure_large_header() {
-    let (_, rustls_creds) = tls_credentials();
+    let local_creds = LocalChannelCredentials::new_arc();
 
     let target_host = "localhost:12345".to_string();
     let proxy_addr = spawn_proxy(ProxyConfig {
@@ -224,7 +172,7 @@ async fn test_proxy_failure_large_header() {
     .await;
 
     let proxy_options = ProxyOptions::new(target_host, None);
-    let handshaker = HttpConnectHandshaker::new(Arc::new(rustls_creds), &proxy_options);
+    let handshaker = HttpConnectHandshaker::new(local_creds, &proxy_options);
 
     let err_msg = run_client_handshake_fail(&handshaker, proxy_addr).await;
     assert!(
@@ -236,7 +184,7 @@ async fn test_proxy_failure_large_header() {
 
 #[tokio::test]
 async fn test_proxy_failure_invalid_response() {
-    let (_, rustls_creds) = tls_credentials();
+    let local_creds = LocalChannelCredentials::new_arc();
 
     let target_host = "localhost:12345".to_string();
     let proxy_addr = spawn_proxy(ProxyConfig {
@@ -248,7 +196,7 @@ async fn test_proxy_failure_invalid_response() {
     .await;
 
     let proxy_options = ProxyOptions::new(target_host, None);
-    let handshaker = HttpConnectHandshaker::new(Arc::new(rustls_creds), &proxy_options);
+    let handshaker = HttpConnectHandshaker::new(local_creds, &proxy_options);
 
     let err_msg = run_client_handshake_fail(&handshaker, proxy_addr).await;
     assert!(
@@ -260,7 +208,7 @@ async fn test_proxy_failure_invalid_response() {
 
 #[tokio::test]
 async fn test_proxy_failure_bad_status() {
-    let (_, rustls_creds) = tls_credentials();
+    let local_creds = LocalChannelCredentials::new_arc();
 
     let target_host = "localhost:12345".to_string();
     let proxy_addr = spawn_proxy(ProxyConfig {
@@ -272,7 +220,7 @@ async fn test_proxy_failure_bad_status() {
     .await;
 
     let proxy_options = ProxyOptions::new(target_host, None);
-    let handshaker = HttpConnectHandshaker::new(Arc::new(rustls_creds), &proxy_options);
+    let handshaker = HttpConnectHandshaker::new(local_creds, &proxy_options);
 
     let err_msg = run_client_handshake_fail(&handshaker, proxy_addr).await;
     assert!(

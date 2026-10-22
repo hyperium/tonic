@@ -3,8 +3,8 @@ name = "xds-client"
 description = "An xDS client implementation in Rust"
 version = "0.1.0-alpha.4"
 edition = "2024"
-homepage = "https://github.com/hyperium/tonic"
-repository = "https://github.com/hyperium/tonic"
+homepage = "https://github.com/grpc/grpc-rust"
+repository = "https://github.com/grpc/grpc-rust"
 license = "MIT"
 rust-version = { workspace = true }
 publish = true
@@ -48,11 +48,13 @@ tokio = { version = "1", features = [
     "rt-multi-thread",
     "macros",
     "net",
+    "test-util",
 ] }
 tonic = { version = "0.14" }
 async-stream = "0.3"
 envoy-types = "0.7"
 prost = "0.14"
+xds-test-util = { path = "../xds-test-util" }
 
 [[example]]
 name = "basic"
