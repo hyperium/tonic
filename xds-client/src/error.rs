@@ -39,9 +39,9 @@ pub enum Error {
     #[error("stream error: {0}")]
     Stream(#[from] tonic::Status),
 
-    /// gRPC RPC failed.
-    #[error("grpc error (code {0}): {1}")]
-    GrpcStream(i32, String),
+    /// Transport error.
+    #[error("transport error: {0}")]
+    Transport(#[source] Box<dyn std::error::Error + Send + Sync + 'static>),
 
     /// Call credentials failed, or require a secure transport.
     #[error("call credentials error: {0}")]

@@ -177,8 +177,7 @@ impl TransportReceiver for GrpcAdsReceiver {
                 }
                 ResponseStreamItem::Trailers(trailers) => {
                     if let Err(err) = trailers.into_status() {
-                        let (code, message) = err.into_parts();
-                        return Err(Error::GrpcStream(code as i32, message));
+                        return Err(Error::Transport(Box::new(err)));
                     }
                     return Ok(None);
                 }
