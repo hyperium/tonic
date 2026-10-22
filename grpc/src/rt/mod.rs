@@ -33,6 +33,7 @@ use std::sync::Arc;
 use std::task::Context;
 use std::task::Poll;
 use std::time::Duration;
+use std::time::Instant;
 
 use ::tokio::io::AsyncRead;
 use ::tokio::io::AsyncWrite;
@@ -77,6 +78,9 @@ pub trait Runtime: Send + Sync + Debug {
 
     /// Returns a future that completes after the specified duration.
     fn sleep(&self, duration: std::time::Duration) -> Pin<Box<dyn Sleep>>;
+
+    /// Returns the current time according to this runtime's clock.
+    fn now(&self) -> Instant;
 
     /// Establishes a TCP connection to the given `target` address with the
     /// specified `opts`.
@@ -431,6 +435,10 @@ impl Runtime for NoOpRuntime {
         unimplemented!()
     }
 
+    fn now(&self) -> Instant {
+        unimplemented!()
+    }
+
     fn tcp_stream(
         &self,
         _target: SocketAddr,
@@ -495,6 +503,10 @@ impl GrpcRuntime {
 
     pub fn sleep(&self, duration: std::time::Duration) -> Pin<Box<dyn Sleep>> {
         self.inner.sleep(duration)
+    }
+
+    pub fn now(&self) -> Instant {
+        self.inner.now()
     }
 
     pub fn tcp_stream(

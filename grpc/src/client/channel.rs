@@ -482,7 +482,9 @@ impl load_balancing::ChannelController for LbChannelController {
             InternalSubchannel::new_arc(
                 address.clone(),
                 transport,
-                Arc::new(NopBackoff {}),
+                Arc::new(NopBackoff {
+                    runtime: self.runtime.clone(),
+                }),
                 self.runtime.clone(),
                 self.security_opts.clone(),
                 work_scheduler,

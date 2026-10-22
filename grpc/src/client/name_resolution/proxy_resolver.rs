@@ -318,6 +318,10 @@ mod tests {
             self.inner.sleep(duration)
         }
 
+        fn now(&self) -> std::time::Instant {
+            self.inner.now()
+        }
+
         fn tcp_stream(
             &self,
             target: std::net::SocketAddr,
