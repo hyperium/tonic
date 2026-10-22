@@ -64,25 +64,25 @@ pub mod health_client {
         clippy::wildcard_imports,
         clippy::let_unit_value,
     )]
-    use tonic::codegen::*;
-    use tonic::codegen::http::Uri;
+    use ::tonic::codegen::*;
+    use ::tonic::codegen::http::Uri;
     #[derive(Debug, Clone)]
     pub struct HealthClient<T> {
-        inner: tonic::client::Grpc<T>,
+        inner: ::tonic::client::Grpc<T>,
     }
     impl<T> HealthClient<T>
     where
-        T: tonic::client::GrpcService<tonic::body::Body>,
+        T: ::tonic::client::GrpcService<::tonic::body::Body>,
         T::Error: Into<StdError>,
         T::ResponseBody: Body<Data = Bytes> + std::marker::Send + 'static,
         <T::ResponseBody as Body>::Error: Into<StdError> + std::marker::Send,
     {
         pub fn new(inner: T) -> Self {
-            let inner = tonic::client::Grpc::new(inner);
+            let inner = ::tonic::client::Grpc::new(inner);
             Self { inner }
         }
         pub fn with_origin(inner: T, origin: Uri) -> Self {
-            let inner = tonic::client::Grpc::with_origin(inner, origin);
+            let inner = ::tonic::client::Grpc::with_origin(inner, origin);
             Self { inner }
         }
         pub fn with_interceptor<F>(
@@ -90,16 +90,18 @@ pub mod health_client {
             interceptor: F,
         ) -> HealthClient<InterceptedService<T, F>>
         where
-            F: tonic::service::Interceptor,
+            F: ::tonic::service::Interceptor,
             T::ResponseBody: Default,
-            T: tonic::codegen::Service<
-                http::Request<tonic::body::Body>,
+            T: ::tonic::codegen::Service<
+                http::Request<::tonic::body::Body>,
                 Response = http::Response<
-                    <T as tonic::client::GrpcService<tonic::body::Body>>::ResponseBody,
+                    <T as ::tonic::client::GrpcService<
+                        ::tonic::body::Body,
+                    >>::ResponseBody,
                 >,
             >,
-            <T as tonic::codegen::Service<
-                http::Request<tonic::body::Body>,
+            <T as ::tonic::codegen::Service<
+                http::Request<::tonic::body::Body>,
             >>::Error: Into<StdError> + std::marker::Send + std::marker::Sync,
         {
             HealthClient::new(InterceptedService::new(inner, interceptor))
@@ -139,16 +141,16 @@ pub mod health_client {
         /// NOT_FOUND.
         pub async fn check(
             &mut self,
-            request: impl tonic::IntoRequest<super::HealthCheckRequest>,
+            request: impl ::tonic::IntoRequest<super::HealthCheckRequest>,
         ) -> std::result::Result<
-            tonic::Response<super::HealthCheckResponse>,
-            tonic::Status,
+            ::tonic::Response<super::HealthCheckResponse>,
+            ::tonic::Status,
         > {
             self.inner
                 .ready()
                 .await
                 .map_err(|e| {
-                    tonic::Status::unknown(
+                    ::tonic::Status::unknown(
                         format!("Service was not ready: {}", e.into()),
                     )
                 })?;
@@ -178,16 +180,16 @@ pub mod health_client {
         /// clients should retry the call with appropriate exponential backoff.
         pub async fn watch(
             &mut self,
-            request: impl tonic::IntoRequest<super::HealthCheckRequest>,
+            request: impl ::tonic::IntoRequest<super::HealthCheckRequest>,
         ) -> std::result::Result<
-            tonic::Response<tonic::codec::Streaming<super::HealthCheckResponse>>,
-            tonic::Status,
+            ::tonic::Response<::tonic::codec::Streaming<super::HealthCheckResponse>>,
+            ::tonic::Status,
         > {
             self.inner
                 .ready()
                 .await
                 .map_err(|e| {
-                    tonic::Status::unknown(
+                    ::tonic::Status::unknown(
                         format!("Service was not ready: {}", e.into()),
                     )
                 })?;
@@ -211,7 +213,7 @@ pub mod health_server {
         clippy::wildcard_imports,
         clippy::let_unit_value,
     )]
-    use tonic::codegen::*;
+    use ::tonic::codegen::*;
     /// Generated trait containing gRPC methods that should be implemented for use with HealthServer.
     #[async_trait]
     pub trait Health: std::marker::Send + std::marker::Sync + 'static {
@@ -219,14 +221,14 @@ pub mod health_server {
         /// NOT_FOUND.
         async fn check(
             &self,
-            request: tonic::Request<super::HealthCheckRequest>,
+            request: ::tonic::Request<super::HealthCheckRequest>,
         ) -> std::result::Result<
-            tonic::Response<super::HealthCheckResponse>,
-            tonic::Status,
+            ::tonic::Response<super::HealthCheckResponse>,
+            ::tonic::Status,
         >;
         /// Server streaming response type for the Watch method.
-        type WatchStream: tonic::codegen::tokio_stream::Stream<
-                Item = std::result::Result<super::HealthCheckResponse, tonic::Status>,
+        type WatchStream: ::tonic::codegen::tokio_stream::Stream<
+                Item = std::result::Result<super::HealthCheckResponse, ::tonic::Status>,
             >
             + std::marker::Send
             + 'static;
@@ -247,8 +249,8 @@ pub mod health_server {
         /// clients should retry the call with appropriate exponential backoff.
         async fn watch(
             &self,
-            request: tonic::Request<super::HealthCheckRequest>,
-        ) -> std::result::Result<tonic::Response<Self::WatchStream>, tonic::Status>;
+            request: ::tonic::Request<super::HealthCheckRequest>,
+        ) -> std::result::Result<::tonic::Response<Self::WatchStream>, ::tonic::Status>;
     }
     #[derive(Debug)]
     pub struct HealthServer<T> {
@@ -276,7 +278,7 @@ pub mod health_server {
             interceptor: F,
         ) -> InterceptedService<Self, F>
         where
-            F: tonic::service::Interceptor,
+            F: ::tonic::service::Interceptor,
         {
             InterceptedService::new(Self::new(inner), interceptor)
         }
@@ -309,13 +311,13 @@ pub mod health_server {
             self
         }
     }
-    impl<T, B> tonic::codegen::Service<http::Request<B>> for HealthServer<T>
+    impl<T, B> ::tonic::codegen::Service<http::Request<B>> for HealthServer<T>
     where
         T: Health,
         B: Body + std::marker::Send + 'static,
         B::Error: Into<StdError> + std::marker::Send + 'static,
     {
-        type Response = http::Response<tonic::body::Body>;
+        type Response = http::Response<::tonic::body::Body>;
         type Error = std::convert::Infallible;
         type Future = BoxFuture<Self::Response, Self::Error>;
         fn poll_ready(
@@ -331,16 +333,16 @@ pub mod health_server {
                     struct CheckSvc<T: Health>(pub Arc<T>);
                     impl<
                         T: Health,
-                    > tonic::server::UnaryService<super::HealthCheckRequest>
+                    > ::tonic::server::UnaryService<super::HealthCheckRequest>
                     for CheckSvc<T> {
                         type Response = super::HealthCheckResponse;
                         type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
+                            ::tonic::Response<Self::Response>,
+                            ::tonic::Status,
                         >;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::HealthCheckRequest>,
+                            request: ::tonic::Request<super::HealthCheckRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
@@ -357,7 +359,7 @@ pub mod health_server {
                     let fut = async move {
                         let method = CheckSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
+                        let mut grpc = ::tonic::server::Grpc::new(codec)
                             .apply_compression_config(
                                 accept_compression_encodings,
                                 send_compression_encodings,
@@ -376,17 +378,17 @@ pub mod health_server {
                     struct WatchSvc<T: Health>(pub Arc<T>);
                     impl<
                         T: Health,
-                    > tonic::server::ServerStreamingService<super::HealthCheckRequest>
+                    > ::tonic::server::ServerStreamingService<super::HealthCheckRequest>
                     for WatchSvc<T> {
                         type Response = super::HealthCheckResponse;
                         type ResponseStream = T::WatchStream;
                         type Future = BoxFuture<
-                            tonic::Response<Self::ResponseStream>,
-                            tonic::Status,
+                            ::tonic::Response<Self::ResponseStream>,
+                            ::tonic::Status,
                         >;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::HealthCheckRequest>,
+                            request: ::tonic::Request<super::HealthCheckRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
@@ -403,7 +405,7 @@ pub mod health_server {
                     let fut = async move {
                         let method = WatchSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
+                        let mut grpc = ::tonic::server::Grpc::new(codec)
                             .apply_compression_config(
                                 accept_compression_encodings,
                                 send_compression_encodings,
@@ -420,18 +422,18 @@ pub mod health_server {
                 _ => {
                     Box::pin(async move {
                         let mut response = http::Response::new(
-                            tonic::body::Body::default(),
+                            ::tonic::body::Body::default(),
                         );
                         let headers = response.headers_mut();
                         headers
                             .insert(
-                                tonic::Status::GRPC_STATUS,
-                                (tonic::Code::Unimplemented as i32).into(),
+                                ::tonic::Status::GRPC_STATUS,
+                                (::tonic::Code::Unimplemented as i32).into(),
                             );
                         headers
                             .insert(
                                 http::header::CONTENT_TYPE,
-                                tonic::metadata::GRPC_CONTENT_TYPE,
+                                ::tonic::metadata::GRPC_CONTENT_TYPE,
                             );
                         Ok(response)
                     })
@@ -453,7 +455,7 @@ pub mod health_server {
     }
     /// Generated gRPC service name
     pub const SERVICE_NAME: &str = "grpc.health.v1.Health";
-    impl<T> tonic::server::NamedService for HealthServer<T> {
+    impl<T> ::tonic::server::NamedService for HealthServer<T> {
         const NAME: &'static str = SERVICE_NAME;
     }
 }

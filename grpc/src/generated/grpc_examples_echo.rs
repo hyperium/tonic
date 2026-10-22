@@ -20,26 +20,26 @@ pub mod echo_client {
         clippy::wildcard_imports,
         clippy::let_unit_value,
     )]
-    use tonic::codegen::*;
-    use tonic::codegen::http::Uri;
+    use ::tonic::codegen::*;
+    use ::tonic::codegen::http::Uri;
     /// Echo is the echo service.
     #[derive(Debug, Clone)]
     pub struct EchoClient<T> {
-        inner: tonic::client::Grpc<T>,
+        inner: ::tonic::client::Grpc<T>,
     }
     impl<T> EchoClient<T>
     where
-        T: tonic::client::GrpcService<tonic::body::Body>,
+        T: ::tonic::client::GrpcService<::tonic::body::Body>,
         T::Error: Into<StdError>,
         T::ResponseBody: Body<Data = Bytes> + std::marker::Send + 'static,
         <T::ResponseBody as Body>::Error: Into<StdError> + std::marker::Send,
     {
         pub fn new(inner: T) -> Self {
-            let inner = tonic::client::Grpc::new(inner);
+            let inner = ::tonic::client::Grpc::new(inner);
             Self { inner }
         }
         pub fn with_origin(inner: T, origin: Uri) -> Self {
-            let inner = tonic::client::Grpc::with_origin(inner, origin);
+            let inner = ::tonic::client::Grpc::with_origin(inner, origin);
             Self { inner }
         }
         pub fn with_interceptor<F>(
@@ -47,16 +47,18 @@ pub mod echo_client {
             interceptor: F,
         ) -> EchoClient<InterceptedService<T, F>>
         where
-            F: tonic::service::Interceptor,
+            F: ::tonic::service::Interceptor,
             T::ResponseBody: Default,
-            T: tonic::codegen::Service<
-                http::Request<tonic::body::Body>,
+            T: ::tonic::codegen::Service<
+                http::Request<::tonic::body::Body>,
                 Response = http::Response<
-                    <T as tonic::client::GrpcService<tonic::body::Body>>::ResponseBody,
+                    <T as ::tonic::client::GrpcService<
+                        ::tonic::body::Body,
+                    >>::ResponseBody,
                 >,
             >,
-            <T as tonic::codegen::Service<
-                http::Request<tonic::body::Body>,
+            <T as ::tonic::codegen::Service<
+                http::Request<::tonic::body::Body>,
             >>::Error: Into<StdError> + std::marker::Send + std::marker::Sync,
         {
             EchoClient::new(InterceptedService::new(inner, interceptor))
@@ -95,13 +97,16 @@ pub mod echo_client {
         /// UnaryEcho is unary echo.
         pub async fn unary_echo(
             &mut self,
-            request: impl tonic::IntoRequest<super::EchoRequest>,
-        ) -> std::result::Result<tonic::Response<super::EchoResponse>, tonic::Status> {
+            request: impl ::tonic::IntoRequest<super::EchoRequest>,
+        ) -> std::result::Result<
+            ::tonic::Response<super::EchoResponse>,
+            ::tonic::Status,
+        > {
             self.inner
                 .ready()
                 .await
                 .map_err(|e| {
-                    tonic::Status::unknown(
+                    ::tonic::Status::unknown(
                         format!("Service was not ready: {}", e.into()),
                     )
                 })?;
@@ -117,16 +122,16 @@ pub mod echo_client {
         /// ServerStreamingEcho is server side streaming.
         pub async fn server_streaming_echo(
             &mut self,
-            request: impl tonic::IntoRequest<super::EchoRequest>,
+            request: impl ::tonic::IntoRequest<super::EchoRequest>,
         ) -> std::result::Result<
-            tonic::Response<tonic::codec::Streaming<super::EchoResponse>>,
-            tonic::Status,
+            ::tonic::Response<::tonic::codec::Streaming<super::EchoResponse>>,
+            ::tonic::Status,
         > {
             self.inner
                 .ready()
                 .await
                 .map_err(|e| {
-                    tonic::Status::unknown(
+                    ::tonic::Status::unknown(
                         format!("Service was not ready: {}", e.into()),
                     )
                 })?;
@@ -144,13 +149,16 @@ pub mod echo_client {
         /// ClientStreamingEcho is client side streaming.
         pub async fn client_streaming_echo(
             &mut self,
-            request: impl tonic::IntoStreamingRequest<Message = super::EchoRequest>,
-        ) -> std::result::Result<tonic::Response<super::EchoResponse>, tonic::Status> {
+            request: impl ::tonic::IntoStreamingRequest<Message = super::EchoRequest>,
+        ) -> std::result::Result<
+            ::tonic::Response<super::EchoResponse>,
+            ::tonic::Status,
+        > {
             self.inner
                 .ready()
                 .await
                 .map_err(|e| {
-                    tonic::Status::unknown(
+                    ::tonic::Status::unknown(
                         format!("Service was not ready: {}", e.into()),
                     )
                 })?;
@@ -168,16 +176,16 @@ pub mod echo_client {
         /// BidirectionalStreamingEcho is bidi streaming.
         pub async fn bidirectional_streaming_echo(
             &mut self,
-            request: impl tonic::IntoStreamingRequest<Message = super::EchoRequest>,
+            request: impl ::tonic::IntoStreamingRequest<Message = super::EchoRequest>,
         ) -> std::result::Result<
-            tonic::Response<tonic::codec::Streaming<super::EchoResponse>>,
-            tonic::Status,
+            ::tonic::Response<::tonic::codec::Streaming<super::EchoResponse>>,
+            ::tonic::Status,
         > {
             self.inner
                 .ready()
                 .await
                 .map_err(|e| {
-                    tonic::Status::unknown(
+                    ::tonic::Status::unknown(
                         format!("Service was not ready: {}", e.into()),
                     )
                 })?;
@@ -206,47 +214,53 @@ pub mod echo_server {
         clippy::wildcard_imports,
         clippy::let_unit_value,
     )]
-    use tonic::codegen::*;
+    use ::tonic::codegen::*;
     /// Generated trait containing gRPC methods that should be implemented for use with EchoServer.
     #[async_trait]
     pub trait Echo: std::marker::Send + std::marker::Sync + 'static {
         /// UnaryEcho is unary echo.
         async fn unary_echo(
             &self,
-            request: tonic::Request<super::EchoRequest>,
-        ) -> std::result::Result<tonic::Response<super::EchoResponse>, tonic::Status>;
+            request: ::tonic::Request<super::EchoRequest>,
+        ) -> std::result::Result<
+            ::tonic::Response<super::EchoResponse>,
+            ::tonic::Status,
+        >;
         /// Server streaming response type for the ServerStreamingEcho method.
-        type ServerStreamingEchoStream: tonic::codegen::tokio_stream::Stream<
-                Item = std::result::Result<super::EchoResponse, tonic::Status>,
+        type ServerStreamingEchoStream: ::tonic::codegen::tokio_stream::Stream<
+                Item = std::result::Result<super::EchoResponse, ::tonic::Status>,
             >
             + std::marker::Send
             + 'static;
         /// ServerStreamingEcho is server side streaming.
         async fn server_streaming_echo(
             &self,
-            request: tonic::Request<super::EchoRequest>,
+            request: ::tonic::Request<super::EchoRequest>,
         ) -> std::result::Result<
-            tonic::Response<Self::ServerStreamingEchoStream>,
-            tonic::Status,
+            ::tonic::Response<Self::ServerStreamingEchoStream>,
+            ::tonic::Status,
         >;
         /// ClientStreamingEcho is client side streaming.
         async fn client_streaming_echo(
             &self,
-            request: tonic::Request<tonic::Streaming<super::EchoRequest>>,
-        ) -> std::result::Result<tonic::Response<super::EchoResponse>, tonic::Status>;
+            request: ::tonic::Request<::tonic::Streaming<super::EchoRequest>>,
+        ) -> std::result::Result<
+            ::tonic::Response<super::EchoResponse>,
+            ::tonic::Status,
+        >;
         /// Server streaming response type for the BidirectionalStreamingEcho method.
-        type BidirectionalStreamingEchoStream: tonic::codegen::tokio_stream::Stream<
-                Item = std::result::Result<super::EchoResponse, tonic::Status>,
+        type BidirectionalStreamingEchoStream: ::tonic::codegen::tokio_stream::Stream<
+                Item = std::result::Result<super::EchoResponse, ::tonic::Status>,
             >
             + std::marker::Send
             + 'static;
         /// BidirectionalStreamingEcho is bidi streaming.
         async fn bidirectional_streaming_echo(
             &self,
-            request: tonic::Request<tonic::Streaming<super::EchoRequest>>,
+            request: ::tonic::Request<::tonic::Streaming<super::EchoRequest>>,
         ) -> std::result::Result<
-            tonic::Response<Self::BidirectionalStreamingEchoStream>,
-            tonic::Status,
+            ::tonic::Response<Self::BidirectionalStreamingEchoStream>,
+            ::tonic::Status,
         >;
     }
     /// Echo is the echo service.
@@ -276,7 +290,7 @@ pub mod echo_server {
             interceptor: F,
         ) -> InterceptedService<Self, F>
         where
-            F: tonic::service::Interceptor,
+            F: ::tonic::service::Interceptor,
         {
             InterceptedService::new(Self::new(inner), interceptor)
         }
@@ -309,13 +323,13 @@ pub mod echo_server {
             self
         }
     }
-    impl<T, B> tonic::codegen::Service<http::Request<B>> for EchoServer<T>
+    impl<T, B> ::tonic::codegen::Service<http::Request<B>> for EchoServer<T>
     where
         T: Echo,
         B: Body + std::marker::Send + 'static,
         B::Error: Into<StdError> + std::marker::Send + 'static,
     {
-        type Response = http::Response<tonic::body::Body>;
+        type Response = http::Response<::tonic::body::Body>;
         type Error = std::convert::Infallible;
         type Future = BoxFuture<Self::Response, Self::Error>;
         fn poll_ready(
@@ -329,16 +343,16 @@ pub mod echo_server {
                 "/grpc.examples.echo.Echo/UnaryEcho" => {
                     #[allow(non_camel_case_types)]
                     struct UnaryEchoSvc<T: Echo>(pub Arc<T>);
-                    impl<T: Echo> tonic::server::UnaryService<super::EchoRequest>
+                    impl<T: Echo> ::tonic::server::UnaryService<super::EchoRequest>
                     for UnaryEchoSvc<T> {
                         type Response = super::EchoResponse;
                         type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
+                            ::tonic::Response<Self::Response>,
+                            ::tonic::Status,
                         >;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::EchoRequest>,
+                            request: ::tonic::Request<super::EchoRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
@@ -355,7 +369,7 @@ pub mod echo_server {
                     let fut = async move {
                         let method = UnaryEchoSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
+                        let mut grpc = ::tonic::server::Grpc::new(codec)
                             .apply_compression_config(
                                 accept_compression_encodings,
                                 send_compression_encodings,
@@ -374,17 +388,17 @@ pub mod echo_server {
                     struct ServerStreamingEchoSvc<T: Echo>(pub Arc<T>);
                     impl<
                         T: Echo,
-                    > tonic::server::ServerStreamingService<super::EchoRequest>
+                    > ::tonic::server::ServerStreamingService<super::EchoRequest>
                     for ServerStreamingEchoSvc<T> {
                         type Response = super::EchoResponse;
                         type ResponseStream = T::ServerStreamingEchoStream;
                         type Future = BoxFuture<
-                            tonic::Response<Self::ResponseStream>,
-                            tonic::Status,
+                            ::tonic::Response<Self::ResponseStream>,
+                            ::tonic::Status,
                         >;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::EchoRequest>,
+                            request: ::tonic::Request<super::EchoRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
@@ -401,7 +415,7 @@ pub mod echo_server {
                     let fut = async move {
                         let method = ServerStreamingEchoSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
+                        let mut grpc = ::tonic::server::Grpc::new(codec)
                             .apply_compression_config(
                                 accept_compression_encodings,
                                 send_compression_encodings,
@@ -420,16 +434,18 @@ pub mod echo_server {
                     struct ClientStreamingEchoSvc<T: Echo>(pub Arc<T>);
                     impl<
                         T: Echo,
-                    > tonic::server::ClientStreamingService<super::EchoRequest>
+                    > ::tonic::server::ClientStreamingService<super::EchoRequest>
                     for ClientStreamingEchoSvc<T> {
                         type Response = super::EchoResponse;
                         type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
+                            ::tonic::Response<Self::Response>,
+                            ::tonic::Status,
                         >;
                         fn call(
                             &mut self,
-                            request: tonic::Request<tonic::Streaming<super::EchoRequest>>,
+                            request: ::tonic::Request<
+                                ::tonic::Streaming<super::EchoRequest>,
+                            >,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
@@ -446,7 +462,7 @@ pub mod echo_server {
                     let fut = async move {
                         let method = ClientStreamingEchoSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
+                        let mut grpc = ::tonic::server::Grpc::new(codec)
                             .apply_compression_config(
                                 accept_compression_encodings,
                                 send_compression_encodings,
@@ -463,17 +479,19 @@ pub mod echo_server {
                 "/grpc.examples.echo.Echo/BidirectionalStreamingEcho" => {
                     #[allow(non_camel_case_types)]
                     struct BidirectionalStreamingEchoSvc<T: Echo>(pub Arc<T>);
-                    impl<T: Echo> tonic::server::StreamingService<super::EchoRequest>
+                    impl<T: Echo> ::tonic::server::StreamingService<super::EchoRequest>
                     for BidirectionalStreamingEchoSvc<T> {
                         type Response = super::EchoResponse;
                         type ResponseStream = T::BidirectionalStreamingEchoStream;
                         type Future = BoxFuture<
-                            tonic::Response<Self::ResponseStream>,
-                            tonic::Status,
+                            ::tonic::Response<Self::ResponseStream>,
+                            ::tonic::Status,
                         >;
                         fn call(
                             &mut self,
-                            request: tonic::Request<tonic::Streaming<super::EchoRequest>>,
+                            request: ::tonic::Request<
+                                ::tonic::Streaming<super::EchoRequest>,
+                            >,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
@@ -491,7 +509,7 @@ pub mod echo_server {
                     let fut = async move {
                         let method = BidirectionalStreamingEchoSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
+                        let mut grpc = ::tonic::server::Grpc::new(codec)
                             .apply_compression_config(
                                 accept_compression_encodings,
                                 send_compression_encodings,
@@ -508,18 +526,18 @@ pub mod echo_server {
                 _ => {
                     Box::pin(async move {
                         let mut response = http::Response::new(
-                            tonic::body::Body::default(),
+                            ::tonic::body::Body::default(),
                         );
                         let headers = response.headers_mut();
                         headers
                             .insert(
-                                tonic::Status::GRPC_STATUS,
-                                (tonic::Code::Unimplemented as i32).into(),
+                                ::tonic::Status::GRPC_STATUS,
+                                (::tonic::Code::Unimplemented as i32).into(),
                             );
                         headers
                             .insert(
                                 http::header::CONTENT_TYPE,
-                                tonic::metadata::GRPC_CONTENT_TYPE,
+                                ::tonic::metadata::GRPC_CONTENT_TYPE,
                             );
                         Ok(response)
                     })
@@ -541,7 +559,7 @@ pub mod echo_server {
     }
     /// Generated gRPC service name
     pub const SERVICE_NAME: &str = "grpc.examples.echo.Echo";
-    impl<T> tonic::server::NamedService for EchoServer<T> {
+    impl<T> ::tonic::server::NamedService for EchoServer<T> {
         const NAME: &'static str = SERVICE_NAME;
     }
 }

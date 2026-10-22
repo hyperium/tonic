@@ -43,6 +43,7 @@ pub struct CodeGenBuilder {
     disable_comments: HashSet<String>,
     use_arc_self: bool,
     generate_default_stubs: bool,
+    tonic_path: String,
 }
 
 impl CodeGenBuilder {
@@ -94,6 +95,15 @@ impl CodeGenBuilder {
         self
     }
 
+    /// Set the path to the `tonic` crate for generated code.
+    ///
+    /// Useful for crates that re-export `tonic` under a different path (e.g.
+    /// `my_lib::tonic`). When unset, the default of `::tonic` is used.
+    pub fn tonic_path(&mut self, path: impl AsRef<str>) -> &mut Self {
+        self.tonic_path = path.as_ref().to_string();
+        self
+    }
+
     /// Enable or disable returning automatic unimplemented gRPC error code for generated traits.
     pub fn generate_default_stubs(&mut self, generate_default_stubs: bool) -> &mut Self {
         self.generate_default_stubs = generate_default_stubs;
@@ -105,6 +115,7 @@ impl CodeGenBuilder {
     /// This takes some `Service` and will generate a `TokenStream` that contains
     /// a public module with the generated client.
     pub fn generate_client(&self, service: &impl Service, proto_path: &str) -> TokenStream {
+        let tonic_path = self.parse_tonic_path();
         crate::client::generate_internal(
             service,
             self.emit_package,
@@ -113,6 +124,7 @@ impl CodeGenBuilder {
             self.build_transport,
             &self.attributes,
             &self.disable_comments,
+            &tonic_path,
         )
     }
 
@@ -121,6 +133,7 @@ impl CodeGenBuilder {
     /// This takes some `Service` and will generate a `TokenStream` that contains
     /// a public module with the generated client.
     pub fn generate_server(&self, service: &impl Service, proto_path: &str) -> TokenStream {
+        let tonic_path = self.parse_tonic_path();
         crate::server::generate_internal(
             service,
             self.emit_package,
@@ -130,7 +143,12 @@ impl CodeGenBuilder {
             &self.disable_comments,
             self.use_arc_self,
             self.generate_default_stubs,
+            &tonic_path,
         )
+    }
+
+    fn parse_tonic_path(&self) -> syn::Path {
+        syn::parse_str(&self.tonic_path).expect("invalid tonic path")
     }
 }
 
@@ -144,6 +162,7 @@ impl Default for CodeGenBuilder {
             disable_comments: HashSet::default(),
             use_arc_self: false,
             generate_default_stubs: false,
+            tonic_path: "::tonic".to_string(),
         }
     }
 }

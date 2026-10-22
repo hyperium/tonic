@@ -1,0 +1,9 @@
+[package]
+name = "wrapper"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[dependencies]
+tonic = { path = "../../../tonic" }
+tonic-prost = { path = "../../../tonic-prost" }

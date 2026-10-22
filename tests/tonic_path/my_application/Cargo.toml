@@ -1,0 +1,12 @@
+[package]
+name = "my_application_tonic_path"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[dependencies]
+prost = "0.14"
+wrapper = { path = "../wrapper" }
+
+[build-dependencies]
+tonic-prost-build = { path = "../../../tonic-prost-build" }

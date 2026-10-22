@@ -385,20 +385,26 @@ struct ServiceGenerator {
 impl ServiceGenerator {
     fn generate(&mut self, service: &Service) {
         if self.builder.build_server {
-            let server = CodeGenBuilder::new()
-                .emit_package(true)
-                .compile_well_known_types(false)
-                .generate_server(service, "");
+            let mut builder = CodeGenBuilder::new();
+            builder.emit_package(true).compile_well_known_types(false);
+            if let Some(tonic_path) = &self.builder.tonic_path {
+                builder.tonic_path(tonic_path);
+            }
+            let server = builder.generate_server(service, "");
 
             self.servers.extend(server);
         }
 
         if self.builder.build_client {
-            let client = CodeGenBuilder::new()
+            let mut builder = CodeGenBuilder::new();
+            builder
                 .emit_package(true)
                 .compile_well_known_types(false)
-                .build_transport(self.builder.build_transport)
-                .generate_client(service, "");
+                .build_transport(self.builder.build_transport);
+            if let Some(tonic_path) = &self.builder.tonic_path {
+                builder.tonic_path(tonic_path);
+            }
+            let client = builder.generate_client(service, "");
 
             self.clients.extend(client);
         }
@@ -443,6 +449,7 @@ pub struct Builder {
     build_transport: bool,
 
     out_dir: Option<PathBuf>,
+    tonic_path: Option<String>,
 }
 
 impl Default for Builder {
@@ -452,6 +459,7 @@ impl Default for Builder {
             build_client: true,
             build_transport: true,
             out_dir: None,
+            tonic_path: None,
         }
     }
 }
@@ -492,6 +500,15 @@ impl Builder {
     /// Defaults to the `OUT_DIR` environment variable.
     pub fn out_dir(mut self, out_dir: impl AsRef<Path>) -> Self {
         self.out_dir = Some(out_dir.as_ref().to_path_buf());
+        self
+    }
+
+    /// Set the path to the `tonic` crate for generated code.
+    ///
+    /// Useful for crates that re-export `tonic` under a different path (e.g.
+    /// `my_lib::tonic`). When unset, the default of `::tonic` is used.
+    pub fn tonic_path(mut self, path: impl AsRef<str>) -> Self {
+        self.tonic_path = Some(path.as_ref().to_string());
         self
     }
 

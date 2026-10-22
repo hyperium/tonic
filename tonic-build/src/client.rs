@@ -32,6 +32,7 @@ use crate::{
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn generate_internal<T: Service>(
     service: &T,
     emit_package: bool,
@@ -40,6 +41,7 @@ pub(crate) fn generate_internal<T: Service>(
     build_transport: bool,
     attributes: &Attributes,
     disable_comments: &HashSet<String>,
+    tonic_path: &syn::Path,
 ) -> TokenStream {
     let service_ident = quote::format_ident!("{}Client", service.name());
     let client_mod = quote::format_ident!("{}_client", naive_snake_case(service.name()));
@@ -49,9 +51,10 @@ pub(crate) fn generate_internal<T: Service>(
         proto_path,
         compile_well_known_types,
         disable_comments,
+        tonic_path,
     );
 
-    let connect = generate_connect(&service_ident, build_transport);
+    let connect = generate_connect(&service_ident, build_transport, tonic_path);
 
     let package = if emit_package { service.package() } else { "" };
     let service_name = format_service_name(service, emit_package);
@@ -77,44 +80,44 @@ pub(crate) fn generate_internal<T: Service>(
                 // will trigger if compression is disabled
                 clippy::let_unit_value,
             )]
-            use tonic::codegen::*;
-            use tonic::codegen::http::Uri;
+            use #tonic_path::codegen::*;
+            use #tonic_path::codegen::http::Uri;
 
             #service_doc
             #(#struct_attributes)*
             #[derive(Debug, Clone)]
             pub struct #service_ident<T> {
-                inner: tonic::client::Grpc<T>,
+                inner: #tonic_path::client::Grpc<T>,
             }
 
             #connect
 
             impl<T> #service_ident<T>
             where
-                T: tonic::client::GrpcService<tonic::body::Body>,
+                T: #tonic_path::client::GrpcService<#tonic_path::body::Body>,
                 T::Error: Into<StdError>,
                 T::ResponseBody: Body<Data = Bytes> + std::marker::Send  + 'static,
                 <T::ResponseBody as Body>::Error: Into<StdError> + std::marker::Send,
             {
                 pub fn new(inner: T) -> Self {
-                    let inner = tonic::client::Grpc::new(inner);
+                    let inner = #tonic_path::client::Grpc::new(inner);
                     Self { inner }
                 }
 
                 pub fn with_origin(inner: T, origin: Uri) -> Self {
-                    let inner = tonic::client::Grpc::with_origin(inner, origin);
+                    let inner = #tonic_path::client::Grpc::with_origin(inner, origin);
                     Self { inner }
                 }
 
                 pub fn with_interceptor<F>(inner: T, interceptor: F) -> #service_ident<InterceptedService<T, F>>
                 where
-                    F: tonic::service::Interceptor,
+                    F: #tonic_path::service::Interceptor,
                     T::ResponseBody: Default,
-                    T: tonic::codegen::Service<
-                        http::Request<tonic::body::Body>,
-                        Response = http::Response<<T as tonic::client::GrpcService<tonic::body::Body>>::ResponseBody>
+                    T: #tonic_path::codegen::Service<
+                        http::Request<#tonic_path::body::Body>,
+                        Response = http::Response<<T as #tonic_path::client::GrpcService<#tonic_path::body::Body>>::ResponseBody>
                     >,
-                    <T as tonic::codegen::Service<http::Request<tonic::body::Body>>>::Error: Into<StdError> + std::marker::Send + std::marker::Sync,
+                    <T as #tonic_path::codegen::Service<http::Request<#tonic_path::body::Body>>>::Error: Into<StdError> + std::marker::Send + std::marker::Sync,
                 {
                     #service_ident::new(InterceptedService::new(inner, interceptor))
                 }
@@ -161,16 +164,20 @@ pub(crate) fn generate_internal<T: Service>(
 }
 
 #[cfg(feature = "transport")]
-fn generate_connect(service_ident: &syn::Ident, enabled: bool) -> TokenStream {
+fn generate_connect(
+    service_ident: &syn::Ident,
+    enabled: bool,
+    tonic_path: &syn::Path,
+) -> TokenStream {
     let connect_impl = quote! {
-        impl #service_ident<tonic::transport::Channel> {
+        impl #service_ident<#tonic_path::transport::Channel> {
             /// Attempt to create a new client by connecting to a given endpoint.
-            pub async fn connect<D>(dst: D) -> Result<Self, tonic::transport::Error>
+            pub async fn connect<D>(dst: D) -> Result<Self, #tonic_path::transport::Error>
             where
-                D: TryInto<tonic::transport::Endpoint>,
+                D: TryInto<#tonic_path::transport::Endpoint>,
                 D::Error: Into<StdError>,
             {
-                let conn = tonic::transport::Endpoint::new(dst)?.connect().await?;
+                let conn = #tonic_path::transport::Endpoint::new(dst)?.connect().await?;
                 Ok(Self::new(conn))
             }
         }
@@ -184,7 +191,11 @@ fn generate_connect(service_ident: &syn::Ident, enabled: bool) -> TokenStream {
 }
 
 #[cfg(not(feature = "transport"))]
-fn generate_connect(_service_ident: &syn::Ident, _enabled: bool) -> TokenStream {
+fn generate_connect(
+    _service_ident: &syn::Ident,
+    _enabled: bool,
+    _tonic_path: &syn::Path,
+) -> TokenStream {
     TokenStream::new()
 }
 
@@ -194,6 +205,7 @@ fn generate_methods<T: Service>(
     proto_path: &str,
     compile_well_known_types: bool,
     disable_comments: &HashSet<String>,
+    tonic_path: &syn::Path,
 ) -> TokenStream {
     let mut stream = TokenStream::new();
 
@@ -212,6 +224,7 @@ fn generate_methods<T: Service>(
                 emit_package,
                 proto_path,
                 compile_well_known_types,
+                tonic_path,
             ),
             (false, true) => generate_server_streaming(
                 service,
@@ -219,6 +232,7 @@ fn generate_methods<T: Service>(
                 emit_package,
                 proto_path,
                 compile_well_known_types,
+                tonic_path,
             ),
             (true, false) => generate_client_streaming(
                 service,
@@ -226,6 +240,7 @@ fn generate_methods<T: Service>(
                 emit_package,
                 proto_path,
                 compile_well_known_types,
+                tonic_path,
             ),
             (true, true) => generate_streaming(
                 service,
@@ -233,6 +248,7 @@ fn generate_methods<T: Service>(
                 emit_package,
                 proto_path,
                 compile_well_known_types,
+                tonic_path,
             ),
         };
 
@@ -248,6 +264,7 @@ fn generate_unary<T: Service>(
     emit_package: bool,
     proto_path: &str,
     compile_well_known_types: bool,
+    tonic_path: &syn::Path,
 ) -> TokenStream {
     let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
     let ident = format_ident!("{}", method.name());
@@ -259,10 +276,10 @@ fn generate_unary<T: Service>(
     quote! {
         pub async fn #ident(
             &mut self,
-            request: impl tonic::IntoRequest<#request>,
-        ) -> std::result::Result<tonic::Response<#response>, tonic::Status> {
+            request: impl #tonic_path::IntoRequest<#request>,
+        ) -> std::result::Result<#tonic_path::Response<#response>, #tonic_path::Status> {
            self.inner.ready().await.map_err(|e| {
-               tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+               #tonic_path::Status::unknown(format!("Service was not ready: {}", e.into()))
            })?;
            let codec = #codec_name::default();
            let path = http::uri::PathAndQuery::from_static(#path);
@@ -279,6 +296,7 @@ fn generate_server_streaming<T: Service>(
     emit_package: bool,
     proto_path: &str,
     compile_well_known_types: bool,
+    tonic_path: &syn::Path,
 ) -> TokenStream {
     let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
     let ident = format_ident!("{}", method.name());
@@ -290,10 +308,10 @@ fn generate_server_streaming<T: Service>(
     quote! {
         pub async fn #ident(
             &mut self,
-            request: impl tonic::IntoRequest<#request>,
-        ) -> std::result::Result<tonic::Response<tonic::codec::Streaming<#response>>, tonic::Status> {
+            request: impl #tonic_path::IntoRequest<#request>,
+        ) -> std::result::Result<#tonic_path::Response<#tonic_path::codec::Streaming<#response>>, #tonic_path::Status> {
             self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+                #tonic_path::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = #codec_name::default();
             let path = http::uri::PathAndQuery::from_static(#path);
@@ -310,6 +328,7 @@ fn generate_client_streaming<T: Service>(
     emit_package: bool,
     proto_path: &str,
     compile_well_known_types: bool,
+    tonic_path: &syn::Path,
 ) -> TokenStream {
     let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
     let ident = format_ident!("{}", method.name());
@@ -321,10 +340,10 @@ fn generate_client_streaming<T: Service>(
     quote! {
         pub async fn #ident(
             &mut self,
-            request: impl tonic::IntoStreamingRequest<Message = #request>
-        ) -> std::result::Result<tonic::Response<#response>, tonic::Status> {
+            request: impl #tonic_path::IntoStreamingRequest<Message = #request>
+        ) -> std::result::Result<#tonic_path::Response<#response>, #tonic_path::Status> {
             self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+                #tonic_path::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = #codec_name::default();
             let path = http::uri::PathAndQuery::from_static(#path);
@@ -341,6 +360,7 @@ fn generate_streaming<T: Service>(
     emit_package: bool,
     proto_path: &str,
     compile_well_known_types: bool,
+    tonic_path: &syn::Path,
 ) -> TokenStream {
     let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
     let ident = format_ident!("{}", method.name());
@@ -352,10 +372,10 @@ fn generate_streaming<T: Service>(
     quote! {
         pub async fn #ident(
             &mut self,
-            request: impl tonic::IntoStreamingRequest<Message = #request>
-        ) -> std::result::Result<tonic::Response<tonic::codec::Streaming<#response>>, tonic::Status> {
+            request: impl #tonic_path::IntoStreamingRequest<Message = #request>
+        ) -> std::result::Result<#tonic_path::Response<#tonic_path::codec::Streaming<#response>>, #tonic_path::Status> {
             self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+                #tonic_path::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = #codec_name::default();
             let path = http::uri::PathAndQuery::from_static(#path);

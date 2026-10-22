@@ -153,25 +153,25 @@ pub mod server_reflection_client {
         clippy::wildcard_imports,
         clippy::let_unit_value,
     )]
-    use tonic::codegen::*;
-    use tonic::codegen::http::Uri;
+    use ::tonic::codegen::*;
+    use ::tonic::codegen::http::Uri;
     #[derive(Debug, Clone)]
     pub struct ServerReflectionClient<T> {
-        inner: tonic::client::Grpc<T>,
+        inner: ::tonic::client::Grpc<T>,
     }
     impl<T> ServerReflectionClient<T>
     where
-        T: tonic::client::GrpcService<tonic::body::Body>,
+        T: ::tonic::client::GrpcService<::tonic::body::Body>,
         T::Error: Into<StdError>,
         T::ResponseBody: Body<Data = Bytes> + std::marker::Send + 'static,
         <T::ResponseBody as Body>::Error: Into<StdError> + std::marker::Send,
     {
         pub fn new(inner: T) -> Self {
-            let inner = tonic::client::Grpc::new(inner);
+            let inner = ::tonic::client::Grpc::new(inner);
             Self { inner }
         }
         pub fn with_origin(inner: T, origin: Uri) -> Self {
-            let inner = tonic::client::Grpc::with_origin(inner, origin);
+            let inner = ::tonic::client::Grpc::with_origin(inner, origin);
             Self { inner }
         }
         pub fn with_interceptor<F>(
@@ -179,16 +179,18 @@ pub mod server_reflection_client {
             interceptor: F,
         ) -> ServerReflectionClient<InterceptedService<T, F>>
         where
-            F: tonic::service::Interceptor,
+            F: ::tonic::service::Interceptor,
             T::ResponseBody: Default,
-            T: tonic::codegen::Service<
-                http::Request<tonic::body::Body>,
+            T: ::tonic::codegen::Service<
+                http::Request<::tonic::body::Body>,
                 Response = http::Response<
-                    <T as tonic::client::GrpcService<tonic::body::Body>>::ResponseBody,
+                    <T as ::tonic::client::GrpcService<
+                        ::tonic::body::Body,
+                    >>::ResponseBody,
                 >,
             >,
-            <T as tonic::codegen::Service<
-                http::Request<tonic::body::Body>,
+            <T as ::tonic::codegen::Service<
+                http::Request<::tonic::body::Body>,
             >>::Error: Into<StdError> + std::marker::Send + std::marker::Sync,
         {
             ServerReflectionClient::new(InterceptedService::new(inner, interceptor))
@@ -228,18 +230,20 @@ pub mod server_reflection_client {
         /// all related requests go to a single server.
         pub async fn server_reflection_info(
             &mut self,
-            request: impl tonic::IntoStreamingRequest<
+            request: impl ::tonic::IntoStreamingRequest<
                 Message = super::ServerReflectionRequest,
             >,
         ) -> std::result::Result<
-            tonic::Response<tonic::codec::Streaming<super::ServerReflectionResponse>>,
-            tonic::Status,
+            ::tonic::Response<
+                ::tonic::codec::Streaming<super::ServerReflectionResponse>,
+            >,
+            ::tonic::Status,
         > {
             self.inner
                 .ready()
                 .await
                 .map_err(|e| {
-                    tonic::Status::unknown(
+                    ::tonic::Status::unknown(
                         format!("Service was not ready: {}", e.into()),
                     )
                 })?;
@@ -268,15 +272,15 @@ pub mod server_reflection_server {
         clippy::wildcard_imports,
         clippy::let_unit_value,
     )]
-    use tonic::codegen::*;
+    use ::tonic::codegen::*;
     /// Generated trait containing gRPC methods that should be implemented for use with ServerReflectionServer.
     #[async_trait]
     pub trait ServerReflection: std::marker::Send + std::marker::Sync + 'static {
         /// Server streaming response type for the ServerReflectionInfo method.
-        type ServerReflectionInfoStream: tonic::codegen::tokio_stream::Stream<
+        type ServerReflectionInfoStream: ::tonic::codegen::tokio_stream::Stream<
                 Item = std::result::Result<
                     super::ServerReflectionResponse,
-                    tonic::Status,
+                    ::tonic::Status,
                 >,
             >
             + std::marker::Send
@@ -285,10 +289,10 @@ pub mod server_reflection_server {
         /// all related requests go to a single server.
         async fn server_reflection_info(
             &self,
-            request: tonic::Request<tonic::Streaming<super::ServerReflectionRequest>>,
+            request: ::tonic::Request<::tonic::Streaming<super::ServerReflectionRequest>>,
         ) -> std::result::Result<
-            tonic::Response<Self::ServerReflectionInfoStream>,
-            tonic::Status,
+            ::tonic::Response<Self::ServerReflectionInfoStream>,
+            ::tonic::Status,
         >;
     }
     #[derive(Debug)]
@@ -317,7 +321,7 @@ pub mod server_reflection_server {
             interceptor: F,
         ) -> InterceptedService<Self, F>
         where
-            F: tonic::service::Interceptor,
+            F: ::tonic::service::Interceptor,
         {
             InterceptedService::new(Self::new(inner), interceptor)
         }
@@ -350,13 +354,13 @@ pub mod server_reflection_server {
             self
         }
     }
-    impl<T, B> tonic::codegen::Service<http::Request<B>> for ServerReflectionServer<T>
+    impl<T, B> ::tonic::codegen::Service<http::Request<B>> for ServerReflectionServer<T>
     where
         T: ServerReflection,
         B: Body + std::marker::Send + 'static,
         B::Error: Into<StdError> + std::marker::Send + 'static,
     {
-        type Response = http::Response<tonic::body::Body>;
+        type Response = http::Response<::tonic::body::Body>;
         type Error = std::convert::Infallible;
         type Future = BoxFuture<Self::Response, Self::Error>;
         fn poll_ready(
@@ -372,18 +376,18 @@ pub mod server_reflection_server {
                     struct ServerReflectionInfoSvc<T: ServerReflection>(pub Arc<T>);
                     impl<
                         T: ServerReflection,
-                    > tonic::server::StreamingService<super::ServerReflectionRequest>
+                    > ::tonic::server::StreamingService<super::ServerReflectionRequest>
                     for ServerReflectionInfoSvc<T> {
                         type Response = super::ServerReflectionResponse;
                         type ResponseStream = T::ServerReflectionInfoStream;
                         type Future = BoxFuture<
-                            tonic::Response<Self::ResponseStream>,
-                            tonic::Status,
+                            ::tonic::Response<Self::ResponseStream>,
+                            ::tonic::Status,
                         >;
                         fn call(
                             &mut self,
-                            request: tonic::Request<
-                                tonic::Streaming<super::ServerReflectionRequest>,
+                            request: ::tonic::Request<
+                                ::tonic::Streaming<super::ServerReflectionRequest>,
                             >,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
@@ -405,7 +409,7 @@ pub mod server_reflection_server {
                     let fut = async move {
                         let method = ServerReflectionInfoSvc(inner);
                         let codec = tonic_prost::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec)
+                        let mut grpc = ::tonic::server::Grpc::new(codec)
                             .apply_compression_config(
                                 accept_compression_encodings,
                                 send_compression_encodings,
@@ -422,18 +426,18 @@ pub mod server_reflection_server {
                 _ => {
                     Box::pin(async move {
                         let mut response = http::Response::new(
-                            tonic::body::Body::default(),
+                            ::tonic::body::Body::default(),
                         );
                         let headers = response.headers_mut();
                         headers
                             .insert(
-                                tonic::Status::GRPC_STATUS,
-                                (tonic::Code::Unimplemented as i32).into(),
+                                ::tonic::Status::GRPC_STATUS,
+                                (::tonic::Code::Unimplemented as i32).into(),
                             );
                         headers
                             .insert(
                                 http::header::CONTENT_TYPE,
-                                tonic::metadata::GRPC_CONTENT_TYPE,
+                                ::tonic::metadata::GRPC_CONTENT_TYPE,
                             );
                         Ok(response)
                     })
@@ -455,7 +459,7 @@ pub mod server_reflection_server {
     }
     /// Generated gRPC service name
     pub const SERVICE_NAME: &str = "grpc.reflection.v1.ServerReflection";
-    impl<T> tonic::server::NamedService for ServerReflectionServer<T> {
+    impl<T> ::tonic::server::NamedService for ServerReflectionServer<T> {
         const NAME: &'static str = SERVICE_NAME;
     }
 }

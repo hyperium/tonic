@@ -43,6 +43,7 @@ pub(crate) fn generate_internal<T: Service>(
     disable_comments: &HashSet<String>,
     use_arc_self: bool,
     generate_default_stubs: bool,
+    tonic_path: &syn::Path,
 ) -> TokenStream {
     let methods = generate_methods(
         service,
@@ -51,6 +52,7 @@ pub(crate) fn generate_internal<T: Service>(
         compile_well_known_types,
         use_arc_self,
         generate_default_stubs,
+        tonic_path,
     );
 
     let server_service = quote::format_ident!("{}Server", service.name());
@@ -67,6 +69,7 @@ pub(crate) fn generate_internal<T: Service>(
         use_arc_self,
         generate_default_stubs,
         trait_attributes,
+        tonic_path,
     );
     let package = if emit_package { service.package() } else { "" };
     // Transport based implementations
@@ -78,7 +81,7 @@ pub(crate) fn generate_internal<T: Service>(
         generate_doc_comments(service.comment())
     };
 
-    let named = generate_named(&server_service, &service_name);
+    let named = generate_named(&server_service, &service_name, tonic_path);
     let mod_attributes = attributes.for_mod(package);
     let struct_attributes = attributes.for_struct(&service_name);
 
@@ -130,7 +133,7 @@ pub(crate) fn generate_internal<T: Service>(
                 // will trigger if compression is disabled
                 clippy::let_unit_value,
             )]
-            use tonic::codegen::*;
+            use #tonic_path::codegen::*;
 
             #generated_trait
 
@@ -162,7 +165,7 @@ pub(crate) fn generate_internal<T: Service>(
 
                 pub fn with_interceptor<F>(inner: T, interceptor: F) -> InterceptedService<Self, F>
                 where
-                    F: tonic::service::Interceptor,
+                    F: #tonic_path::service::Interceptor,
                 {
                     InterceptedService::new(Self::new(inner), interceptor)
                 }
@@ -172,13 +175,13 @@ pub(crate) fn generate_internal<T: Service>(
                 #configure_max_message_size_methods
             }
 
-            impl<T, B> tonic::codegen::Service<http::Request<B>> for #server_service<T>
+            impl<T, B> #tonic_path::codegen::Service<http::Request<B>> for #server_service<T>
                 where
                     T: #server_trait,
                     B: Body + std::marker::Send + 'static,
                     B::Error: Into<StdError> + std::marker::Send + 'static,
             {
-                type Response = http::Response<tonic::body::Body>;
+                type Response = http::Response<#tonic_path::body::Body>;
                 type Error = std::convert::Infallible;
                 type Future = BoxFuture<Self::Response, Self::Error>;
 
@@ -191,10 +194,10 @@ pub(crate) fn generate_internal<T: Service>(
                         #methods
 
                         _ => Box::pin(async move {
-                            let mut response = http::Response::new(tonic::body::Body::default());
+                            let mut response = http::Response::new(#tonic_path::body::Body::default());
                             let headers = response.headers_mut();
-                            headers.insert(tonic::Status::GRPC_STATUS, (tonic::Code::Unimplemented as i32).into());
-                            headers.insert(http::header::CONTENT_TYPE, tonic::metadata::GRPC_CONTENT_TYPE);
+                            headers.insert(#tonic_path::Status::GRPC_STATUS, (#tonic_path::Code::Unimplemented as i32).into());
+                            headers.insert(http::header::CONTENT_TYPE, #tonic_path::metadata::GRPC_CONTENT_TYPE);
                             Ok(response)
                         }),
                     }
@@ -230,6 +233,7 @@ fn generate_trait<T: Service>(
     use_arc_self: bool,
     generate_default_stubs: bool,
     trait_attributes: Vec<syn::Attribute>,
+    tonic_path: &syn::Path,
 ) -> TokenStream {
     let methods = generate_trait_methods(
         service,
@@ -239,6 +243,7 @@ fn generate_trait<T: Service>(
         disable_comments,
         use_arc_self,
         generate_default_stubs,
+        tonic_path,
     );
     let trait_doc = generate_doc_comment(format!(
         " Generated trait containing gRPC methods that should be implemented for use with {}Server.",
@@ -255,6 +260,7 @@ fn generate_trait<T: Service>(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn generate_trait_methods<T: Service>(
     service: &T,
     emit_package: bool,
@@ -263,6 +269,7 @@ fn generate_trait_methods<T: Service>(
     disable_comments: &HashSet<String>,
     use_arc_self: bool,
     generate_default_stubs: bool,
+    tonic_path: &syn::Path,
 ) -> TokenStream {
     let mut stream = TokenStream::new();
 
@@ -293,41 +300,41 @@ fn generate_trait_methods<T: Service>(
             (false, false, true) => {
                 quote! {
                     #method_doc
-                    async fn #name(#self_param, request: tonic::Request<#req_message>)
-                        -> std::result::Result<tonic::Response<#res_message>, tonic::Status> {
-                        Err(tonic::Status::unimplemented("Not yet implemented"))
+                    async fn #name(#self_param, request: #tonic_path::Request<#req_message>)
+                        -> std::result::Result<#tonic_path::Response<#res_message>, #tonic_path::Status> {
+                        Err(#tonic_path::Status::unimplemented("Not yet implemented"))
                     }
                 }
             }
             (false, false, false) => {
                 quote! {
                     #method_doc
-                    async fn #name(#self_param, request: tonic::Request<#req_message>)
-                        -> std::result::Result<tonic::Response<#res_message>, tonic::Status>;
+                    async fn #name(#self_param, request: #tonic_path::Request<#req_message>)
+                        -> std::result::Result<#tonic_path::Response<#res_message>, #tonic_path::Status>;
                 }
             }
             (true, false, true) => {
                 quote! {
                     #method_doc
-                    async fn #name(#self_param, request: tonic::Request<tonic::Streaming<#req_message>>)
-                        -> std::result::Result<tonic::Response<#res_message>, tonic::Status> {
-                        Err(tonic::Status::unimplemented("Not yet implemented"))
+                    async fn #name(#self_param, request: #tonic_path::Request<#tonic_path::Streaming<#req_message>>)
+                        -> std::result::Result<#tonic_path::Response<#res_message>, #tonic_path::Status> {
+                        Err(#tonic_path::Status::unimplemented("Not yet implemented"))
                     }
                 }
             }
             (true, false, false) => {
                 quote! {
                     #method_doc
-                    async fn #name(#self_param, request: tonic::Request<tonic::Streaming<#req_message>>)
-                        -> std::result::Result<tonic::Response<#res_message>, tonic::Status>;
+                    async fn #name(#self_param, request: #tonic_path::Request<#tonic_path::Streaming<#req_message>>)
+                        -> std::result::Result<#tonic_path::Response<#res_message>, #tonic_path::Status>;
                 }
             }
             (false, true, true) => {
                 quote! {
                     #method_doc
-                    async fn #name(#self_param, request: tonic::Request<#req_message>)
-                        -> std::result::Result<tonic::Response<BoxStream<#res_message>>, tonic::Status> {
-                        Err(tonic::Status::unimplemented("Not yet implemented"))
+                    async fn #name(#self_param, request: #tonic_path::Request<#req_message>)
+                        -> std::result::Result<#tonic_path::Response<BoxStream<#res_message>>, #tonic_path::Status> {
+                        Err(#tonic_path::Status::unimplemented("Not yet implemented"))
                     }
                 }
             }
@@ -340,19 +347,19 @@ fn generate_trait_methods<T: Service>(
 
                 quote! {
                     #stream_doc
-                    type #stream: tonic::codegen::tokio_stream::Stream<Item = std::result::Result<#res_message, tonic::Status>> + std::marker::Send + 'static;
+                    type #stream: #tonic_path::codegen::tokio_stream::Stream<Item = std::result::Result<#res_message, #tonic_path::Status>> + std::marker::Send + 'static;
 
                     #method_doc
-                    async fn #name(#self_param, request: tonic::Request<#req_message>)
-                        -> std::result::Result<tonic::Response<Self::#stream>, tonic::Status>;
+                    async fn #name(#self_param, request: #tonic_path::Request<#req_message>)
+                        -> std::result::Result<#tonic_path::Response<Self::#stream>, #tonic_path::Status>;
                 }
             }
             (true, true, true) => {
                 quote! {
                     #method_doc
-                    async fn #name(#self_param, request: tonic::Request<tonic::Streaming<#req_message>>)
-                        -> std::result::Result<tonic::Response<BoxStream<#res_message>>, tonic::Status> {
-                        Err(tonic::Status::unimplemented("Not yet implemented"))
+                    async fn #name(#self_param, request: #tonic_path::Request<#tonic_path::Streaming<#req_message>>)
+                        -> std::result::Result<#tonic_path::Response<BoxStream<#res_message>>, #tonic_path::Status> {
+                        Err(#tonic_path::Status::unimplemented("Not yet implemented"))
                     }
                 }
             }
@@ -365,11 +372,11 @@ fn generate_trait_methods<T: Service>(
 
                 quote! {
                     #stream_doc
-                    type #stream: tonic::codegen::tokio_stream::Stream<Item = std::result::Result<#res_message, tonic::Status>> + std::marker::Send + 'static;
+                    type #stream: #tonic_path::codegen::tokio_stream::Stream<Item = std::result::Result<#res_message, #tonic_path::Status>> + std::marker::Send + 'static;
 
                     #method_doc
-                    async fn #name(#self_param, request: tonic::Request<tonic::Streaming<#req_message>>)
-                        -> std::result::Result<tonic::Response<Self::#stream>, tonic::Status>;
+                    async fn #name(#self_param, request: #tonic_path::Request<#tonic_path::Streaming<#req_message>>)
+                        -> std::result::Result<#tonic_path::Response<Self::#stream>, #tonic_path::Status>;
                 }
             }
         };
@@ -380,7 +387,11 @@ fn generate_trait_methods<T: Service>(
     stream
 }
 
-fn generate_named(server_service: &syn::Ident, service_name: &str) -> TokenStream {
+fn generate_named(
+    server_service: &syn::Ident,
+    service_name: &str,
+    tonic_path: &syn::Path,
+) -> TokenStream {
     let service_name = syn::LitStr::new(service_name, proc_macro2::Span::call_site());
     let name_doc = generate_doc_comment(" Generated gRPC service name");
 
@@ -388,7 +399,7 @@ fn generate_named(server_service: &syn::Ident, service_name: &str) -> TokenStrea
         #name_doc
         pub const SERVICE_NAME: &str = #service_name;
 
-        impl<T> tonic::server::NamedService for #server_service<T> {
+        impl<T> #tonic_path::server::NamedService for #server_service<T> {
             const NAME: &'static str = SERVICE_NAME;
         }
     }
@@ -401,6 +412,7 @@ fn generate_methods<T: Service>(
     compile_well_known_types: bool,
     use_arc_self: bool,
     generate_default_stubs: bool,
+    tonic_path: &syn::Path,
 ) -> TokenStream {
     let mut stream = TokenStream::new();
 
@@ -418,6 +430,7 @@ fn generate_methods<T: Service>(
                 ident,
                 server_trait,
                 use_arc_self,
+                tonic_path,
             ),
 
             (false, true) => generate_server_streaming(
@@ -428,6 +441,7 @@ fn generate_methods<T: Service>(
                 server_trait,
                 use_arc_self,
                 generate_default_stubs,
+                tonic_path,
             ),
             (true, false) => generate_client_streaming(
                 method,
@@ -436,6 +450,7 @@ fn generate_methods<T: Service>(
                 ident.clone(),
                 server_trait,
                 use_arc_self,
+                tonic_path,
             ),
 
             (true, true) => generate_streaming(
@@ -446,6 +461,7 @@ fn generate_methods<T: Service>(
                 server_trait,
                 use_arc_self,
                 generate_default_stubs,
+                tonic_path,
             ),
         };
 
@@ -467,6 +483,7 @@ fn generate_unary<T: Method>(
     method_ident: Ident,
     server_trait: Ident,
     use_arc_self: bool,
+    tonic_path: &syn::Path,
 ) -> TokenStream {
     let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
 
@@ -484,11 +501,11 @@ fn generate_unary<T: Method>(
         #[allow(non_camel_case_types)]
         struct #service_ident<T: #server_trait >(pub Arc<T>);
 
-        impl<T: #server_trait> tonic::server::UnaryService<#request> for #service_ident<T> {
+        impl<T: #server_trait> #tonic_path::server::UnaryService<#request> for #service_ident<T> {
             type Response = #response;
-            type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+            type Future = BoxFuture<#tonic_path::Response<Self::Response>, #tonic_path::Status>;
 
-            fn call(&mut self, request: tonic::Request<#request>) -> Self::Future {
+            fn call(&mut self, request: #tonic_path::Request<#request>) -> Self::Future {
                 let inner = Arc::clone(&self.0);
                 let fut = async move {
                     <T as #server_trait>::#method_ident(#inner_arg, request).await
@@ -506,7 +523,7 @@ fn generate_unary<T: Method>(
             let method = #service_ident(inner);
             let codec = #codec_name::default();
 
-            let mut grpc = tonic::server::Grpc::new(codec)
+            let mut grpc = #tonic_path::server::Grpc::new(codec)
                 .apply_compression_config(accept_compression_encodings, send_compression_encodings)
                 .apply_max_message_size_config(max_decoding_message_size, max_encoding_message_size);
 
@@ -518,6 +535,7 @@ fn generate_unary<T: Method>(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn generate_server_streaming<T: Method>(
     method: &T,
     proto_path: &str,
@@ -526,6 +544,7 @@ fn generate_server_streaming<T: Method>(
     server_trait: Ident,
     use_arc_self: bool,
     generate_default_stubs: bool,
+    tonic_path: &syn::Path,
 ) -> TokenStream {
     let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
 
@@ -550,12 +569,12 @@ fn generate_server_streaming<T: Method>(
         #[allow(non_camel_case_types)]
         struct #service_ident<T: #server_trait >(pub Arc<T>);
 
-        impl<T: #server_trait> tonic::server::ServerStreamingService<#request> for #service_ident<T> {
+        impl<T: #server_trait> #tonic_path::server::ServerStreamingService<#request> for #service_ident<T> {
             type Response = #response;
             #response_stream;
-            type Future = BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;
+            type Future = BoxFuture<#tonic_path::Response<Self::ResponseStream>, #tonic_path::Status>;
 
-            fn call(&mut self, request: tonic::Request<#request>) -> Self::Future {
+            fn call(&mut self, request: #tonic_path::Request<#request>) -> Self::Future {
                 let inner = Arc::clone(&self.0);
                 let fut = async move {
                     <T as #server_trait>::#method_ident(#inner_arg, request).await
@@ -573,7 +592,7 @@ fn generate_server_streaming<T: Method>(
             let method = #service_ident(inner);
             let codec = #codec_name::default();
 
-            let mut grpc = tonic::server::Grpc::new(codec)
+            let mut grpc = #tonic_path::server::Grpc::new(codec)
                 .apply_compression_config(accept_compression_encodings, send_compression_encodings)
                 .apply_max_message_size_config(max_decoding_message_size, max_encoding_message_size);
 
@@ -592,6 +611,7 @@ fn generate_client_streaming<T: Method>(
     method_ident: Ident,
     server_trait: Ident,
     use_arc_self: bool,
+    tonic_path: &syn::Path,
 ) -> TokenStream {
     let service_ident = quote::format_ident!("{}Svc", method.identifier());
 
@@ -608,12 +628,12 @@ fn generate_client_streaming<T: Method>(
         #[allow(non_camel_case_types)]
         struct #service_ident<T: #server_trait >(pub Arc<T>);
 
-        impl<T: #server_trait> tonic::server::ClientStreamingService<#request> for #service_ident<T>
+        impl<T: #server_trait> #tonic_path::server::ClientStreamingService<#request> for #service_ident<T>
         {
             type Response = #response;
-            type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+            type Future = BoxFuture<#tonic_path::Response<Self::Response>, #tonic_path::Status>;
 
-            fn call(&mut self, request: tonic::Request<tonic::Streaming<#request>>) -> Self::Future {
+            fn call(&mut self, request: #tonic_path::Request<#tonic_path::Streaming<#request>>) -> Self::Future {
                 let inner = Arc::clone(&self.0);
                 let fut = async move {
                     <T as #server_trait>::#method_ident(#inner_arg, request).await
@@ -631,7 +651,7 @@ fn generate_client_streaming<T: Method>(
             let method = #service_ident(inner);
             let codec = #codec_name::default();
 
-            let mut grpc = tonic::server::Grpc::new(codec)
+            let mut grpc = #tonic_path::server::Grpc::new(codec)
                 .apply_compression_config(accept_compression_encodings, send_compression_encodings)
                 .apply_max_message_size_config(max_decoding_message_size, max_encoding_message_size);
 
@@ -643,6 +663,7 @@ fn generate_client_streaming<T: Method>(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn generate_streaming<T: Method>(
     method: &T,
     proto_path: &str,
@@ -651,6 +672,7 @@ fn generate_streaming<T: Method>(
     server_trait: Ident,
     use_arc_self: bool,
     generate_default_stubs: bool,
+    tonic_path: &syn::Path,
 ) -> TokenStream {
     let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
 
@@ -675,13 +697,13 @@ fn generate_streaming<T: Method>(
         #[allow(non_camel_case_types)]
         struct #service_ident<T: #server_trait>(pub Arc<T>);
 
-        impl<T: #server_trait> tonic::server::StreamingService<#request> for #service_ident<T>
+        impl<T: #server_trait> #tonic_path::server::StreamingService<#request> for #service_ident<T>
         {
             type Response = #response;
             #response_stream;
-            type Future = BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;
+            type Future = BoxFuture<#tonic_path::Response<Self::ResponseStream>, #tonic_path::Status>;
 
-            fn call(&mut self, request: tonic::Request<tonic::Streaming<#request>>) -> Self::Future {
+            fn call(&mut self, request: #tonic_path::Request<#tonic_path::Streaming<#request>>) -> Self::Future {
                 let inner = Arc::clone(&self.0);
                 let fut = async move {
                     <T as #server_trait>::#method_ident(#inner_arg, request).await
@@ -699,7 +721,7 @@ fn generate_streaming<T: Method>(
             let method = #service_ident(inner);
             let codec = #codec_name::default();
 
-            let mut grpc = tonic::server::Grpc::new(codec)
+            let mut grpc = #tonic_path::server::Grpc::new(codec)
                 .apply_compression_config(accept_compression_encodings, send_compression_encodings)
                 .apply_max_message_size_config(max_decoding_message_size, max_encoding_message_size);
 
