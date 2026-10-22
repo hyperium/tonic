@@ -27,6 +27,15 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use grpc::__unstable::Internal;
+use grpc::__unstable::credentials::server::HandshakeOutput;
+use grpc::__unstable::rt::BoxEndpoint;
+use grpc::__unstable::rt::EndpointIoStream;
+use grpc::__unstable::rt::GrpcRuntime;
+use grpc::credentials::ProtocolInfo;
+use grpc::credentials::SecurityInfo;
+use grpc::credentials::SecurityLevel;
+use grpc::credentials::ServerCredentials;
 use rustls::crypto::CryptoProvider;
 use rustls::server::ClientHello;
 use rustls::server::ProducesTickets;
@@ -48,15 +57,6 @@ use crate::parse_certs;
 use crate::parse_key;
 use crate::sanitize_crypto_provider;
 use crate::tls_stream::TlsStream;
-use grpc::__unstable::Internal;
-use grpc::__unstable::credentials::server::HandshakeOutput;
-use grpc::__unstable::rt::BoxEndpoint;
-use grpc::__unstable::rt::EndpointIoStream;
-use grpc::__unstable::rt::GrpcRuntime;
-use grpc::credentials::ProtocolInfo;
-use grpc::credentials::SecurityInfo;
-use grpc::credentials::SecurityLevel;
-use grpc::credentials::ServerCredentials;
 
 #[cfg(test)]
 mod test;
@@ -176,9 +176,6 @@ impl From<TlsClientCertificateRequestType> for InnerClientCertificateRequestType
 pub struct RustlsServerCredentials {
     acceptor: TlsAcceptor,
 }
-
-#[deprecated(since = "0.10.0", note = "typo: use RustlsServerCredentials instead")]
-pub type RustlsServerCredendials = RustlsServerCredentials;
 
 /// Configuration for server-side TLS settings.
 pub struct ServerTlsConfig {

@@ -27,7 +27,20 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use grpc::__unstable::Internal;
+use grpc::__unstable::credentials::client::ClientHandshakeInfo;
+use grpc::__unstable::credentials::client::HandshakeOutput;
+use grpc::__unstable::credentials::client::ValidateAuthority;
+use grpc::__unstable::credentials::common::Authority;
+use grpc::__unstable::rt::BoxEndpoint;
+use grpc::__unstable::rt::EndpointIoStream;
+use grpc::__unstable::rt::GrpcRuntime;
 use grpc::async_trait;
+use grpc::credentials::ChannelCredentials;
+use grpc::credentials::ProtocolInfo;
+use grpc::credentials::SecurityInfo;
+use grpc::credentials::SecurityLevel;
+use grpc::credentials::call::CallCredentials;
 use rustls::crypto::CryptoProvider;
 use rustls_pki_types::CertificateDer;
 use rustls_pki_types::ServerName;
@@ -46,19 +59,6 @@ use crate::parse_certs;
 use crate::parse_key;
 use crate::sanitize_crypto_provider;
 use crate::tls_stream::TlsStream;
-use grpc::__unstable::Internal;
-use grpc::__unstable::credentials::client::ClientHandshakeInfo;
-use grpc::__unstable::credentials::client::HandshakeOutput;
-use grpc::__unstable::credentials::client::ValidateAuthority;
-use grpc::__unstable::credentials::common::Authority;
-use grpc::__unstable::rt::BoxEndpoint;
-use grpc::__unstable::rt::EndpointIoStream;
-use grpc::__unstable::rt::GrpcRuntime;
-use grpc::credentials::ChannelCredentials;
-use grpc::credentials::ProtocolInfo;
-use grpc::credentials::SecurityInfo;
-use grpc::credentials::SecurityLevel;
-use grpc::credentials::call::CallCredentials;
 
 #[cfg(test)]
 mod test;
@@ -129,9 +129,6 @@ impl Default for ClientTlsConfig {
 pub struct RustlsChannelCredentials {
     connector: TlsConnector,
 }
-
-#[deprecated(since = "0.10.0", note = "typo: use RustlsChannelCredentials instead")]
-pub type RustlsChannelCredendials = RustlsChannelCredentials;
 
 impl RustlsChannelCredentials {
     /// Constructs a new [RustlsChannelCredentials] instance from the provided
