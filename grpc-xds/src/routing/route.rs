@@ -91,24 +91,20 @@ impl HeaderMatcher {
     }
 }
 
-/// Returns the value a header matcher sees for header `name`:
+/// Returns the value a header matcher sees for header `name`, which must be
+/// lowercase (header matcher names are lowercased when RDS is parsed):
 /// - `-bin` headers count as absent (gRFC A28);
 /// - `content-type` is always "application/grpc";
 /// - any other header is looked up in `metadata`, with multiple values joined
-///   with ",". Names are case-insensitive.
+///   with ",".
 fn header_value<'a>(metadata: &'a MetadataMap, name: &str) -> Option<Cow<'a, str>> {
-    let name = if name.bytes().any(|b| b.is_ascii_uppercase()) {
-        Cow::Owned(name.to_ascii_lowercase())
-    } else {
-        Cow::Borrowed(name)
-    };
     if name.ends_with("-bin") {
         return None;
     }
     if name == "content-type" {
         return Some(Cow::Borrowed("application/grpc"));
     }
-    let mut values = metadata.get_all(name.as_ref()).iter();
+    let mut values = metadata.get_all(name).iter();
     let first = values.next()?.to_str();
     let Some(second) = values.next() else {
         return Some(Cow::Borrowed(first));
@@ -356,15 +352,6 @@ mod tests {
         };
         assert!(header_matches(exact("a,b,c"), &md));
         assert!(!header_matches(exact("a"), &md));
-    }
-
-    #[test]
-    fn header_names_match_case_insensitively() {
-        let md = metadata(&[("x-foo", "v")]);
-        assert!(header_matches(
-            header("X-Foo", HeaderMatchSpecifier::Present),
-            &md
-        ));
     }
 
     #[test]
