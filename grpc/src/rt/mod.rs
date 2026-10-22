@@ -53,6 +53,10 @@ pub type BoxEndpoint = Box<dyn GrpcEndpoint>;
 #[crate::async_trait]
 pub(crate) trait EndpointListener: Send + Sync + 'static {
     /// Accepts the next incoming connection.
+    ///
+    /// An error stops the server, so return one only when the listener itself
+    /// can't continue. A failure that affects only one connection must not be
+    /// returned as an error.
     async fn accept(&self) -> Result<Box<dyn GrpcEndpoint>, String>;
 
     /// Returns the local address this listener is bound to.

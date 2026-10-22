@@ -23,6 +23,7 @@
  */
 
 use std::collections::HashMap;
+use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::LazyLock;
@@ -73,6 +74,7 @@ use crate::core::StreamEnded;
 use crate::core::StreamError;
 use crate::credentials::SecurityInfo;
 use crate::credentials::SecurityLevel;
+use crate::private::Internal;
 use crate::rt::GrpcRuntime;
 use crate::server::DynHandle;
 use crate::server::GracefulConnection;
@@ -189,15 +191,11 @@ impl InMemoryListener {
 impl Listener for InMemoryListener {
     type Transport = InMemoryServerCall;
 
-    async fn accept(&self, _token: crate::private::Internal) -> Option<Self::Transport> {
+    async fn accept(&self, _token: Internal) -> Result<Self::Transport, String> {
         let mut r = self.inner.r.lock().await;
         tokio::select! {
-            call = r.recv() => {
-                call
-            }
-            _ = self.inner.close_notify.notified() => {
-                None
-            }
+            call = r.recv() => call.ok_or_else(|| "listener closed".to_string()),
+            _ = self.inner.close_notify.notified() => Err("listener closed".to_string()),
         }
     }
 
@@ -210,13 +208,13 @@ impl Listener for InMemoryListener {
 
 /// A serving in-memory connection.
 pub struct InMemoryServingConnection {
-    inner: Pin<Box<dyn std::future::Future<Output = ()> + Send>>,
+    inner: Pin<Box<dyn Future<Output = Result<(), String>> + Send>>,
 }
 
-impl std::future::Future for InMemoryServingConnection {
-    type Output = ();
+impl Future for InMemoryServingConnection {
+    type Output = Result<(), String>;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), String>> {
         self.inner.as_mut().poll(cx)
     }
 }
@@ -245,7 +243,9 @@ impl ServerTransport for InMemoryServerCall {
             let trailers = handler
                 .dyn_handle(self.headers, options, &mut send, recv)
                 .await;
-            let _ = trailers_tx.send(trailers);
+            trailers_tx
+                .send(trailers)
+                .map_err(|_| "failed to send trailers: client receiver dropped".to_string())
         });
         InMemoryServingConnection { inner }
     }

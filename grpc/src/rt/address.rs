@@ -81,6 +81,31 @@ impl ListenerAddress for UnixListenerAddress {
     }
 }
 
+/// Address representing a listener whose local address could not be determined.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct FailingSocketAddress {
+    network: &'static str,
+    error: String,
+}
+
+impl FailingSocketAddress {
+    /// Creates a new `FailingSocketAddress` with the specified network and error description.
+    pub fn new(network: &'static str, error: String) -> Self {
+        Self { network, error }
+    }
+
+    /// Returns the underlying error message describing why obtaining the address failed.
+    pub fn error(&self) -> &str {
+        &self.error
+    }
+}
+
+impl ListenerAddress for FailingSocketAddress {
+    fn network(&self) -> &str {
+        self.network
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::net::SocketAddr;
@@ -144,5 +169,32 @@ mod tests {
             .downcast_ref::<UnixListenerAddress>()
             .expect("downcast failed");
         assert_eq!(downcasted.path(), "/tmp/test.sock");
+    }
+
+    #[test]
+    fn failing_address_network() {
+        let addr = FailingSocketAddress::new("tcp", "permission denied".to_string());
+        assert_eq!(addr.network(), "tcp");
+        assert_eq!(addr.error(), "permission denied");
+    }
+
+    #[test]
+    fn failing_address_debug_contains_network_and_error() {
+        let addr = FailingSocketAddress::new("unix", "socket unbound".to_string());
+        let debug_str = format!("{addr:?}");
+        assert!(debug_str.contains("unix"));
+        assert!(debug_str.contains("socket unbound"));
+    }
+
+    #[test]
+    fn failing_address_downcast_via_any_supertrait() {
+        let addr = FailingSocketAddress::new("tcp", "bad address".to_string());
+        let trait_obj: &dyn ListenerAddress = &addr;
+        let any_ref: &dyn Any = trait_obj;
+        let downcasted = any_ref
+            .downcast_ref::<FailingSocketAddress>()
+            .expect("downcast failed");
+        assert_eq!(downcasted.error(), "bad address");
+        assert!(any_ref.downcast_ref::<TcpAddress>().is_none());
     }
 }
