@@ -34,6 +34,7 @@ use std::sync::Arc;
 
 use bytes::Buf;
 use bytes::Bytes;
+use grpc::__unstable::rt::GrpcRuntime;
 use grpc::client::CallOptions;
 use grpc::client::Channel;
 use grpc::client::DynRecvStream;
@@ -64,6 +65,7 @@ const ADS_PATH: &str =
 #[derive(Clone)]
 pub(crate) struct GrpcTransportBuilder {
     credentials: Arc<dyn ChannelCredentials>,
+    runtime: GrpcRuntime,
 }
 
 impl std::fmt::Debug for GrpcTransportBuilder {
@@ -72,18 +74,13 @@ impl std::fmt::Debug for GrpcTransportBuilder {
     }
 }
 
-impl Default for GrpcTransportBuilder {
-    fn default() -> Self {
-        Self {
-            credentials: Arc::new(LocalChannelCredentials::new()),
-        }
-    }
-}
-
 impl GrpcTransportBuilder {
     /// Creates a new transport builder with default credentials.
-    pub(crate) fn new() -> Self {
-        Self::default()
+    pub(crate) fn new(runtime: GrpcRuntime) -> Self {
+        Self {
+            credentials: Arc::new(LocalChannelCredentials::new()),
+            runtime,
+        }
     }
 
     /// Sets the channel credentials to use when building channels.
@@ -97,7 +94,12 @@ impl TransportBuilder for GrpcTransportBuilder {
     type Transport = GrpcTransport;
 
     async fn build(&self, server: &ServerConfig) -> Result<Self::Transport> {
-        let channel = Channel::builder(server.uri(), self.credentials.clone()).build();
+        let channel = Channel::builder_with_runtime(
+            server.uri(),
+            self.credentials.clone(),
+            self.runtime.clone(),
+        )
+        .build();
         Ok(GrpcTransport::from_channel(channel))
     }
 }
@@ -231,8 +233,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_builder_build() {
-        let builder =
-            GrpcTransportBuilder::new().with_credentials(Arc::new(LocalChannelCredentials::new()));
+        let builder = GrpcTransportBuilder::new(GrpcRuntime::default())
+            .with_credentials(Arc::new(LocalChannelCredentials::new()));
 
         let server_config = ServerConfig::new("dns:///localhost:50051");
         let _transport = builder.build(&server_config).await.unwrap();
@@ -259,7 +261,7 @@ mod tests {
 
         let addr = running_cp.addr();
         let server_config = ServerConfig::new(format!("dns:///{addr}"));
-        let transport = GrpcTransportBuilder::new()
+        let transport = GrpcTransportBuilder::new(GrpcRuntime::default())
             .build(&server_config)
             .await
             .expect("build transport");
@@ -301,9 +303,13 @@ mod tests {
             Node::new("test", "0"),
             format!("dns:///{}", running_cp.addr()),
         );
-        let client =
-            XdsClient::builder(config, GrpcTransportBuilder::new(), ProstCodec, TokioRuntime)
-                .build();
+        let client = XdsClient::builder(
+            config,
+            GrpcTransportBuilder::new(GrpcRuntime::default()),
+            ProstCodec,
+            TokioRuntime,
+        )
+        .build();
 
         let mut watcher = client.watch::<ListenerResource>("listener-1").await;
         let event = watcher.next().await.expect("watcher event");
