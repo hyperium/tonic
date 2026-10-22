@@ -12,6 +12,7 @@ RPC framework that puts mobile and HTTP/2 first.
 
 [![Crates.io](https://img.shields.io/crates/v/tonic)](https://crates.io/crates/tonic)
 [![Documentation](https://docs.rs/tonic/badge.svg)](https://docs.rs/tonic)
+[![inspect.software](https://raw.githubusercontent.com/inspect-software/badges/main/v1/g/grpc/grpc-rust.svg)](https://inspect.software/software/grpc/grpc-rust)
 [![Crates.io](https://img.shields.io/crates/l/tonic)](LICENSE)
 
 
