@@ -38,8 +38,6 @@
 pub mod call;
 pub(crate) mod client;
 mod local;
-#[cfg(feature = "tls-rustls")]
-pub mod rustls;
 pub(crate) mod server;
 
 use std::sync::Arc;

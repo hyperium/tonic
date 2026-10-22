@@ -27,7 +27,20 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use crate::async_trait;
+use grpc::__unstable::Internal;
+use grpc::__unstable::credentials::client::ClientHandshakeInfo;
+use grpc::__unstable::credentials::client::HandshakeOutput;
+use grpc::__unstable::credentials::client::ValidateAuthority;
+use grpc::__unstable::credentials::common::Authority;
+use grpc::__unstable::rt::BoxEndpoint;
+use grpc::__unstable::rt::EndpointIoStream;
+use grpc::__unstable::rt::GrpcRuntime;
+use grpc::async_trait;
+use grpc::credentials::ChannelCredentials;
+use grpc::credentials::ProtocolInfo;
+use grpc::credentials::SecurityInfo;
+use grpc::credentials::SecurityLevel;
+use grpc::credentials::call::CallCredentials;
 use rustls::crypto::CryptoProvider;
 use rustls_pki_types::CertificateDer;
 use rustls_pki_types::ServerName;
@@ -36,29 +49,16 @@ use tokio::sync::watch::Receiver;
 use tokio_rustls::TlsConnector;
 use tokio_rustls::TlsStream as RustlsStream;
 
-use crate::credentials::ChannelCredentials;
-use crate::credentials::ProtocolInfo;
-use crate::credentials::SecurityInfo;
-use crate::credentials::SecurityLevel;
-use crate::credentials::call::CallCredentials;
-use crate::credentials::client::ClientHandshakeInfo;
-use crate::credentials::client::HandshakeOutput;
-use crate::credentials::client::ValidateAuthority;
-use crate::credentials::common::Authority;
-use crate::credentials::rustls::ALPN_PROTO_STR_H2;
-use crate::credentials::rustls::Identity;
-use crate::credentials::rustls::Provider;
-use crate::credentials::rustls::RootCertificates;
-use crate::credentials::rustls::TLS_PROTO_INFO;
-use crate::credentials::rustls::key_log::KeyLogFile;
-use crate::credentials::rustls::parse_certs;
-use crate::credentials::rustls::parse_key;
-use crate::credentials::rustls::sanitize_crypto_provider;
-use crate::credentials::rustls::tls_stream::TlsStream;
-use crate::private;
-use crate::rt::BoxEndpoint;
-use crate::rt::EndpointIoStream;
-use crate::rt::GrpcRuntime;
+use crate::ALPN_PROTO_STR_H2;
+use crate::Identity;
+use crate::Provider;
+use crate::RootCertificates;
+use crate::TLS_PROTO_INFO;
+use crate::key_log::KeyLogFile;
+use crate::parse_certs;
+use crate::parse_key;
+use crate::sanitize_crypto_provider;
+use crate::tls_stream::TlsStream;
 
 #[cfg(test)]
 mod test;
@@ -89,7 +89,7 @@ impl ClientTlsConfig {
     where
         R: Provider<RootCertificates>,
     {
-        self.pem_roots_provider = Some(provider.get_receiver(private::Internal));
+        self.pem_roots_provider = Some(provider.get_receiver(Internal));
         self
     }
 
@@ -102,7 +102,7 @@ impl ClientTlsConfig {
     where
         I: Provider<Identity>,
     {
-        self.identity_provider = Some(provider.get_receiver(private::Internal));
+        self.identity_provider = Some(provider.get_receiver(Internal));
         self
     }
 
@@ -129,9 +129,6 @@ impl Default for ClientTlsConfig {
 pub struct RustlsChannelCredentials {
     connector: TlsConnector,
 }
-
-#[deprecated(since = "0.10.0", note = "typo: use RustlsChannelCredentials instead")]
-pub type RustlsChannelCredendials = RustlsChannelCredentials;
 
 impl RustlsChannelCredentials {
     /// Constructs a new [RustlsChannelCredentials] instance from the provided
@@ -281,7 +278,7 @@ impl ChannelCredentials for RustlsChannelCredentials {
         source: BoxEndpoint,
         _info: &ClientHandshakeInfo,
         _rt: &GrpcRuntime,
-        _token: private::Internal,
+        _token: Internal,
     ) -> Result<HandshakeOutput, String> {
         let (ep, security_info, authority_validator) = self.connect_tls(authority, source).await?;
         Ok(HandshakeOutput {
@@ -295,7 +292,7 @@ impl ChannelCredentials for RustlsChannelCredentials {
         &TLS_PROTO_INFO
     }
 
-    fn get_call_credentials(&self, _: private::Internal) -> Option<&Arc<dyn CallCredentials>> {
+    fn get_call_credentials(&self, _: Internal) -> Option<&Arc<dyn CallCredentials>> {
         None
     }
 }

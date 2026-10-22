@@ -27,6 +27,15 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use grpc::__unstable::Internal;
+use grpc::__unstable::credentials::server::HandshakeOutput;
+use grpc::__unstable::rt::BoxEndpoint;
+use grpc::__unstable::rt::EndpointIoStream;
+use grpc::__unstable::rt::GrpcRuntime;
+use grpc::credentials::ProtocolInfo;
+use grpc::credentials::SecurityInfo;
+use grpc::credentials::SecurityLevel;
+use grpc::credentials::ServerCredentials;
 use rustls::crypto::CryptoProvider;
 use rustls::server::ClientHello;
 use rustls::server::ProducesTickets;
@@ -37,26 +46,17 @@ use tokio_rustls::TlsAcceptor;
 use tokio_rustls::TlsStream as RustlsStream;
 use webpki::EndEntityCert;
 
-use crate::credentials::ProtocolInfo;
-use crate::credentials::SecurityInfo;
-use crate::credentials::SecurityLevel;
-use crate::credentials::ServerCredentials;
-use crate::credentials::rustls::ALPN_PROTO_STR_H2;
-use crate::credentials::rustls::IdentityList;
-use crate::credentials::rustls::Provider;
-use crate::credentials::rustls::RootCertificates;
-use crate::credentials::rustls::StaticRootCertificatesProvider;
-use crate::credentials::rustls::TLS_PROTO_INFO;
-use crate::credentials::rustls::key_log::KeyLogFile;
-use crate::credentials::rustls::parse_certs;
-use crate::credentials::rustls::parse_key;
-use crate::credentials::rustls::sanitize_crypto_provider;
-use crate::credentials::rustls::tls_stream::TlsStream;
-use crate::credentials::server::HandshakeOutput;
-use crate::private;
-use crate::rt::BoxEndpoint;
-use crate::rt::EndpointIoStream;
-use crate::rt::GrpcRuntime;
+use crate::ALPN_PROTO_STR_H2;
+use crate::IdentityList;
+use crate::Provider;
+use crate::RootCertificates;
+use crate::StaticRootCertificatesProvider;
+use crate::TLS_PROTO_INFO;
+use crate::key_log::KeyLogFile;
+use crate::parse_certs;
+use crate::parse_key;
+use crate::sanitize_crypto_provider;
+use crate::tls_stream::TlsStream;
 
 #[cfg(test)]
 mod test;
@@ -159,12 +159,12 @@ impl From<TlsClientCertificateRequestType> for InnerClientCertificateRequestType
             }
             TlsClientCertificateRequestType::RequestAndVerify { roots_provider } => {
                 InnerClientCertificateRequestType::RequestClientCertificateAndVerify {
-                    roots_provider: roots_provider.get_receiver(private::Internal),
+                    roots_provider: roots_provider.get_receiver(Internal),
                 }
             }
             TlsClientCertificateRequestType::RequireAndVerify { roots_provider } => {
                 InnerClientCertificateRequestType::RequestAndRequireClientCertificateAndVerify {
-                    roots_provider: roots_provider.get_receiver(private::Internal),
+                    roots_provider: roots_provider.get_receiver(Internal),
                 }
             }
         }
@@ -176,9 +176,6 @@ impl From<TlsClientCertificateRequestType> for InnerClientCertificateRequestType
 pub struct RustlsServerCredentials {
     acceptor: TlsAcceptor,
 }
-
-#[deprecated(since = "0.10.0", note = "typo: use RustlsServerCredentials instead")]
-pub type RustlsServerCredendials = RustlsServerCredentials;
 
 /// Configuration for server-side TLS settings.
 pub struct ServerTlsConfig {
@@ -196,7 +193,7 @@ impl ServerTlsConfig {
         I: Provider<IdentityList>,
     {
         ServerTlsConfig {
-            identities_provider: identities_provider.get_receiver(private::Internal),
+            identities_provider: identities_provider.get_receiver(Internal),
             request_type: TlsClientCertificateRequestType::DontRequest.into(),
             key_log_path: None,
         }
@@ -340,13 +337,13 @@ impl ProducesTickets for NoTicketer {
     }
 }
 
-#[crate::async_trait]
+#[grpc::async_trait]
 impl ServerCredentials for RustlsServerCredentials {
     async fn accept(
         &self,
         source: BoxEndpoint,
         _runtime: GrpcRuntime,
-        _token: private::Internal,
+        _token: Internal,
     ) -> Result<HandshakeOutput, String> {
         let input_io = EndpointIoStream::new(source);
         let tls_stream = self
