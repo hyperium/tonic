@@ -16,13 +16,13 @@
 // of unary/streaming requests/responses.
 syntax = "proto3";
 
-package grpc.testing;
-
 import "grpc/testing/messages.proto";
 
+package grpc.testing;
+
 option java_multiple_files = true;
-option java_outer_classname = "BenchmarkServiceProto";
 option java_package = "io.grpc.testing";
+option java_outer_classname = "BenchmarkServiceProto";
 
 service BenchmarkService {
   // One request followed by one response.
