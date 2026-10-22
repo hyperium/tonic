@@ -35,7 +35,7 @@ use generated::api::ListTopicsRequest;
 use generated::api::publisher_client::PublisherClient;
 use grpc::client::Channel;
 use grpc::credentials::CompositeChannelCredentials;
-use grpc_google::GcpCallCredentials;
+use grpc_google_cloud_auth::GcpCallCredentials;
 use grpc_rustls::client::ClientTlsConfig;
 use grpc_rustls::client::RustlsChannelCredentials;
 use protobuf::proto;

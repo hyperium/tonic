@@ -12,7 +12,7 @@ members = [
   "codegen",
   "grpc",
   "grpc-benchmark",
-  "grpc-google",
+  "grpc-google-cloud-auth",
   "grpc-protobuf",
   "grpc-protobuf-build",
   "grpc-rustls",

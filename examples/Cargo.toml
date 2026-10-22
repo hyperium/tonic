@@ -287,7 +287,7 @@ types = ["dep:tonic-types"]
 h2c = ["dep:hyper", "dep:tower", "dep:http", "dep:hyper-util"]
 cancellation = ["dep:tokio-util"]
 tower = ["dep:tower", "dep:http"]
-grpc-gcp = [ "dep:protobuf", "dep:grpc-protobuf", "dep:grpc", "dep:grpc-google",
+grpc-gcp = [ "dep:protobuf", "dep:grpc-protobuf", "dep:grpc", "dep:grpc-google-cloud-auth",
 "dep:grpc-rustls", "dep:rustls", "dep:protobuf-well-known-types" ]
 grpc-routeguide = ["dep:grpc", "dep:grpc-protobuf", "dep:protobuf", "dep:rand"]
 grpc-helloworld = ["dep:grpc", "dep:grpc-protobuf", "dep:protobuf"]
@@ -329,7 +329,7 @@ h2 = { version = "0.4", optional = true }
 tokio-rustls = { version = "0.26.1", optional = true, features = ["ring", "tls12"], default-features = false }
 hyper-rustls = { version = "0.27.0", features = ["http2", "ring", "tls12"], optional = true, default-features = false }
 tower-http = { version = "0.6", optional = true }
-grpc-google = { path = "../grpc-google", optional = true}
+grpc-google-cloud-auth = { path = "../grpc-google-cloud-auth", optional = true }
 grpc-protobuf = { path = "../grpc-protobuf", optional = true }
 protobuf = { version = "4.35.1-release", optional = true }
 grpc = { path = "../grpc", optional = true }
