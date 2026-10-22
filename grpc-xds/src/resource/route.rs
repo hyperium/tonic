@@ -26,9 +26,8 @@
 //!
 //! Models the validated data shapes only (gRFC A28).
 
-// TODO: implement request routing components (
-// path/header/fraction matching, stripping `-bin` headers from request metadata before
-// evaluating header matchers) in the future resolver/interceptor layer that consumes `XdsConfig`.
+// Matching requests against these routes (path, header and fraction matching,
+// with `-bin` headers treated as absent) is implemented in `routing/route.rs`.
 
 use std::collections::HashSet;
 
