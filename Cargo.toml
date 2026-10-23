@@ -17,7 +17,7 @@ members = [
   "grpc-protobuf-build",
   "grpc-rustls",
   "grpc-xds",
-  "protoc-gen-rust-grpc",
+  "protoc-gen-grpc-rust",
   "xds-client",
   "xds-client-opentelemetry",
   "tonic-xds",

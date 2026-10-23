@@ -1,4 +1,4 @@
-name: Release protoc-gen-rust-grpc
+name: Release protoc-gen-grpc-rust
 
 # Workflow explanation:
 #
@@ -46,8 +46,8 @@ jobs:
         with:
           filters: |
             should_run:
-              - '.github/workflows/release-protoc-gen-rust-grpc.yml'
-              - 'protoc-gen-rust-grpc/src/cpp_source/**'
+              - '.github/workflows/release-protoc-gen-grpc-rust.yml'
+              - 'protoc-gen-grpc-rust/src/cpp_source/**'
 
       - name: Determine if workflow should run
         id: determine
@@ -58,7 +58,7 @@ jobs:
           FILTER_SHOULD_RUN: ${{ steps.filter.outputs.should_run }}
         run: |
           if [ "$EVENT_NAME" = "release" ]; then
-            if [[ "$TAG_NAME" == protoc-gen-rust-grpc* ]]; then
+            if [[ "$TAG_NAME" == protoc-gen-grpc-rust* ]]; then
               echo "should_run=true" >> "$GITHUB_OUTPUT"
             else
               echo "should_run=false" >> "$GITHUB_OUTPUT"
@@ -80,27 +80,27 @@ jobs:
           # --- Linux Builds ---
           - runs_on: ubuntu-latest
             target: linux-x86_64
-            binary_name: protoc-gen-rust-grpc
+            binary_name: protoc-gen-grpc-rust
             cmake_flags: ""
           - runs_on: ubuntu-latest
             target: linux-x86_32
-            binary_name: protoc-gen-rust-grpc
+            binary_name: protoc-gen-grpc-rust
             # Multiarch build (32-bit x86)
             cmake_flags: "-DCMAKE_CXX_FLAGS=-m32 -DCMAKE_C_FLAGS=-m32"
             install_32bit: true
           - runs_on: ubuntu-24.04-arm
             target: linux-aarch_64
-            binary_name: protoc-gen-rust-grpc
+            binary_name: protoc-gen-grpc-rust
             cmake_flags: ""
           - runs_on: ubuntu-latest
             target: linux-ppcle_64
-            binary_name: protoc-gen-rust-grpc
+            binary_name: protoc-gen-grpc-rust
             # Cross-compilation using GCC cross-compiler
             cmake_flags: "-DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=ppc64le -DCMAKE_C_COMPILER=powerpc64le-linux-gnu-gcc -DCMAKE_CXX_COMPILER=powerpc64le-linux-gnu-g++"
             install_cross: "g++-powerpc64le-linux-gnu"
           - runs_on: ubuntu-latest
             target: linux-s390_64
-            binary_name: protoc-gen-rust-grpc
+            binary_name: protoc-gen-grpc-rust
             # Cross-compilation using GCC cross-compiler
             cmake_flags: "-DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=s390x -DCMAKE_C_COMPILER=s390x-linux-gnu-gcc -DCMAKE_CXX_COMPILER=s390x-linux-gnu-g++"
             install_cross: "g++-s390x-linux-gnu"
@@ -108,25 +108,25 @@ jobs:
           # --- macOS Builds ---
           - runs_on: macos-latest
             target: osx-x86_64
-            binary_name: protoc-gen-rust-grpc
+            binary_name: protoc-gen-grpc-rust
             cmake_flags: "-DCMAKE_OSX_ARCHITECTURES=x86_64"
           - runs_on: macos-latest
             target: osx-aarch_64
-            binary_name: protoc-gen-rust-grpc
+            binary_name: protoc-gen-grpc-rust
             cmake_flags: "-DCMAKE_OSX_ARCHITECTURES=arm64"
           - runs_on: macos-latest
             target: osx-universal_binary
-            binary_name: protoc-gen-rust-grpc
+            binary_name: protoc-gen-grpc-rust
             cmake_flags: "-DCMAKE_OSX_ARCHITECTURES='arm64;x86_64'"
 
           # --- Windows Builds ---
           - runs_on: windows-latest
             target: win32
-            binary_name: protoc-gen-rust-grpc.exe
+            binary_name: protoc-gen-grpc-rust.exe
             cmake_flags: "-A Win32"
           - runs_on: windows-latest
             target: win64
-            binary_name: protoc-gen-rust-grpc.exe
+            binary_name: protoc-gen-grpc-rust.exe
             cmake_flags: "-A x64"
 
     steps:
@@ -151,21 +151,21 @@ jobs:
         env:
           TAG_NAME: ${{ github.event.release.tag_name }}
         run: |
-          # Extract version from release tag (e.g. protoc-gen-rust-grpc-v0.9.0 -> 0.9.0)
+          # Extract version from release tag (e.g. protoc-gen-grpc-rust-v0.9.0 -> 0.9.0)
           VERSION_FROM_TAG="$TAG_NAME"
           if [ -z "$VERSION_FROM_TAG" ]; then
             VERSION_FROM_TAG="test-version"
           else
-            VERSION_FROM_TAG="${VERSION_FROM_TAG##*protoc-gen-rust-grpc-v}"
+            VERSION_FROM_TAG="${VERSION_FROM_TAG##*protoc-gen-grpc-rust-v}"
           fi
 
           echo "Building version: $VERSION_FROM_TAG"
 
           # Export clean version and asset filename for subsequent steps
           echo "VERSION_FROM_TAG=${VERSION_FROM_TAG}" >> $GITHUB_ENV
-          echo "ASSET_FILENAME=protoc-gen-rust-grpc-${VERSION_FROM_TAG}-${{ matrix.target }}.zip" >> $GITHUB_ENV
+          echo "ASSET_FILENAME=protoc-gen-grpc-rust-${VERSION_FROM_TAG}-${{ matrix.target }}.zip" >> $GITHUB_ENV
 
-          cmake -S protoc-gen-rust-grpc/src/cpp_source -B build \
+          cmake -S protoc-gen-grpc-rust/src/cpp_source -B build \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_PROTOC=OFF \
             -DBUILD_PLUGIN=ON \

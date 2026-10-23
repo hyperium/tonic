@@ -72,5 +72,5 @@ name = "grpc-rustls"
 release = false
 
 [[package]]
-name = "protoc-gen-rust-grpc"
+name = "protoc-gen-grpc-rust"
 release = false

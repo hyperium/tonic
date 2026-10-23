@@ -1,5 +1,5 @@
 [package]
-name = "protoc-gen-rust-grpc"
+name = "protoc-gen-grpc-rust"
 version = "0.10.0"
 authors = ["gRPC authors"]
 license = "MIT"
@@ -11,6 +11,9 @@ keywords = ["rpc", "grpc", "async", "protobuf", "proto"]
 categories = ["web-programming", "network-programming", "asynchronous"]
 rust-version = { workspace = true }
 edition = "2024"
+# We do want to publish, but semver CI gets angry because it doesn't exist yet.
+# So we'll enable this just before we publish the first time.
+publish = false
 
 [dependencies]
 

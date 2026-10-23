@@ -10,7 +10,7 @@ Protobuf integration for the [`grpc` crate](../grpc).
 This crate provides types that applications use to perform and control RPCs.  
 
 The types in this crate are generally created by the generated code produced by
-[`protoc-gen-rust-grpc`](https://docs.rs/protoc-gen-rust-grpc).  Detailed usage
+[`protoc-gen-grpc-rust`](https://docs.rs/protoc-gen-grpc-rust).  Detailed usage
 information can be found in the crate documentation.
 
 ## Documentation, Examples, and Getting Started

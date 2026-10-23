@@ -26,7 +26,7 @@
 //!
 //! This module provides the core types and traits for building gRPC clients.
 //! While most applications will use generated code (e.g. using
-//! [`protoc-gen-rust-grpc`](https://crates.io/protoc-gen-rust-grpc)) to
+//! [`protoc-gen-grpc-rust`](https://crates.io/protoc-gen-grpc-rust)) to
 //! interact with gRPC services, this module provides the underlying primitives.
 //!
 //! # Key Concepts

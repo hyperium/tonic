@@ -19,7 +19,7 @@
 # IN THE SOFTWARE.
 
 cc_binary(
-    name = "protoc-gen-rust-grpc",
+    name = "protoc-gen-grpc-rust",
     srcs = [
         "grpc_rust_plugin.cc",
         "grpc_rust_generator.h",

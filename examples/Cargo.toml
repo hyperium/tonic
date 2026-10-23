@@ -340,5 +340,5 @@ protobuf-well-known-types = { version = "4.35.1-release", optional = true }
 [build-dependencies]
 tonic-prost-build = { path = "../tonic-prost-build" }
 grpc-protobuf-build = { path = "../grpc-protobuf-build", default-features = false }
-protoc-gen-rust-grpc = { path = "../protoc-gen-rust-grpc", optional = true }
+protoc-gen-grpc-rust = { path = "../protoc-gen-grpc-rust", optional = true }
 protobuf-well-known-types = { version = "4.35.1-release" }

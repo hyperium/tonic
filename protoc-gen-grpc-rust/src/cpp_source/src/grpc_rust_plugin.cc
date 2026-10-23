@@ -100,7 +100,7 @@ public:
 
 int main(int argc, char *argv[]) {
   if (argc > 1 && std::string(argv[1]) == "--version") {
-    std::cout << "protoc-gen-rust-grpc " << TOSTRING(RUST_GRPC_VERSION) << std::endl;
+    std::cout << "protoc-gen-grpc-rust " << TOSTRING(RUST_GRPC_VERSION) << std::endl;
     return 0;
   }
   RustGrpcGenerator generator;

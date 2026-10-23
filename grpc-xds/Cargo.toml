@@ -11,7 +11,7 @@ xDS routing and load balancing for the Rust gRPC implementation.
 edition = "2024"
 rust-version.workspace = true
 # Not published yet: the build.rs codegen requires protoc (and a C++ build of
-# `protoc-gen-rust-grpc`), which doesn't fit docs.rs / crates.io publishing.
+# `protoc-gen-grpc-rust`), which doesn't fit docs.rs / crates.io publishing.
 publish = false
 
 [package.metadata.cargo_check_external_types]
@@ -32,4 +32,4 @@ serde_json = "1.0"
 [build-dependencies]
 protobuf-codegen = "4.35.1-release"
 protobuf-well-known-types = "4.35.1-release"
-protoc-gen-rust-grpc = { version = "0.10.0", path = "../protoc-gen-rust-grpc" }
+protoc-gen-grpc-rust = { version = "0.10.0", path = "../protoc-gen-grpc-rust" }

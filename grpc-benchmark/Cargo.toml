@@ -37,5 +37,5 @@ nix = { version = "0.31.3", features = ["resource"] }
 [build-dependencies]
 grpc-protobuf-build = { path = "../grpc-protobuf-build" }
 protobuf-well-known-types = { version = "4.35.1-release" }
-protoc-gen-rust-grpc = { path = "../protoc-gen-rust-grpc" }
+protoc-gen-grpc-rust = { path = "../protoc-gen-grpc-rust" }
 tonic-prost-build = { path = "../tonic-prost-build" }

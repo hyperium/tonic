@@ -60,8 +60,8 @@ fn main() {
     .map(|d| third_party.join(d))
     .collect();
 
-    // Resolve protoc. Locally, `protoc-gen-rust-grpc` builds it and we use that;
-    // in CI its C++ build is skipped (`PROTOC_GEN_RUST_GRPC_NO_BUILD=1`) and a
+    // Resolve protoc. Locally, `protoc-gen-grpc-rust` builds it and we use that;
+    // in CI its C++ build is skipped (`PROTOC_GEN_GRPC_RUST_NO_BUILD=1`) and a
     // prebuilt protoc is provided on `$PATH`, so `find_protoc` falls back to it.
     let protoc = find_protoc();
 
@@ -241,14 +241,14 @@ fn write_module_tree(dir: &Path) {
     std::fs::write(dir.join("mod.rs"), m).unwrap();
 }
 
-/// Resolves the `protoc` binary. Prefers the one built by `protoc-gen-rust-grpc`
-/// (local dev); when that build is skipped (`PROTOC_GEN_RUST_GRPC_NO_BUILD`, as
+/// Resolves the `protoc` binary. Prefers the one built by `protoc-gen-grpc-rust`
+/// (local dev); when that build is skipped (`PROTOC_GEN_GRPC_RUST_NO_BUILD`, as
 /// in CI), falls back to `$PROTOC` or the first `protoc` on `$PATH`. Returns the
 /// full path so the sibling `../include` dir can be located.
 fn find_protoc() -> PathBuf {
     const PROTOC_NAME: &str = "protoc";
-    // Prefer to use the protoc built by `protoc-gen-rust-grpc`.
-    let built = protoc_gen_rust_grpc::protoc();
+    // Prefer to use the protoc built by `protoc-gen-grpc-rust`.
+    let built = protoc_gen_grpc_rust::protoc();
     if built.is_file() {
         return built;
     }

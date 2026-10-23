@@ -178,7 +178,7 @@ impl CodeGen {
         self
     }
 
-    /// Sets explicit paths to the `protoc` and `protoc-gen-rust-grpc` plugin binaries.
+    /// Sets explicit paths to the `protoc` and `protoc-gen-grpc-rust` plugin binaries.
     pub fn prebuilt_binaries(
         &mut self,
         protoc: impl Into<PathBuf>,
@@ -267,13 +267,13 @@ impl CodeGen {
             return Ok((protoc.clone(), plugin.clone()));
         }
 
-        // 2. Compiled via protoc-gen-rust-grpc
-        #[cfg(feature = "protoc-gen-rust-grpc")]
+        // 2. Compiled via protoc-gen-grpc-rust
+        #[cfg(feature = "protoc-gen-grpc-rust")]
         {
-            let compiled_protoc = protoc_gen_rust_grpc::protoc();
-            let compiled_plugin = protoc_gen_rust_grpc::protoc_gen_rust_grpc();
+            let compiled_protoc = protoc_gen_grpc_rust::protoc();
+            let compiled_plugin = protoc_gen_grpc_rust::protoc_gen_grpc_rust();
             if compiled_protoc.exists() && compiled_plugin.exists() {
-                // The files may not exist if a build setting instructed protoc-gen-rust-grpc to
+                // The files may not exist if a build setting instructed protoc-gen-grpc-rust to
                 // skip the C++ build (DOCS_RS / our CI setting).
                 return Ok((compiled_protoc, compiled_plugin));
             }
@@ -285,9 +285,9 @@ impl CodeGen {
             "protoc"
         };
         let plugin_filename = if cfg!(windows) {
-            "protoc-gen-rust-grpc.exe"
+            "protoc-gen-grpc-rust.exe"
         } else {
-            "protoc-gen-rust-grpc"
+            "protoc-gen-grpc-rust"
         };
 
         // 3. Prebuilt binaries environment variable
@@ -308,7 +308,7 @@ impl CodeGen {
         }
 
         Err(
-            "Could not locate the protoc and/or protoc-gen-rust-grpc plugin binaries.
+            "Could not locate the protoc and/or protoc-gen-grpc-rust plugin binaries.
 Please do one of the following:
   1. Enable the \"build-plugin\" feature to compile from source.
   2. Set the \"GRPC_RUST_PROTOC_DIR\" environment variable to a path
@@ -342,11 +342,11 @@ Please do one of the following:
         // Generate the service code.
         let mut cmd = Command::new(&protoc);
         cmd.arg(format!(
-            "--plugin=protoc-gen-rust-grpc={}",
+            "--plugin=protoc-gen-grpc-rust={}",
             plugin.display()
         ));
         if self.client_only {
-            cmd.arg("--rust-grpc_opt=client_only=true");
+            cmd.arg("--grpc-rust_opt=client_only=true");
         }
         for input in &self.inputs {
             cmd.arg(input);
@@ -367,14 +367,14 @@ Please do one of the following:
             }
         }
 
-        cmd.arg(format!("--rust-grpc_out={}", self.output_dir.display()));
+        cmd.arg(format!("--grpc-rust_out={}", self.output_dir.display()));
         cmd.arg(format!(
-            "--rust-grpc_opt=crate_mapping={}",
+            "--grpc-rust_opt=crate_mapping={}",
             crate_mapping_path.display()
         ));
         if let Some(message_path) = &self.message_module_path {
             cmd.arg(format!(
-                "--rust-grpc_opt=message_module_path={message_path}",
+                "--grpc-rust_opt=message_module_path={message_path}",
             ));
         }
 

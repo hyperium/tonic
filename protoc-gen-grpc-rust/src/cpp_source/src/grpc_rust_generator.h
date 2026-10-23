@@ -19,8 +19,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 
-#ifndef PROTOC_GEN_RUST_GRPC_GRPC_RUST_GENERATOR_H_
-#define PROTOC_GEN_RUST_GRPC_GRPC_RUST_GENERATOR_H_
+#ifndef PROTOC_GEN_GRPC_RUST_GRPC_RUST_GENERATOR_H_
+#define PROTOC_GEN_GRPC_RUST_GRPC_RUST_GENERATOR_H_
 
 #include "absl/log/absl_log.h"
 #include "google/protobuf/descriptor.h"
@@ -108,4 +108,4 @@ absl::StatusOr<absl::flat_hash_map<std::string, std::string>>
 GetImportPathToCrateNameMap(const absl::string_view mapping_file_path);
 } // namespace rust_grpc_generator
 
-#endif // PROTOC_GEN_RUST_GRPC_GRPC_RUST_GENERATOR_H_
+#endif // PROTOC_GEN_GRPC_RUST_GRPC_RUST_GENERATOR_H_

@@ -42,9 +42,9 @@ pub fn protoc() -> PathBuf {
     bin_file("protoc")
 }
 
-/// The full path to the gRPC `protoc` plugin, `protoc-gen-rust-grpc`.
-pub fn protoc_gen_rust_grpc() -> PathBuf {
-    bin_file("protoc-gen-rust-grpc")
+/// The full path to the gRPC `protoc` plugin, `protoc-gen-grpc-rust`.
+pub fn protoc_gen_grpc_rust() -> PathBuf {
+    bin_file("protoc-gen-grpc-rust")
 }
 
 /// The path to the `bin` directory containing the C++ binaries this package

@@ -20,7 +20,7 @@ gRPC!
 ### Project Layout
 
 - `grpc` (this crate): The core gRPC implementation.
-- [`protoc-gen-rust-grpc`]: The protobuf code generator binary, used with [`protoc`].
+- [`protoc-gen-grpc-rust`]: The protobuf code generator binary, used with [`protoc`].
 - [`grpc-protobuf-build`]: Build integration for grpc protobuf code generation.
 - [`grpc-protobuf`]: Implementation of protobuf-over-grpc used by the generated code.
 
@@ -36,6 +36,6 @@ If you'd like to contribute, please see our project's
 
 [gRPC]: https://grpc.io
 [`protoc`]: https://protobuf.dev/installation/
-[`protoc-gen-rust-grpc`]: ../protoc-gen-rust-grpc
+[`protoc-gen-grpc-rust`]: ../protoc-gen-grpc-rust
 [`grpc-protobuf-build`]: ../grpc-protobuf-build
 [`grpc-protobuf`]: ../grpc-protobuf
