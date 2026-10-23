@@ -1,7 +1,7 @@
 [package]
 authors = ["gRPC authors"]
 edition = "2024"
-license = "MIT"
+license = "MIT AND Apache-2.0"
 name = "examples"
 
 [[bin]]
