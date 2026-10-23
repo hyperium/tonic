@@ -18,6 +18,8 @@ tonic-prost = { path = "../../tonic-prost" }
 
 [dev-dependencies]
 tonic-web = { path = "../../tonic-web" }
+tower-layer = "0.3"
+tower-service = "0.3"
 
 [build-dependencies]
 tonic-prost-build = { path = "../../tonic-prost-build" }
