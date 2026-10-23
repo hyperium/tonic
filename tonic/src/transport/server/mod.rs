@@ -87,6 +87,7 @@ use std::{
     time::Duration,
 };
 use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::time::{Sleep, sleep};
 use tokio_stream::Stream;
 use tower::{
     Service, ServiceBuilder, ServiceExt,
@@ -291,7 +292,7 @@ impl<L> Server<L> {
         }
     }
 
-    /// Sets the maximum time option in milliseconds that a connection may exist
+    /// Sets the maximum age of a connection before graceful shutdown begins.
     ///
     /// Default is no limit (`None`).
     ///
@@ -313,7 +314,7 @@ impl<L> Server<L> {
     }
 
     /// Sets the maximum duration that a connection may continue to exist
-    /// **after** the graceful shutdown period (`max_connection_age`) has elapsed.
+    /// **after** it reaches `max_connection_age` and begins graceful shutdown.
     ///
     /// This timeout only takes effect *after* a connection has exceeded its
     /// configured `max_connection_age`. Once that happens, the server will begin
@@ -915,29 +916,6 @@ impl<L> Server<L> {
     }
 }
 
-enum TimeoutAction {
-    GracefulShutdown,
-    ForcefulShutdown,
-}
-
-async fn connection_timeout_future(
-    max_connection_age: Option<Duration>,
-    max_connection_age_grace: Option<Duration>,
-) -> TimeoutAction {
-    if let Some(age) = max_connection_age {
-        tokio::time::sleep(age).await;
-
-        if let Some(grace) = max_connection_age_grace {
-            tokio::time::sleep(grace).await;
-            TimeoutAction::ForcefulShutdown
-        } else {
-            TimeoutAction::GracefulShutdown
-        }
-    } else {
-        future::pending().await
-    }
-}
-
 // This is moved to its own function as a way to get around
 // https://github.com/rust-lang/rust/issues/102211
 fn serve_connection<B, IO, S, E>(
@@ -965,11 +943,11 @@ fn serve_connection<B, IO, S, E>(
 
             let mut conn = pin!(builder.serve_connection(hyper_io, hyper_svc));
 
-            let mut connection_timeout = pin!(Fuse {
-                inner: Some(connection_timeout_future(
-                    max_connection_age,
-                    max_connection_age_grace,
-                )),
+            let mut age_timeout = pin!(Fuse {
+                inner: max_connection_age.map(sleep),
+            });
+            let mut grace_timeout = pin!(Fuse {
+                inner: None::<Sleep>,
             });
 
             loop {
@@ -980,16 +958,15 @@ fn serve_connection<B, IO, S, E>(
                         }
                         break;
                     },
-                    timeout_action = &mut connection_timeout => {
-                        match timeout_action {
-                            TimeoutAction::GracefulShutdown => {
-                                conn.as_mut().graceful_shutdown();
-                            },
-                            TimeoutAction::ForcefulShutdown => {
-                                debug!("forcefully closed connection");
-                                break;
-                            }
-                        }
+                    _ = &mut age_timeout => {
+                        conn.as_mut().graceful_shutdown();
+                        grace_timeout.set(Fuse {
+                            inner: max_connection_age_grace.map(sleep),
+                        });
+                    },
+                    _ = &mut grace_timeout => {
+                        debug!("forcefully closed connection after grace period");
+                        break;
                     },
                     _ = &mut sig => {
                         conn.as_mut().graceful_shutdown();
@@ -1320,82 +1297,197 @@ where
 mod tests {
     use super::*;
     use crate::transport::Server;
-    use std::time::Duration;
+    use h2::client::{ResponseFuture, SendRequest};
+    use http_body_util::Full;
+    use hyper::service::service_fn;
+    use std::{convert::Infallible, time::Duration};
+    use tokio::{
+        io::duplex,
+        sync::{mpsc, oneshot, watch},
+        task::JoinHandle,
+        time::{sleep, timeout},
+    };
+
+    const CONNECTION_AGE: Duration = Duration::from_secs(10);
+    const CONNECTION_GRACE: Duration = Duration::from_secs(5);
+    const TEST_TIMEOUT: Duration = Duration::from_secs(1);
+
+    struct TestConnection {
+        client: SendRequest<Bytes>,
+        calls: mpsc::UnboundedReceiver<oneshot::Sender<()>>,
+        shutdown: watch::Sender<()>,
+        driver: JoinHandle<Result<(), h2::Error>>,
+    }
+
+    impl TestConnection {
+        async fn new(age: Option<Duration>, grace: Option<Duration>) -> Self {
+            let (server_io, client_io) = duplex(4096);
+            let (calls_tx, calls) = mpsc::unbounded_channel();
+            let service = service_fn(move |_request: Request<Incoming>| {
+                let calls_tx = calls_tx.clone();
+                async move {
+                    let (complete, wait) = oneshot::channel();
+                    calls_tx.send(complete).unwrap();
+                    let _ = wait.await;
+                    Ok::<_, Infallible>(Response::new(Full::new(Bytes::from_static(b"ok"))))
+                }
+            });
+            let mut builder = ConnectionBuilder::new(TokioExecutor::new()).http2_only();
+            builder.http2().timer(TokioTimer::new());
+            let (shutdown, watcher) = watch::channel(());
+            serve_connection(
+                TokioIo::new(server_io),
+                service,
+                builder,
+                Some(watcher),
+                age,
+                grace,
+            );
+            // Use a single HTTP/2 connection rather than a Channel that could
+            // reconnect transparently and hide the absence of GOAWAY.
+            let (client, connection) = h2::client::handshake(client_io).await.unwrap();
+            let driver = tokio::spawn(connection);
+            Self {
+                client,
+                calls,
+                shutdown,
+                driver,
+            }
+        }
+
+        async fn start_call(&mut self) -> (ResponseFuture, oneshot::Sender<()>) {
+            let mut client = self.client.clone().ready().await.unwrap();
+            let request = Request::builder()
+                .uri("http://localhost/test")
+                .body(())
+                .unwrap();
+            let (response, _) = client.send_request(request, true).unwrap();
+            let complete = timeout(TEST_TIMEOUT, self.calls.recv())
+                .await
+                .expect("request did not reach the server")
+                .unwrap();
+            (response, complete)
+        }
+
+        async fn assert_goaway(&self) {
+            let error = self
+                .client
+                .clone()
+                .ready()
+                .await
+                .expect_err("aged connection still accepts new streams");
+            assert!(error.is_go_away(), "expected GOAWAY, got {error:?}");
+            assert_eq!(error.reason(), Some(h2::Reason::NO_ERROR));
+        }
+
+        async fn close(self) {
+            drop(self.client);
+            let _ = self.shutdown.send(());
+            timeout(TEST_TIMEOUT, self.shutdown.closed())
+                .await
+                .expect("connection task did not exit");
+            self.driver.abort();
+            let _ = self.driver.await;
+        }
+    }
+
+    async fn assert_call_pending(response: &mut ResponseFuture) {
+        let pending =
+            future::poll_fn(|cx| Poll::Ready(Pin::new(&mut *response).poll(cx).is_pending())).await;
+        assert!(pending, "in-flight call ended before it could finish");
+    }
+
+    async fn finish_call(response: ResponseFuture, complete: oneshot::Sender<()>) {
+        complete.send(()).expect("in-flight handler was dropped");
+        let response = timeout(TEST_TIMEOUT, response)
+            .await
+            .expect("in-flight response timed out")
+            .expect("in-flight call failed during graceful drain");
+        let body = timeout(TEST_TIMEOUT, response.into_body().data())
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        assert_eq!(body, "ok");
+    }
 
     #[tokio::test(start_paused = true)]
-    async fn test_connection_timeout_no_max_age() {
-        let future = connection_timeout_future(None, None);
+    async fn connection_age_sends_goaway_and_allows_in_flight_calls_to_finish() {
+        let mut connection =
+            TestConnection::new(Some(CONNECTION_AGE), Some(CONNECTION_GRACE)).await;
+        let (mut response, complete) = connection.start_call().await;
 
-        tokio::select! {
-            _ = future => {
-                panic!("timeout future should never complete when max_connection_age is None");
-            }
-            _ = tokio::time::sleep(Duration::from_secs(1000)) => {
-            }
+        sleep(CONNECTION_AGE + TEST_TIMEOUT).await;
+        connection.assert_goaway().await;
+        assert_call_pending(&mut response).await;
+        finish_call(response, complete).await;
+
+        // Finishing the last call should close the connection before grace expires.
+        timeout(TEST_TIMEOUT, connection.shutdown.closed())
+            .await
+            .expect("drained connection waited for the grace deadline");
+        connection.close().await;
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn connection_age_force_closes_only_after_grace_expires() {
+        let mut connection =
+            TestConnection::new(Some(CONNECTION_AGE), Some(CONNECTION_GRACE)).await;
+        let (mut response, complete) = connection.start_call().await;
+
+        sleep(CONNECTION_AGE + CONNECTION_GRACE - TEST_TIMEOUT).await;
+        assert_call_pending(&mut response).await;
+        sleep(TEST_TIMEOUT).await;
+        assert!(
+            timeout(TEST_TIMEOUT, response)
+                .await
+                .expect("connection remained open after the grace deadline")
+                .is_err(),
+            "unfinished call should be terminated after grace expires",
+        );
+        drop(complete);
+        connection.close().await;
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn connection_age_without_grace_preserves_in_flight_calls() {
+        let mut connection = TestConnection::new(Some(CONNECTION_AGE), None).await;
+        let (mut response, complete) = connection.start_call().await;
+
+        sleep(CONNECTION_AGE + CONNECTION_GRACE + TEST_TIMEOUT).await;
+        connection.assert_goaway().await;
+        assert_call_pending(&mut response).await;
+        finish_call(response, complete).await;
+        connection.close().await;
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn connection_age_grace_without_age_does_not_close_connections() {
+        for grace in [None, Some(CONNECTION_GRACE), Some(Duration::ZERO)] {
+            let mut connection = TestConnection::new(None, grace).await;
+            let (mut response, complete) = connection.start_call().await;
+
+            sleep(CONNECTION_AGE + CONNECTION_GRACE + TEST_TIMEOUT).await;
+            assert_call_pending(&mut response).await;
+            let (next_response, next_complete) = connection.start_call().await;
+            finish_call(next_response, next_complete).await;
+            finish_call(response, complete).await;
+            connection.close().await;
         }
     }
 
     #[tokio::test(start_paused = true)]
-    async fn test_connection_timeout_with_max_connection_age() {
-        let future = connection_timeout_future(Some(Duration::from_secs(10)), None);
+    async fn connection_age_with_zero_grace_terminates_in_flight_calls() {
+        let mut connection = TestConnection::new(Some(CONNECTION_AGE), Some(Duration::ZERO)).await;
+        let (response, complete) = connection.start_call().await;
 
-        let action = future.await;
-        assert!(matches!(action, TimeoutAction::GracefulShutdown));
-    }
-
-    #[tokio::test(start_paused = true)]
-    async fn test_connection_timeout_with_max_connection_age_grace() {
-        let mut future = pin!(connection_timeout_future(
-            Some(Duration::from_secs(10)),
-            Some(Duration::from_secs(5)),
-        ));
-
-        tokio::select! {
-            _ = &mut future => {
-                panic!("should not complete before max_connection_age");
-            }
-            _ = tokio::time::sleep(Duration::from_secs(9)) => {}
-        }
-
-        tokio::select! {
-            _ = &mut future => {
-                panic!("should not complete before max_connection_age_grace");
-            }
-            _ = tokio::time::sleep(Duration::from_secs(4)) => {}
-        }
-
-        let action = future.await;
-        assert!(matches!(action, TimeoutAction::ForcefulShutdown));
-    }
-
-    #[tokio::test(start_paused = true)]
-    async fn test_connection_timeout_polled_after_graceful_shutdown() {
-        // Reproduce #2522: connection_timeout polled after GracefulShutdown
-        let mut future = pin!(Fuse {
-            inner: Some(connection_timeout_future(
-                Some(Duration::from_secs(10)),
-                None,
-            ))
-        });
-
-        // First poll: should return GracefulShutdown after 10s
-        let action = tokio::select! {
-            action = &mut future => action,
-            _ = tokio::time::sleep(Duration::from_secs(11)) => {
-                panic!("timeout future should complete after max_connection_age");
-            }
-        };
-        assert!(matches!(action, TimeoutAction::GracefulShutdown));
-
-        // Second poll: Fuse should return Pending, not panic
-        tokio::select! {
-            _ = &mut future => {
-                panic!("fused future should not complete again");
-            }
-            _ = tokio::time::sleep(Duration::from_secs(1)) => {
-                // OK: future is fused, returns Pending
-            }
-        }
+        sleep(CONNECTION_AGE + TEST_TIMEOUT).await;
+        assert!(
+            timeout(TEST_TIMEOUT, response).await.unwrap().is_err(),
+            "zero grace should terminate unfinished calls at the age limit",
+        );
+        drop(complete);
+        connection.close().await;
     }
 
     #[test]
