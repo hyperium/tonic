@@ -164,12 +164,7 @@ impl LbPolicy for RoundRobinPolicy {
 
         // Shard the update by endpoint.
         let updates = update.endpoints.as_ref().unwrap().iter().map(|e| {
-            let update = ResolverUpdate {
-                attributes: crate::attributes::Attributes::default(),
-                endpoints: Ok(vec![e.clone()]),
-                service_config: update.service_config.clone(),
-                resolution_note: None,
-            };
+            let update = update.with_endpoints(Ok(vec![e.clone()]));
             ChildUpdate {
                 child_identifier: e.clone(),
                 child_policy_builder: PickFirstBuilder {},
