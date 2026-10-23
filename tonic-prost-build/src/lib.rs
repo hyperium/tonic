@@ -929,6 +929,10 @@ impl Builder {
             config.include_file(path);
         }
 
+        if self.with_extended_rust_types {
+            NON_PATH_TYPE_ALLOWLIST.set(EXTENDED_NON_PATH_TYPE_ALLOWLIST);
+        }
+
         // Note: We don't pass self.disable_comments to prost Config here
         // because those are meant for service/method paths which are handled
         // by the ServiceGenerator, not for message paths
