@@ -275,6 +275,14 @@ impl<P> TestEnv<P> {
         }
     }
 
+    /// Calls [`Self::expect_new_subchannel`], verifies that the created
+    /// subchannel's address equals `addr`, and returns the subchannel.
+    pub(crate) fn expect_new_subchannel_for(&mut self, addr: &str) -> Arc<dyn Subchannel> {
+        let sc = self.expect_new_subchannel();
+        assert_eq!(&*sc.address().address, addr);
+        sc
+    }
+
     /// Verifies that the policy asked a subchannel to connect, and returns that
     /// subchannel's address.
     pub(crate) fn expect_connect(&mut self) -> Address {

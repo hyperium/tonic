@@ -496,8 +496,7 @@ mod test {
         env.policy
             .resolver_update(update.clone(), &parsed_config2, &mut env.tcc)
             .unwrap();
-        let subchannel = env.expect_new_subchannel();
-        assert_eq!(&*subchannel.address().address, "127.0.0.1:1234");
+        env.expect_new_subchannel_for("127.0.0.1:1234");
         env.expect_no_events();
     }
 
