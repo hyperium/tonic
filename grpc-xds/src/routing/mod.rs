@@ -24,6 +24,7 @@
 
 //! Pure xDS routing utilities.
 
+mod route;
 mod virtual_host;
 
 // TODO: remove once the dependency manager consumes virtual-host selection.

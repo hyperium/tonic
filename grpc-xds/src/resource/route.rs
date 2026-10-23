@@ -26,9 +26,8 @@
 //!
 //! Models the validated data shapes only (gRFC A28).
 
-// TODO: implement request routing components (
-// path/header/fraction matching, stripping `-bin` headers from request metadata before
-// evaluating header matchers) in the future resolver/interceptor layer that consumes `XdsConfig`.
+// Matching requests against these routes (path, header and fraction matching,
+// with `-bin` headers treated as absent) is implemented in `routing/route.rs`.
 
 use std::collections::HashSet;
 
@@ -136,6 +135,9 @@ pub(crate) enum PathSpecifier {
 /// Header matching criteria.
 #[derive(Debug, Clone)]
 pub(crate) struct HeaderMatcher {
+    /// The header name, lowercased. Metadata keys are always lowercase, so
+    /// lowercasing once here lets header names match case-insensitively
+    /// without lowercasing on every RPC.
     pub(crate) name: String,
     pub(crate) match_specifier: HeaderMatchSpecifier,
     pub(crate) invert_match: bool,
@@ -356,7 +358,7 @@ fn validate_route_match(rm: RouteMatchView<'_>) -> xds_client::Result<RouteMatch
 }
 
 fn validate_header_matcher(hm: HeaderMatcherView<'_>) -> xds_client::Result<HeaderMatcher> {
-    let name = hm.name().to_str().unwrap_or_default().to_string();
+    let name = hm.name().to_str().unwrap_or_default().to_ascii_lowercase();
     if name.is_empty() {
         return Err(Error::Validation("header matcher name is empty".into()));
     }
@@ -975,6 +977,27 @@ mod tests {
             assert!(
                 message.starts_with(&format!("{field} should be valid UTF-8:")),
                 "{kind}: {message}"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_header_matcher_lowercases_name() {
+        for (name, expected) in [
+            ("X-Foo", "x-foo"),
+            ("Content-Type", "content-type"),
+            ("X-Trace-BIN", "x-trace-bin"),
+            ("x-already-lower", "x-already-lower"),
+        ] {
+            let mut header = EnvoyHeaderMatcher::new();
+            header.set_name(name);
+            header.set_present_match(true);
+
+            let validated = RouteConfigResource::validate(route_config_with_header(header))
+                .expect("should validate");
+            assert_eq!(
+                validated.virtual_hosts[0].routes[0].route_match.headers[0].name,
+                expected
             );
         }
     }
