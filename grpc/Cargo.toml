@@ -18,6 +18,7 @@ edition = "2024"
 elidable_lifetime_names = "deny"
 semicolon_if_nothing_returned = "deny"
 unnecessary_semicolon = "deny"
+disallowed_methods = "deny"
 
 [package.metadata.cargo_check_external_types]
 allowed_external_types = [
@@ -48,6 +49,7 @@ __unstable = []
 gzip = ["dep:flate2"]
 
 [dependencies]
+arc-swap = "1"
 base64 = "0.22"
 bytes = "1.10.1"
 flate2 = { version = "1.0", optional = true, default-features = false, features = [

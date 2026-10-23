@@ -752,7 +752,8 @@ mod tests {
         let _ = shutdown_tx.send(());
 
         // Server should exit promptly.
-        tokio::time::timeout(std::time::Duration::from_secs(2), server_handle)
+        GrpcRuntime::default()
+            .timeout(std::time::Duration::from_secs(2), server_handle)
             .await
             .expect("server did not shut down within 2s")
             .unwrap();
@@ -772,7 +773,8 @@ mod tests {
         // Closing the listener makes accept() return None.
         listener.close().await;
 
-        tokio::time::timeout(std::time::Duration::from_secs(2), server_handle)
+        GrpcRuntime::default()
+            .timeout(std::time::Duration::from_secs(2), server_handle)
             .await
             .expect("server did not exit after listener close")
             .unwrap();
@@ -793,7 +795,8 @@ mod tests {
 
         // The watched task should exit promptly because `rx.changed()` returns `Err` -> `break`.
         // If the old busy-loop bug existed, this `await` would time out / hang forever.
-        tokio::time::timeout(std::time::Duration::from_secs(1), handle)
+        GrpcRuntime::default()
+            .timeout(std::time::Duration::from_secs(1), handle)
             .await
             .expect("watched connection did not exit when coordinator was dropped")
             .unwrap();
@@ -820,7 +823,9 @@ mod tests {
             });
             let _ = serve_started_tx.send(());
             // Wrap in a short timeout so the future drops mid-flight while connections are active.
-            let _ = tokio::time::timeout(std::time::Duration::from_millis(50), serve_fut).await;
+            let _ = GrpcRuntime::default()
+                .timeout(std::time::Duration::from_millis(50), serve_fut)
+                .await;
         });
 
         serve_started_rx.await.unwrap();
@@ -850,7 +855,7 @@ mod tests {
         drop(coordinator);
 
         // The watched task MUST self-terminate (`rx.changed()` returns `Err` -> `break`) despite being mid-drain.
-        tokio::time::timeout(std::time::Duration::from_secs(1), handle)
+        GrpcRuntime::default().timeout(std::time::Duration::from_secs(1), handle)
             .await
             .expect("infinite watched connection did not exit when coordinator was dropped after graceful shutdown")
             .unwrap();
@@ -998,7 +1003,8 @@ mod tests {
         let _ = shutdown_tx.send(());
 
         // Server should exit promptly and drop the listener.
-        tokio::time::timeout(std::time::Duration::from_secs(2), server_handle)
+        GrpcRuntime::default()
+            .timeout(std::time::Duration::from_secs(2), server_handle)
             .await
             .expect("server did not shut down within 2s")
             .unwrap();
@@ -1096,7 +1102,9 @@ mod tests {
             if handler_started.load(Ordering::SeqCst) {
                 break;
             }
-            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            GrpcRuntime::default()
+                .sleep(std::time::Duration::from_millis(10))
+                .await;
         }
         assert!(handler_started.load(Ordering::SeqCst));
 
@@ -1111,7 +1119,9 @@ mod tests {
             if dropped.load(Ordering::SeqCst) {
                 break;
             }
-            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            GrpcRuntime::default()
+                .sleep(std::time::Duration::from_millis(10))
+                .await;
         }
 
         // 1. The listener must be dropped immediately, even though the RPC connection is still draining.
@@ -1135,7 +1145,8 @@ mod tests {
         // Unblock the handler so the RPC finishes and graceful shutdown completes.
         let _ = unblock_tx.send(());
 
-        tokio::time::timeout(std::time::Duration::from_secs(2), server_handle)
+        GrpcRuntime::default()
+            .timeout(std::time::Duration::from_secs(2), server_handle)
             .await
             .expect("server did not shut down after connection drained")
             .unwrap();

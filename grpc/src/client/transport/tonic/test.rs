@@ -37,8 +37,6 @@ use http::HeaderValue;
 use tokio::net::TcpListener;
 use tokio::sync::Notify;
 use tokio::sync::oneshot;
-use tokio::time;
-use tokio::time::timeout;
 use tokio_stream::Stream;
 use tokio_stream::StreamExt;
 use tokio_stream::wrappers::ReceiverStream;
@@ -230,7 +228,8 @@ pub(crate) async fn tonic_transport_rpc() {
         Err(oneshot::error::TryRecvError::Empty),
     );
     shutdown_notify.notify_waiters();
-    let res = timeout(DEFAULT_TEST_DURATION, disconnection_listener)
+    let res = GrpcRuntime::default()
+        .timeout(DEFAULT_TEST_DURATION, disconnection_listener)
         .await
         .unwrap()
         .unwrap();
@@ -740,11 +739,12 @@ async fn tonic_transport_invalid_base64_headers() {
     };
     let req = WrappedEchoRequest(request);
 
-    time::timeout(DEFAULT_TEST_DURATION, async {
-        while tx.send(&req, SendOptions::default()).await.is_ok() {}
-    })
-    .await
-    .expect("timed out waiting for stream to close");
+    GrpcRuntime::default()
+        .timeout(DEFAULT_TEST_DURATION, async {
+            while tx.send(&req, SendOptions::default()).await.is_ok() {}
+        })
+        .await
+        .expect("timed out waiting for stream to close");
 
     shutdown_notify.notify_one();
     server_handle.await.unwrap();
@@ -812,11 +812,12 @@ async fn tonic_transport_recv_drop_cancels_send() {
     };
     let req = WrappedEchoRequest(request);
 
-    time::timeout(DEFAULT_TEST_DURATION, async {
-        while tx.send(&req, SendOptions::default()).await.is_ok() {}
-    })
-    .await
-    .expect("timed out waiting for stream to close");
+    GrpcRuntime::default()
+        .timeout(DEFAULT_TEST_DURATION, async {
+            while tx.send(&req, SendOptions::default()).await.is_ok() {}
+        })
+        .await
+        .expect("timed out waiting for stream to close");
 
     shutdown_notify.notify_one();
     server_handle.await.unwrap();
@@ -904,7 +905,7 @@ async fn connect_timeout_exceeded() {
     let rpc_handle = tokio::spawn(async move { perform_unary_echo_failure(&channel).await });
 
     // Advance time to trigger the timeout in subchannel connect.
-    time::sleep(Duration::from_secs(21)).await;
+    GrpcRuntime::default().sleep(Duration::from_secs(21)).await;
 
     // The RPC should have failed with a timeout.
     let trailers = rpc_handle.await.unwrap();
@@ -1138,7 +1139,8 @@ async fn tonic_transport_recv_drop_sends_rst_stream() {
     drop(rx);
 
     // Wait for the server to verify the reset.
-    tokio::time::timeout(Duration::from_secs(5), server_handle)
+    GrpcRuntime::default()
+        .timeout(Duration::from_secs(5), server_handle)
         .await
         .expect("Test timed out waiting for server to verify reset")
         .unwrap();

@@ -84,9 +84,13 @@ impl Timer for HyperCompatTimer {
     }
 
     fn sleep_until(&self, deadline: Instant) -> Pin<Box<dyn hyper::rt::Sleep>> {
-        let now = Instant::now();
+        let now = self.inner.now();
         let duration = deadline.saturating_duration_since(now);
         self.sleep(duration)
+    }
+
+    fn now(&self) -> Instant {
+        self.inner.now()
     }
 }
 

@@ -33,12 +33,12 @@ use std::sync::Weak;
 use std::time::Duration;
 use std::time::Instant;
 
-use crate::async_trait;
 use tokio::sync::Notify;
 use tokio::sync::oneshot;
 
 use crate::StatusCodeError;
 use crate::StatusError;
+use crate::async_trait;
 use crate::client::CallOptions;
 use crate::client::ConnectivityState;
 use crate::client::DynInvoke;
@@ -73,10 +73,12 @@ pub trait Backoff: Send + Sync {
 }
 
 // TODO(easwars): Move this somewhere else, where appropriate.
-pub(crate) struct NopBackoff {}
+pub(crate) struct NopBackoff {
+    pub(crate) runtime: GrpcRuntime,
+}
 impl Backoff for NopBackoff {
     fn backoff_until(&self) -> Instant {
-        Instant::now()
+        self.runtime.now()
     }
     fn reset(&self) {}
     fn min_connect_timeout(&self) -> Duration {
@@ -431,9 +433,10 @@ async fn move_to_transient_failure(data: Arc<Mutex<InternalSubchannelData>>, err
         let mut data = data.lock().unwrap();
         on_drop = data.on_drop.clone();
         let backoff_interval = data.backoff.backoff_until();
+        let now = data.runtime.now();
         backoff_fut = data
             .runtime
-            .sleep(backoff_interval.saturating_duration_since(Instant::now()));
+            .sleep(backoff_interval.saturating_duration_since(now));
         data.update_state(InternalSubchannelState::TransientFailure(err.clone()));
     }
     tokio::select! {
