@@ -1,5 +1,5 @@
 [package]
-name = "grpc-google"
+name = "grpc-google-cloud-auth"
 version = "0.10.0"
 edition = "2024"
 authors = ["gRPC authors"]
