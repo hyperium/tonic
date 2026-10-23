@@ -18,6 +18,7 @@ edition = "2024"
 elidable_lifetime_names = "deny"
 semicolon_if_nothing_returned = "deny"
 unnecessary_semicolon = "deny"
+disallowed_methods = "deny"
 
 [package.metadata.cargo_check_external_types]
 allowed_external_types = [

@@ -1,0 +1,10 @@
+disallowed-methods = [
+  { path = "std::time::Instant::now",     reason = "use GrpcRuntime::now() so fake clocks work" },
+  { path = "std::time::Instant::elapsed", reason = "use GrpcRuntime::now() - start" },
+  { path = "std::time::SystemTime::now",  reason = "use GrpcRuntime::now()" },
+  { path = "tokio::time::Instant::now",   reason = "use GrpcRuntime::now()" },
+  { path = "tokio::time::sleep",          reason = "use GrpcRuntime::sleep()" },
+  { path = "tokio::time::sleep_until",    reason = "use GrpcRuntime::sleep()" },
+  { path = "tokio::time::timeout",        reason = "use GrpcRuntime::timeout()" },
+  { path = "tokio::time::interval",       reason = "use GrpcRuntime::sleep()" },
+]

@@ -31,7 +31,6 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
-use std::time::SystemTime;
 
 use parking_lot::Mutex;
 use tokio::sync::Notify;
@@ -169,7 +168,8 @@ impl DnsResolver {
                 channel_updated_rx.notified().await;
                 let channel_response = { state.lock().channel_response.take() };
                 let next_resoltion_time = if channel_response.is_some() {
-                    SystemTime::now()
+                    runtime
+                        .now()
                         .checked_add(backoff.backoff_duration())
                         .unwrap()
                 } else {
@@ -177,16 +177,18 @@ impl DnsResolver {
                     // also wait MIN_RESOLUTION_INTERVAL at the very least to prevent
                     // constantly re-resolving.
                     backoff.reset();
-                    let res_time = SystemTime::now()
+                    let res_time = runtime
+                        .now()
                         .checked_add(dns_opts.min_resolution_interval)
                         .unwrap();
                     _ = resolve_now_rx.notified().await;
                     res_time
                 };
                 // Wait till next resolution time.
-                let Ok(duration) = next_resoltion_time.duration_since(SystemTime::now()) else {
+                let duration = next_resoltion_time.saturating_duration_since(runtime.now());
+                if duration.is_zero() {
                     continue; // Time has already passed.
-                };
+                }
                 runtime.sleep(duration).await;
             }
         }));
