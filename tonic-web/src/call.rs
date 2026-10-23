@@ -337,7 +337,12 @@ where
                     }
                     FindTrailers::IncompleteBuf => continue,
                     FindTrailers::Done(len) => Poll::Ready(match len {
-                        0 => None,
+                        0 => me
+                            .as_mut()
+                            .project()
+                            .trailers
+                            .take()
+                            .map(|trailers| Ok(Frame::trailers(trailers))),
                         _ => Some(Ok(Frame::data(buf.split_to(len).freeze()))),
                     }),
                 };
@@ -728,6 +733,68 @@ mod tests {
         assert_eq!(
             map.get("grpc-message").unwrap(),
             "error: something: went wrong"
+        );
+    }
+
+    /// Regression test: a data frame and the trailer frame both arriving in a
+    /// single underlying `poll_frame` (e.g. because the whole response was
+    /// buffered before decoding, or the transport happened to deliver it in
+    /// one read) used to silently drop the trailer. `poll_frame`'s
+    /// client+Decode branch correctly parses and stashes it into
+    /// `self.trailers`, but the immediately following `poll_frame` call
+    /// (required by the `Body` contract before treating the stream as ended)
+    /// found the accumulation buffer empty, took the `FindTrailers::Done(0)`
+    /// arm, and returned `None` unconditionally without ever checking
+    /// `self.trailers` — losing an already-successfully-decoded trailer and
+    /// surfacing as "stream was terminated without a final status" to a
+    /// tonic client. Reproduced against a real captured 27-byte production
+    /// response (one 7-byte data frame + one 20-byte trailer frame) before
+    /// this fix; this test is the minimal, offline, network-free repro.
+    #[tokio::test]
+    async fn trailer_not_dropped_when_buffered_with_data() {
+        struct OneShot(Option<Bytes>);
+
+        impl super::Body for OneShot {
+            type Data = Bytes;
+            type Error = std::convert::Infallible;
+
+            fn poll_frame(
+                self: Pin<&mut Self>,
+                _cx: &mut std::task::Context<'_>,
+            ) -> Poll<Option<Result<Frame<Bytes>, Self::Error>>> {
+                Poll::Ready(self.get_mut().0.take().map(|b| Ok(Frame::data(b))))
+            }
+        }
+
+        // One data frame (flag 0, len 2, payload `08 01`) immediately
+        // followed by one trailer frame (flag 0x80, len 15, "grpc-status:0\r\n")
+        // — delivered as ONE chunk, the exact condition that triggered the bug.
+        let buf = Bytes::from_static(&[
+            0, 0, 0, 0, 2, 8, 1, 128, 0, 0, 0, 15, 103, 114, 112, 99, 45, 115, 116, 97, 116, 117,
+            115, 58, 48, 13, 10,
+        ]);
+
+        let mut call = std::pin::pin!(GrpcWebCall::client_response(OneShot(Some(buf))));
+
+        let (mut saw_data, mut saw_trailers) = (false, false);
+        loop {
+            match std::future::poll_fn(|cx| call.as_mut().poll_frame(cx)).await {
+                Some(Ok(f)) if f.is_data() => saw_data = true,
+                Some(Ok(f)) if f.is_trailers() => {
+                    let trailers = f.into_trailers().unwrap();
+                    assert_eq!(trailers.get(Status::GRPC_STATUS).unwrap(), "0");
+                    saw_trailers = true;
+                }
+                Some(Ok(_)) => unreachable!("unexpected frame type"),
+                Some(Err(e)) => panic!("unexpected error: {e}"),
+                None => break,
+            }
+        }
+
+        assert!(saw_data, "expected a data frame");
+        assert!(
+            saw_trailers,
+            "trailer must not be silently dropped when it arrives in the same poll as data"
         );
     }
 }
