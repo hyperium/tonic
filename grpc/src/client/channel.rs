@@ -707,7 +707,8 @@ mod tests {
     async fn assert_next<'a, T: 'a>(
         next: impl Future<Output = Snapshot<'a, T>>,
     ) -> Snapshot<'a, T> {
-        tokio::time::timeout(Duration::from_secs(5), next)
+        GrpcRuntime::default()
+            .timeout(Duration::from_secs(5), next)
             .await
             .expect("next() did not resolve")
     }
@@ -715,7 +716,8 @@ mod tests {
     // Fails the test if next() resolves without a further update.
     async fn assert_no_next<'a, T: 'a>(next: impl Future<Output = Snapshot<'a, T>>) {
         assert!(
-            tokio::time::timeout(Duration::from_millis(10), next)
+            GrpcRuntime::default()
+                .timeout(Duration::from_millis(10), next)
                 .await
                 .is_err(),
             "next() resolved without an update"
