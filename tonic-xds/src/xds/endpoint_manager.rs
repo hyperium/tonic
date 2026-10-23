@@ -198,6 +198,7 @@ mod tests {
                     .iter()
                     .map(|(host, port)| ResolvedEndpoint {
                         address: EndpointAddress::new(*host, *port),
+                        additional_addresses: vec![],
                         health_status: HealthStatus::Healthy,
                         load_balancing_weight: 1,
                     })
@@ -292,6 +293,7 @@ mod tests {
                 locality: None,
                 endpoints: vec![ResolvedEndpoint {
                     address: EndpointAddress::new("10.0.0.1", 8080),
+                    additional_addresses: vec![],
                     health_status: HealthStatus::Unhealthy,
                     load_balancing_weight: 1,
                 }],

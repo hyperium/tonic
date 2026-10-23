@@ -26,7 +26,7 @@
 
 use bytes::Bytes;
 use envoy_types::pb::envoy::config::core::v3::{
-    HealthStatus as EnvoyHealthStatus, address, socket_address,
+    Address, HealthStatus as EnvoyHealthStatus, address, socket_address,
 };
 use envoy_types::pb::envoy::config::endpoint::v3::{
     ClusterLoadAssignment, LbEndpoint, lb_endpoint,
@@ -65,6 +65,9 @@ pub(crate) struct Locality {
 #[derive(Debug)]
 pub(crate) struct ResolvedEndpoint {
     pub address: EndpointAddress,
+    /// Further addresses of the same backend from `Endpoint.additional_addresses`
+    /// (gRFC A61), in control-plane order.
+    pub additional_addresses: Vec<EndpointAddress>,
     pub health_status: HealthStatus,
     pub load_balancing_weight: u32,
 }
@@ -162,36 +165,43 @@ fn validate_lb_endpoint(lb_ep: LbEndpoint) -> xds_client::Result<Option<Resolved
         _ => return Ok(None),
     };
 
-    let addr = host_identifier
-        .address
-        .ok_or_else(|| Error::Validation("endpoint missing address".into()))?;
+    let address = parse_address(host_identifier.address)
+        .map_err(|reason| Error::Validation(format!("endpoint address: {reason}")))?;
 
-    let addr = match addr.address {
-        Some(address::Address::SocketAddress(sa)) => {
-            let port = match sa.port_specifier {
-                Some(socket_address::PortSpecifier::PortValue(p)) => p as u16,
-                _ => {
-                    return Err(Error::Validation(
-                        "endpoint address missing numeric port".into(),
-                    ));
-                }
-            };
-            EndpointAddress::new(sa.address, port)
-        }
-        _ => {
-            return Err(Error::Validation(
-                "only socket addresses are supported for gRPC endpoints".into(),
-            ));
-        }
-    };
+    // gRFC A61: each entry is validated exactly like `Endpoint.address`.
+    let additional_addresses = host_identifier
+        .additional_addresses
+        .into_iter()
+        .enumerate()
+        .map(|(i, additional)| {
+            parse_address(additional.address).map_err(|reason| {
+                Error::Validation(format!("endpoint additional_addresses[{i}]: {reason}"))
+            })
+        })
+        .collect::<xds_client::Result<Vec<_>>>()?;
 
     let weight = lb_ep.load_balancing_weight.map(|w| w.value).unwrap_or(1);
 
     Ok(Some(ResolvedEndpoint {
-        address: addr,
+        address,
+        additional_addresses,
         health_status,
         load_balancing_weight: weight,
     }))
+}
+
+/// Validates an endpoint `Address`, returning the rejection reason on failure.
+fn parse_address(address: Option<Address>) -> Result<EndpointAddress, &'static str> {
+    let address = address.ok_or("address is unset")?;
+    match address.address {
+        Some(address::Address::SocketAddress(sa)) => match sa.port_specifier {
+            Some(socket_address::PortSpecifier::PortValue(port)) => {
+                Ok(EndpointAddress::new(sa.address, port as u16))
+            }
+            _ => Err("missing numeric port"),
+        },
+        _ => Err("only socket addresses are supported for gRPC endpoints"),
+    }
 }
 
 impl EndpointsResource {
@@ -211,26 +221,52 @@ impl EndpointsResource {
 
 #[cfg(test)]
 mod tests {
-    use envoy_types::pb::envoy::config::core::v3::{Address, SocketAddress};
+    use envoy_types::pb::envoy::config::core::v3::{Pipe, SocketAddress};
+    use envoy_types::pb::envoy::config::endpoint::v3::endpoint::AdditionalAddress;
     use envoy_types::pb::envoy::config::endpoint::v3::{Endpoint, LocalityLbEndpoints};
     use envoy_types::pb::google::protobuf::UInt32Value;
 
     use super::*;
 
+    fn make_socket_address(ip: &str, port: u32) -> Address {
+        Address {
+            address: Some(address::Address::SocketAddress(SocketAddress {
+                address: ip.to_string(),
+                port_specifier: Some(socket_address::PortSpecifier::PortValue(port)),
+                ..Default::default()
+            })),
+        }
+    }
+
     fn make_lb_endpoint(ip: &str, port: u32, health: i32) -> LbEndpoint {
         LbEndpoint {
             host_identifier: Some(lb_endpoint::HostIdentifier::Endpoint(Endpoint {
-                address: Some(Address {
-                    address: Some(address::Address::SocketAddress(SocketAddress {
-                        address: ip.to_string(),
-                        port_specifier: Some(socket_address::PortSpecifier::PortValue(port)),
-                        ..Default::default()
-                    })),
-                }),
+                address: Some(make_socket_address(ip, port)),
                 ..Default::default()
             })),
             health_status: health,
             load_balancing_weight: Some(UInt32Value { value: 1 }),
+            ..Default::default()
+        }
+    }
+
+    /// Builds a single-endpoint resource whose endpoint carries the given
+    /// `additional_addresses` entries.
+    fn make_cla_with_additional(additional: Vec<Option<Address>>) -> ClusterLoadAssignment {
+        let mut lb_ep = make_lb_endpoint("10.0.0.1", 8080, EnvoyHealthStatus::Healthy as i32);
+        let Some(lb_endpoint::HostIdentifier::Endpoint(ep)) = &mut lb_ep.host_identifier else {
+            unreachable!("make_lb_endpoint always sets an Endpoint");
+        };
+        ep.additional_addresses = additional
+            .into_iter()
+            .map(|address| AdditionalAddress { address })
+            .collect();
+        ClusterLoadAssignment {
+            cluster_name: "c1".to_string(),
+            endpoints: vec![LocalityLbEndpoints {
+                lb_endpoints: vec![lb_ep],
+                ..Default::default()
+            }],
             ..Default::default()
         }
     }
@@ -294,6 +330,65 @@ mod tests {
         let validated = EndpointsResource::validate(cla).unwrap();
         for ep in &validated.localities[0].endpoints {
             assert_eq!(ep.load_balancing_weight, 1);
+        }
+    }
+
+    #[test]
+    fn test_no_additional_addresses() {
+        let validated = EndpointsResource::validate(make_cla("c1")).unwrap();
+        for ep in &validated.localities[0].endpoints {
+            assert!(ep.additional_addresses.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_additional_addresses_parsed_in_order() {
+        let cla = make_cla_with_additional(vec![
+            Some(make_socket_address("2001:db8::1", 8080)),
+            Some(make_socket_address("10.0.1.1", 9090)),
+        ]);
+        let validated = EndpointsResource::validate(cla).unwrap();
+        let ep = &validated.localities[0].endpoints[0];
+        assert_eq!(ep.address, EndpointAddress::new("10.0.0.1", 8080));
+        assert_eq!(
+            ep.additional_addresses,
+            vec![
+                EndpointAddress::new("2001:db8::1", 8080),
+                EndpointAddress::new("10.0.1.1", 9090),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_invalid_additional_address_rejected() {
+        let named_port = Address {
+            address: Some(address::Address::SocketAddress(SocketAddress {
+                address: "10.0.1.1".to_string(),
+                port_specifier: Some(socket_address::PortSpecifier::NamedPort("grpc".into())),
+                ..Default::default()
+            })),
+        };
+        let pipe = Address {
+            address: Some(address::Address::Pipe(Pipe {
+                path: "/tmp/grpc.sock".to_string(),
+                ..Default::default()
+            })),
+        };
+        let cases = [
+            (None, "address is unset"),
+            (Some(Address::default()), "only socket addresses"),
+            (Some(pipe), "only socket addresses"),
+            (Some(named_port), "missing numeric port"),
+        ];
+        for (invalid, reason) in cases {
+            // Put the invalid entry second so the error must name its index.
+            let cla = make_cla_with_additional(vec![
+                Some(make_socket_address("10.0.1.2", 8080)),
+                invalid,
+            ]);
+            let err = EndpointsResource::validate(cla).unwrap_err().to_string();
+            assert!(err.contains("additional_addresses[1]"), "{err}");
+            assert!(err.contains(reason), "{err}");
         }
     }
 }

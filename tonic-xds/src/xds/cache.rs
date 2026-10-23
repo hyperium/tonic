@@ -233,6 +233,7 @@ mod tests {
                 locality: None,
                 endpoints: vec![ResolvedEndpoint {
                     address: EndpointAddress::new("10.0.0.1", 8080),
+                    additional_addresses: vec![],
                     health_status: HealthStatus::Healthy,
                     load_balancing_weight: 1,
                 }],

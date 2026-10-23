@@ -221,6 +221,7 @@
 //! | ADS TLS and mTLS credentials | [A65] | Supported |
 //! | TLS endpoint connections | [A29] | Supported |
 //! | Least-request load balancing | [A48] | Planned |
+//! | Dual-stack endpoints (multiple addresses per endpoint) | [A61] | Planned |
 //!
 //! ## Load-balancer backend
 //!
@@ -252,6 +253,7 @@
 //! [A28]: https://github.com/grpc/proposal/blob/master/A28-xds-traffic-splitting-and-routing.md
 //! [A29]: https://github.com/grpc/proposal/blob/master/A29-xds-tls-security.md
 //! [A48]: https://github.com/grpc/proposal/blob/master/A48-xds-least-request-lb-policy.md
+//! [A61]: https://github.com/grpc/proposal/blob/master/A61-IPv4-IPv6-dualstack-backends.md
 //! [A63]: https://github.com/grpc/proposal/blob/master/A63-xds-string-matcher-ignore-case.md
 //! [A65]: https://github.com/grpc/proposal/blob/master/A65-xds-mtls-creds-in-bootstrap.md
 
