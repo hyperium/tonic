@@ -39,7 +39,10 @@
     clippy::all
 )]
 mod generated {
-    include!(concat!(env!("OUT_DIR"), "/generated/mod.rs"));
+    include!(concat!(
+        env!("OUT_DIR"),
+        "/generated/google/protobuf/generated.rs"
+    ));
 }
 
 /// Validated xDS resource types (LDS/RDS/CDS/EDS), each implementing

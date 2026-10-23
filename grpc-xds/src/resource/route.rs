@@ -39,17 +39,17 @@ use xds_client::resource::TypeUrl;
 
 use super::safe_regex::SafeRegex;
 use super::string_matcher::StringMatcher;
-use crate::generated::envoy::config::route::v3::HeaderMatcherView;
-use crate::generated::envoy::config::route::v3::RouteActionView;
-use crate::generated::envoy::config::route::v3::RouteConfiguration;
-use crate::generated::envoy::config::route::v3::RouteMatchView;
-use crate::generated::envoy::config::route::v3::RouteView;
-use crate::generated::envoy::config::route::v3::VirtualHostView;
-use crate::generated::envoy::config::route::v3::header_matcher::HeaderMatchSpecifierOneof;
-use crate::generated::envoy::config::route::v3::route::ActionOneof;
-use crate::generated::envoy::config::route::v3::route_action::ClusterSpecifierOneof;
-use crate::generated::envoy::config::route::v3::route_match::PathSpecifierOneof;
-use crate::generated::envoy::r#type::v3::fractional_percent::DenominatorType;
+use crate::generated::envoy_config_route_v3_route_components_proto::HeaderMatcherView;
+use crate::generated::envoy_config_route_v3_route_components_proto::RouteActionView;
+use crate::generated::envoy_config_route_v3_route_components_proto::RouteMatchView;
+use crate::generated::envoy_config_route_v3_route_components_proto::RouteView;
+use crate::generated::envoy_config_route_v3_route_components_proto::VirtualHostView;
+use crate::generated::envoy_config_route_v3_route_components_proto::header_matcher::HeaderMatchSpecifierOneof;
+use crate::generated::envoy_config_route_v3_route_components_proto::route::ActionOneof;
+use crate::generated::envoy_config_route_v3_route_components_proto::route_action::ClusterSpecifierOneof;
+use crate::generated::envoy_config_route_v3_route_components_proto::route_match::PathSpecifierOneof;
+use crate::generated::envoy_config_route_v3_route_proto::RouteConfiguration;
+use crate::generated::envoy_type_v3_percent_proto::fractional_percent::DenominatorType;
 
 /// Validated RouteConfiguration.
 #[derive(Debug, Clone)]

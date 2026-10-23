@@ -27,8 +27,8 @@
 use xds_client::Error;
 
 use super::safe_regex::SafeRegex;
-use crate::generated::envoy::r#type::matcher::v3::StringMatcherView;
-use crate::generated::envoy::r#type::matcher::v3::string_matcher::MatchPatternOneof;
+use crate::generated::envoy_type_matcher_v3_string_proto::StringMatcherView;
+use crate::generated::envoy_type_matcher_v3_string_proto::string_matcher::MatchPatternOneof;
 
 /// An owned, validated `envoy.type.matcher.v3.StringMatcher`.
 ///

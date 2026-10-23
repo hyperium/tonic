@@ -36,11 +36,12 @@
 //! (`crate::generated::<pkg>`), so cross-package references resolve there
 //! instead of colliding.
 
-use std::collections::BTreeMap;
 use std::path::Path;
 use std::path::PathBuf;
 
 fn main() {
+    println!("cargo:rerun-if-changed=build.rs");
+
     let manifest = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
     let out_dir = PathBuf::from(std::env::var("OUT_DIR").unwrap());
     let gen_dir = out_dir.join("generated");
@@ -68,6 +69,18 @@ fn main() {
     // Collect every vendored proto as an include-relative import path, e.g.
     // "envoy/config/route/v3/route.proto".
     let mut protos: Vec<String> = Vec::new();
+
+    // Generate `descriptor.proto` (from protoc's bundled include) as an
+    // in-crate package `crate::generated::google::protobuf`. It's imported by
+    // the option-defining protos to DEFINE custom options; generating it
+    // in-crate means their reflection metadata (`__unstable`) can reference it
+    // here instead of a symbol that doesn't exist in the external
+    // well-known-types crate. protoc finds it via the bundled include path.
+    //
+    // We put it first in the protos list, so protoc places generated.rs in a
+    // predictable location.
+    protos.push("google/protobuf/descriptor.proto".to_string());
+
     for dir in &include_dirs {
         let mut found = Vec::new();
         collect_protos(dir, &mut found);
@@ -84,13 +97,6 @@ fn main() {
             protos.push(rel);
         }
     }
-    // Also generate `descriptor.proto` (from protoc's bundled include) as an
-    // in-crate package `crate::generated::google::protobuf`. It's imported by
-    // the option-defining protos to DEFINE custom options; generating it
-    // in-crate means their reflection metadata (`__unstable`) can reference it
-    // here instead of a symbol that doesn't exist in the external
-    // well-known-types crate. protoc finds it via the bundled include path.
-    protos.push("google/protobuf/descriptor.proto".to_string());
 
     // Fresh output tree.
     if gen_dir.exists() {
@@ -98,147 +104,16 @@ fn main() {
     }
     std::fs::create_dir_all(&gen_dir).unwrap();
 
-    // Deps shared by every invocation: the well-known types resolve to the
-    // external `protobuf_well_known_types` crate. (`descriptor.proto` is not
-    // listed here — it's generated in-crate as its own package, so the
-    // per-package loop below maps it to `crate::generated::google::protobuf`
-    // like any other vendored proto.)
-    let base_deps = protobuf_well_known_types::get_dependency("protobuf_well_known_types");
-
-    // Group protos by package directory (each leaf dir is exactly one package)
-    // and run one invocation per package.
-    let mut packages: BTreeMap<&str, Vec<String>> = BTreeMap::new();
-    for file in &protos {
-        packages
-            .entry(package_dir(file))
-            .or_default()
-            .push(file.clone());
-    }
-
-    for files in packages.values() {
-        let mut deps = base_deps.clone();
-        for other in &protos {
-            if !files.contains(other) {
-                deps.push(protobuf_codegen::Dependency {
-                    crate_name: package_module_path(other),
-                    proto_import_paths: Vec::new(),
-                    proto_files: vec![other.clone()],
-                });
-            }
-        }
-        protobuf_codegen::CodeGen::new()
-            .protoc_path(&protoc)
-            .inputs(files.iter())
-            .includes(include_dirs.iter())
-            .output_dir(&gen_dir)
-            .dependency(deps)
-            .generate_and_compile()
-            .unwrap_or_else(|e| {
-                panic!(
-                    "xDS codegen failed for package {}: {e}",
-                    package_dir(&files[0])
-                )
-            });
-    }
-
-    // protobuf_codegen rewrites `crate_mapping.txt` in the output dir each
-    // invocation; drop the leftover. The per-package `generated.rs` entry points
-    // are kept — `write_module_tree` folds each into its package `mod.rs`.
-    let _ = std::fs::remove_file(gen_dir.join("crate_mapping.txt"));
-
-    write_module_tree(&gen_dir);
-}
-
-/// Returns the package directory of an include-relative proto path, e.g.
-/// `envoy/config/route/v3/route.proto` -> `envoy/config/route/v3`.
-fn package_dir(proto_rel: &str) -> &str {
-    proto_rel
-        .rsplit_once('/')
-        .map(|(dir, _)| dir)
-        .unwrap_or(proto_rel)
-}
-
-/// Maps an include-relative proto path to its package's in-crate module path,
-/// e.g. `envoy/config/route/v3/route.proto` ->
-/// `crate::generated::envoy::config::route::v3`. Every file in a package is
-/// co-generated and flat-re-exported at this module, so a message `Foo` from any
-/// file in the package is reachable as `<this path>::Foo`.
-fn package_module_path(proto_rel: &str) -> String {
-    let path: Vec<String> = package_dir(proto_rel).split('/').map(raw_ident).collect();
-    format!("crate::generated::{}", path.join("::"))
-}
-
-/// Wraps a path segment as a raw identifier when it is a Rust keyword.
-fn raw_ident(seg: &str) -> String {
-    const KEYWORDS: &[&str] = &[
-        "as", "break", "const", "continue", "else", "enum", "extern", "false", "fn", "for", "if",
-        "impl", "in", "let", "loop", "match", "mod", "move", "mut", "pub", "ref", "return",
-        "static", "struct", "trait", "true", "type", "unsafe", "use", "where", "while", "async",
-        "await", "dyn", "abstract", "become", "box", "do", "final", "macro", "override", "priv",
-        "typeof", "unsized", "virtual", "yield", "try", "gen",
-    ];
-    if KEYWORDS.contains(&seg) {
-        format!("r#{seg}")
-    } else {
-        seg.to_string()
-    }
-}
-
-/// Builds the module tree under `dir`: each package directory's protoc entry
-/// point (`generated.rs`) becomes that directory's `mod.rs` (re-exporting the
-/// package's messages), and every directory declares `pub mod` for each of its
-/// subdirectories with an ABSOLUTE `#[path]`. The root `mod.rs` is `include!`d
-/// into `src/lib.rs` from `OUT_DIR`, so the generated tree is fully reachable as
-/// `crate::generated::<pkg>::...`. For example,
-/// `crate::generated::envoy::config::route::v3::RouteConfiguration`.
-fn write_module_tree(dir: &Path) {
-    const HEADER: &str = "// @generated at build time by grpc-xds/build.rs. Do not edit.";
-
-    let mut subdirs: Vec<String> = Vec::new();
-    let mut has_entry_point = false;
-    for entry in std::fs::read_dir(dir).unwrap() {
-        let path = entry.unwrap().path();
-        let name = path.file_name().unwrap().to_string_lossy().into_owned();
-        if path.is_dir() {
-            subdirs.push(name);
-            write_module_tree(&path);
-        } else if name == "generated.rs" {
-            has_entry_point = true;
-        }
-    }
-    subdirs.sort();
-
-    let mut m = format!("{HEADER}\n");
-
-    // Fold the package's protoc entry point in as the module body: it declares
-    // each `<file>.u.pb.rs` as a hidden submodule and flat-re-exports them, so
-    // this module holds all of the package's messages (and intra-package
-    // `super::…` refs resolve here). Its `#[path]`s are relative, which is fine
-    // because this `mod.rs` is file-loaded (only the tree root is `include!`d).
-    // The trailing `__unstable` reflection block is kept verbatim: its
-    // cross-package `<pkg>::__unstable::<dep>` refs all resolve because every
-    // dependency is either generated in-crate (including `descriptor.proto`) or
-    // comes from `protobuf_well_known_types`.
-    if has_entry_point {
-        let entry = dir.join("generated.rs");
-        let body = std::fs::read_to_string(&entry).unwrap();
-        m.push_str(&body);
-        if !m.ends_with('\n') {
-            m.push('\n');
-        }
-        std::fs::remove_file(&entry).unwrap();
-    }
-
-    for s in &subdirs {
-        let child = dir.join(s).join("mod.rs");
-        m.push_str(&format!(
-            "#[path = {:?}]\npub mod {};\n",
-            child.to_string_lossy(),
-            raw_ident(s)
-        ));
-    }
-
-    std::fs::write(dir.join("mod.rs"), m).unwrap();
+    protobuf_codegen::CodeGen::new()
+        .protoc_path(&protoc)
+        .inputs(protos.iter())
+        .includes(include_dirs.iter())
+        .output_dir(&gen_dir)
+        .dependency(protobuf_well_known_types::get_dependency(
+            "protobuf_well_known_types",
+        ))
+        .generate_and_compile()
+        .unwrap_or_else(|e| panic!("xDS codegen failed: {e}"));
 }
 
 /// Resolves the `protoc` binary. Prefers the one built by `protoc-gen-grpc-rust`
