@@ -646,7 +646,7 @@ fn setup_registeries() {
     tonic_transport::reg();
 }
 
-#[cfg(all(test, feature = "_runtime-tokio"))]
+#[cfg(test)]
 mod tests {
     use std::sync::Barrier;
     use std::time::Duration;
