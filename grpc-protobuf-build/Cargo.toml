@@ -20,9 +20,9 @@ prettyplease = "0.2.35"
 protobuf-codegen = { version = "4.35.1-release" }
 syn = "2.0.104"
 which = "8.0"
-protoc-gen-rust-grpc = { version = "0.10.0", path = "../protoc-gen-rust-grpc", optional = true }
+protoc-gen-grpc-rust = { version = "0.10.0", path = "../protoc-gen-grpc-rust", optional = true }
 
 [features]
 default = ["build-plugin"]
 # Alias for existing users
-build-plugin = ["protoc-gen-rust-grpc"]
+build-plugin = ["protoc-gen-grpc-rust"]

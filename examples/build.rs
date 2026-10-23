@@ -28,13 +28,13 @@ use std::path::PathBuf;
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
 
-    // Optionally use protoc-gen-rust-grpc's protoc for prost. protoc-gen-rust-grpc will skip its
-    // build when PROTOC_GEN_RUST_GRPC_NO_BUILD=1 (used in gRPC's CI), so we check that the binary
+    // Optionally use protoc-gen-grpc-rust's protoc for prost. protoc-gen-grpc-rust will skip its
+    // build when PROTOC_GEN_GRPC_RUST_NO_BUILD=1 (used in gRPC's CI), so we check that the binary
     // exists.
-    #[cfg(feature = "protoc-gen-rust-grpc")]
-    if protoc_gen_rust_grpc::protoc().exists() {
+    #[cfg(feature = "protoc-gen-grpc-rust")]
+    if protoc_gen_grpc_rust::protoc().exists() {
         unsafe {
-            env::set_var("PROTOC", protoc_gen_rust_grpc::protoc());
+            env::set_var("PROTOC", protoc_gen_grpc_rust::protoc());
         }
     }
 

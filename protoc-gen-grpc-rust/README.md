@@ -1,4 +1,4 @@
-# protoc-gen-rust-grpc
+# protoc-gen-grpc-rust
 
 A protoc plugin that generates Rust gRPC service code for use with the [`grpc`
 crate](https://crates.io/crates/grpc).  This crate is generally not needed
@@ -15,8 +15,8 @@ The archive's checksum is verified before compiling.
 
 ## Using from Rust
 
-A `build.rs` script will ensure the `protoc` and `protoc-gen-rust-grpc` binaries
-are compiled, and the functions `protoc` and `protoc_gen_rust_grpc` can be used
+A `build.rs` script will ensure the `protoc` and `protoc-gen-grpc-rust` binaries
+are compiled, and the functions `protoc` and `protoc_gen_grpc_rust` can be used
 to find their locations.
 
 ### Skipping C++ Compilation
@@ -25,7 +25,7 @@ If you want to bypass the C++ compilation step in your application, set the
 following environment variable:
 
 ```bash
-export PROTOC_GEN_RUST_GRPC_NO_BUILD=1
+export PROTOC_GEN_GRPC_RUST_NO_BUILD=1
 ```
 
 When set, the C++ build is skipped, and no binaries will be present in the
@@ -54,7 +54,7 @@ cmake --install build --config Release --prefix install
 
 The binaries will be in `build/bin/`:
 - `protoc` - The protobuf compiler
-- `protoc-gen-rust-grpc` - The Rust gRPC code generator plugin
+- `protoc-gen-grpc-rust` - The Rust gRPC code generator plugin
 
 ## Usage
 
@@ -69,7 +69,7 @@ export PATH="$PWD/build/bin:$PATH"
 protoc \
   --rust_opt="experimental-codegen=enabled,kernel=upb" \
   --rust_out=./generated \
-  --rust-grpc_out=./generated \
+  --grpc-rust_out=./generated \
   your_service.proto
 ```
 

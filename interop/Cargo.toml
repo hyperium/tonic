@@ -37,9 +37,9 @@ grpc-protobuf = {path = "../grpc-protobuf"}
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
 
 [features]
-protoc-gen-rust-grpc = ["dep:protoc-gen-rust-grpc", "grpc-protobuf-build/protoc-gen-rust-grpc"]
+protoc-gen-grpc-rust = ["dep:protoc-gen-grpc-rust", "grpc-protobuf-build/protoc-gen-grpc-rust"]
 
 [build-dependencies]
 tonic-prost-build = {path = "../tonic-prost-build"}
 grpc-protobuf-build = {path = "../grpc-protobuf-build", default-features = false}
-protoc-gen-rust-grpc = { path = "../protoc-gen-rust-grpc", optional = true }
+protoc-gen-grpc-rust = { path = "../protoc-gen-grpc-rust", optional = true }

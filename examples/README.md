@@ -8,8 +8,8 @@ compiler.  You need to have installed either:
  * the `protoc` binary, made available in your PATH. This is the default.
 
  * A compatible C++ compiler and CMake as described in the
-   [`protoc-gen-rust-grpc` crate](../protoc-gen-rust-grpc/README.md).  Choose
-   this option by passing `--features protoc-gen-rust-grpc` to `cargo`.
+   [`protoc-gen-grpc-rust` crate](../protoc-gen-grpc-rust/README.md).  Choose
+   this option by passing `--features protoc-gen-grpc-rust` to `cargo`.
 
 If you choose to install protobuf, here are the steps for a variety of operating
 systems.
@@ -42,12 +42,12 @@ the repo to allow building without `protoc`.  To rebuild the generated code you
 must set `GRPC_RUST_REGENERATE_PROTO=1` in your environment.  This requires that
 you have installed either:
 
- * the `protoc` and `protoc-gen-rust-grpc` binaries, made available in your
-   PATH.  See above for `protoc`.  `protoc-gen-rust-grpc` can be downloaded from
+ * the `protoc` and `protoc-gen-grpc-rust` binaries, made available in your
+   PATH.  See above for `protoc`.  `protoc-gen-grpc-rust` can be downloaded from
    [our releases].
 
  * A compatible C++ compiler and CMake as described in the
-   [`protoc-gen-rust-grpc` crate](../protoc-gen-rust-grpc/README.md).  Choose
+   [`protoc-gen-grpc-rust` crate](../protoc-gen-grpc-rust/README.md).  Choose
    this option by passing `--features grpc-protobuf-build/build-plugin` to `cargo`.
 
 [our releases]: https://github.com/grpc/grpc-rust/releases

@@ -51,9 +51,9 @@ fn main() {
     let services_tonic = out_dir.join("tonic");
 
     // TODO: Use gRPC servers when available.
-    if protoc_gen_rust_grpc::protoc().exists() {
+    if protoc_gen_grpc_rust::protoc().exists() {
         unsafe {
-            env::set_var("PROTOC", protoc_gen_rust_grpc::protoc());
+            env::set_var("PROTOC", protoc_gen_grpc_rust::protoc());
         }
     }
 

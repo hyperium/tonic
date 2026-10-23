@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project(protoc-gen-rust-grpc LANGUAGES CXX)
+project(protoc-gen-grpc-rust LANGUAGES CXX)
 
 set(PROTOBUF_VERSION "35.1" CACHE STRING "Version of protobuf to download")
 set(CMAKE_BINARY_DIR "${CMAKE_BINARY_DIR}/proto-${PROTOBUF_VERSION}")
@@ -30,7 +30,7 @@ endif()
 # Options
 option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
 option(BUILD_PROTOC "Build protoc executable" ON)
-option(BUILD_PLUGIN "Build protoc-gen-rust-grpc plugin" ON)
+option(BUILD_PLUGIN "Build protoc-gen-grpc-rust plugin" ON)
 
 # Add cmake directory to module path
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
@@ -72,16 +72,16 @@ set(protobuf_ABSL_PROVIDER "package" CACHE STRING "Use external Abseil" FORCE)
 # Download and configure protobuf
 fetch_protobuf(${PROTOBUF_VERSION})
 
-# Add the protoc-gen-rust-grpc executable and installation rules
+# Add the protoc-gen-grpc-rust executable and installation rules
 if(BUILD_PLUGIN)
-    add_executable(protoc-gen-rust-grpc
+    add_executable(protoc-gen-grpc-rust
         src/grpc_rust_plugin.cc
         src/grpc_rust_generator.cc
         src/grpc_rust_generator.h
     )
 
     # Link against protobuf and abseil
-    target_link_libraries(protoc-gen-rust-grpc
+    target_link_libraries(protoc-gen-grpc-rust
         PRIVATE
             protobuf::libprotoc
             protobuf::libprotobuf
@@ -91,19 +91,19 @@ if(BUILD_PLUGIN)
     )
 
     # Include directories
-    target_include_directories(protoc-gen-rust-grpc
+    target_include_directories(protoc-gen-grpc-rust
         PRIVATE
             ${protobuf_SOURCE_DIR}/src
             ${CMAKE_CURRENT_SOURCE_DIR}
     )
 
     # Set output directory
-    set_target_properties(protoc-gen-rust-grpc
+    set_target_properties(protoc-gen-grpc-rust
         PROPERTIES
             RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
     )
 
-    install(TARGETS protoc-gen-rust-grpc
+    install(TARGETS protoc-gen-grpc-rust
         RUNTIME DESTINATION bin
     )
 endif()
@@ -142,7 +142,7 @@ endif()
 
 # Print summary
 message(STATUS "")
-message(STATUS "protoc-gen-rust-grpc configuration summary:")
+message(STATUS "protoc-gen-grpc-rust configuration summary:")
 message(STATUS "  Crate Version: ${RUST_GRPC_VERSION}")
 message(STATUS "  Protobuf version: ${PROTOBUF_VERSION}")
 message(STATUS "  Abseil version: ${ABSEIL_VERSION}")

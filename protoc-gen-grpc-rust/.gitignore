@@ -2,7 +2,7 @@
 bazel-bin
 bazel-genfiles
 bazel-out
-bazel-protoc-gen-rust-grpc
+bazel-protoc-gen-grpc-rust
 bazel-testlogs
 MODULE.bazel.lock
 

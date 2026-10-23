@@ -16,7 +16,7 @@ permissions:
 env:
   # By default, skip building the plugin and rely on caching to put it in the
   # system's PATH.
-  PROTOC_GEN_RUST_GRPC_NO_BUILD: 1
+  PROTOC_GEN_GRPC_RUST_NO_BUILD: 1
 
 jobs:
   rustfmt:
@@ -66,28 +66,28 @@ jobs:
     env:
       # By default we skip building this plugin; this is the only rule that
       # needs to actually build it.
-      PROTOC_GEN_RUST_GRPC_NO_BUILD: ""
+      PROTOC_GEN_GRPC_RUST_NO_BUILD: ""
     steps:
       - uses: actions/checkout@v6
       - uses: actions/cache@v4
         id: protoc-binaries-cache
         with:
           path: protoc-cache
-          key: protoc-binaries-${{ runner.os }}-${{ hashFiles('protoc-gen-rust-grpc/src/cpp_source/**', 'protoc-gen-rust-grpc/build.rs') }}
+          key: protoc-binaries-${{ runner.os }}-${{ hashFiles('protoc-gen-grpc-rust/src/cpp_source/**', 'protoc-gen-grpc-rust/build.rs') }}
       - uses: hecrj/setup-rust-action@v2
         if: steps.protoc-binaries-cache.outputs.cache-hit != 'true'
       - uses: Swatinem/rust-cache@v2
         if: steps.protoc-binaries-cache.outputs.cache-hit != 'true'
         with:
           cache-targets: "false"
-      - name: Build protoc-gen-rust-grpc
+      - name: Build protoc-gen-grpc-rust
         if: steps.protoc-binaries-cache.outputs.cache-hit != 'true'
-        run: cargo build -p protoc-gen-rust-grpc --release
+        run: cargo build -p protoc-gen-grpc-rust --release
       - name: Populate cache directory if needed
         if: steps.protoc-binaries-cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
-          cp -r target/release/build/protoc-gen-rust-grpc-*/out/install protoc-cache/
+          cp -r target/release/build/protoc-gen-grpc-rust-*/out/install protoc-cache/
           echo "Cached files:"
           find protoc-cache/ -type f -exec ls -lh {} +
 
@@ -102,7 +102,7 @@ jobs:
     - uses: actions/cache@v4
       with:
         path: protoc-cache
-        key: protoc-binaries-${{ runner.os }}-${{ hashFiles('protoc-gen-rust-grpc/src/cpp_source/**', 'protoc-gen-rust-grpc/build.rs') }}
+        key: protoc-binaries-${{ runner.os }}-${{ hashFiles('protoc-gen-grpc-rust/src/cpp_source/**', 'protoc-gen-grpc-rust/build.rs') }}
     - name: Add cached binaries to PATH
       shell: bash
       run: echo "${{ github.workspace }}/protoc-cache/bin" >> $GITHUB_PATH
@@ -120,7 +120,7 @@ jobs:
     - uses: actions/cache@v4
       with:
         path: protoc-cache
-        key: protoc-binaries-${{ runner.os }}-${{ hashFiles('protoc-gen-rust-grpc/src/cpp_source/**', 'protoc-gen-rust-grpc/build.rs') }}
+        key: protoc-binaries-${{ runner.os }}-${{ hashFiles('protoc-gen-grpc-rust/src/cpp_source/**', 'protoc-gen-grpc-rust/build.rs') }}
     - name: Add cached binaries to PATH
       shell: bash
       run: echo "${{ github.workspace }}/protoc-cache/bin" >> $GITHUB_PATH
@@ -143,7 +143,7 @@ jobs:
     - uses: actions/cache@v4
       with:
         path: protoc-cache
-        key: protoc-binaries-${{ runner.os }}-${{ hashFiles('protoc-gen-rust-grpc/src/cpp_source/**', 'protoc-gen-rust-grpc/build.rs') }}
+        key: protoc-binaries-${{ runner.os }}-${{ hashFiles('protoc-gen-grpc-rust/src/cpp_source/**', 'protoc-gen-grpc-rust/build.rs') }}
     - name: Add cached binaries to PATH
       shell: bash
       run: echo "${{ github.workspace }}/protoc-cache/bin" >> $GITHUB_PATH
@@ -174,7 +174,7 @@ jobs:
     - uses: actions/cache@v4
       with:
         path: protoc-cache
-        key: protoc-binaries-${{ runner.os }}-${{ hashFiles('protoc-gen-rust-grpc/src/cpp_source/**', 'protoc-gen-rust-grpc/build.rs') }}
+        key: protoc-binaries-${{ runner.os }}-${{ hashFiles('protoc-gen-grpc-rust/src/cpp_source/**', 'protoc-gen-grpc-rust/build.rs') }}
     - name: Add cached binaries to PATH
       shell: bash
       run: echo "${{ github.workspace }}/protoc-cache/bin" >> $GITHUB_PATH
@@ -211,7 +211,7 @@ jobs:
     - uses: actions/cache@v4
       with:
         path: protoc-cache
-        key: protoc-binaries-${{ runner.os }}-${{ hashFiles('protoc-gen-rust-grpc/src/cpp_source/**', 'protoc-gen-rust-grpc/build.rs') }}
+        key: protoc-binaries-${{ runner.os }}-${{ hashFiles('protoc-gen-grpc-rust/src/cpp_source/**', 'protoc-gen-grpc-rust/build.rs') }}
     - name: Add cached binaries to PATH
       shell: bash
       run: echo "${{ github.workspace }}/protoc-cache/bin" >> $GITHUB_PATH
@@ -230,7 +230,7 @@ jobs:
     - uses: actions/cache@v4
       with:
         path: protoc-cache
-        key: protoc-binaries-${{ runner.os }}-${{ hashFiles('protoc-gen-rust-grpc/src/cpp_source/**', 'protoc-gen-rust-grpc/build.rs') }}
+        key: protoc-binaries-${{ runner.os }}-${{ hashFiles('protoc-gen-grpc-rust/src/cpp_source/**', 'protoc-gen-grpc-rust/build.rs') }}
     - name: Add cached binaries to PATH
       shell: bash
       run: echo "${{ github.workspace }}/protoc-cache/bin" >> $GITHUB_PATH
@@ -255,7 +255,7 @@ jobs:
     - uses: actions/cache@v4
       with:
         path: protoc-cache
-        key: protoc-binaries-${{ runner.os }}-${{ hashFiles('protoc-gen-rust-grpc/src/cpp_source/**', 'protoc-gen-rust-grpc/build.rs') }}
+        key: protoc-binaries-${{ runner.os }}-${{ hashFiles('protoc-gen-grpc-rust/src/cpp_source/**', 'protoc-gen-grpc-rust/build.rs') }}
     - name: Add cached binaries to PATH
       shell: bash
       run: echo "${{ github.workspace }}/protoc-cache/bin" >> $GITHUB_PATH
@@ -276,7 +276,7 @@ jobs:
     - uses: actions/cache@v4
       with:
         path: protoc-cache
-        key: protoc-binaries-${{ runner.os }}-${{ hashFiles('protoc-gen-rust-grpc/src/cpp_source/**', 'protoc-gen-rust-grpc/build.rs') }}
+        key: protoc-binaries-${{ runner.os }}-${{ hashFiles('protoc-gen-grpc-rust/src/cpp_source/**', 'protoc-gen-grpc-rust/build.rs') }}
     - name: Add cached binaries to PATH
       shell: bash
       run: echo "${{ github.workspace }}/protoc-cache/bin" >> $GITHUB_PATH
@@ -298,7 +298,7 @@ jobs:
     - uses: actions/cache@v4
       with:
         path: protoc-cache
-        key: protoc-binaries-${{ runner.os }}-${{ hashFiles('protoc-gen-rust-grpc/src/cpp_source/**', 'protoc-gen-rust-grpc/build.rs') }}
+        key: protoc-binaries-${{ runner.os }}-${{ hashFiles('protoc-gen-grpc-rust/src/cpp_source/**', 'protoc-gen-grpc-rust/build.rs') }}
     - name: Add cached binaries to PATH
       shell: bash
       run: echo "${{ github.workspace }}/protoc-cache/bin" >> $GITHUB_PATH
@@ -336,7 +336,7 @@ jobs:
     - uses: actions/cache@v4
       with:
         path: protoc-cache
-        key: protoc-binaries-${{ runner.os }}-${{ hashFiles('protoc-gen-rust-grpc/src/cpp_source/**', 'protoc-gen-rust-grpc/build.rs') }}
+        key: protoc-binaries-${{ runner.os }}-${{ hashFiles('protoc-gen-grpc-rust/src/cpp_source/**', 'protoc-gen-grpc-rust/build.rs') }}
     - name: Add cached binaries to PATH
       shell: bash
       run: echo "${{ github.workspace }}/protoc-cache/bin" >> $GITHUB_PATH

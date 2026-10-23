@@ -25,7 +25,7 @@
 //! Protobuf integration for the [`grpc`] crate.
 //!
 //! These types are generally created by the generated code produced by
-//! [`protoc-gen-rust-grpc`](https://docs.rs/protoc-gen-rust-grpc).  See our
+//! [`protoc-gen-grpc-rust`](https://docs.rs/protoc-gen-grpc-rust).  See our
 //! [Quick Start Guide](docs/languages/rust/quickstart/) for more information.
 //!
 //! # Modules

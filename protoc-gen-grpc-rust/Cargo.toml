@@ -1,5 +1,5 @@
 [package]
-name = "protoc-gen-rust-grpc"
+name = "protoc-gen-grpc-rust"
 version = "0.10.0"
 authors = ["gRPC authors"]
 license = "MIT"

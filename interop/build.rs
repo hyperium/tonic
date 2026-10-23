@@ -25,11 +25,11 @@
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
 
-    // Use protoc-gen-rust-grpc for tonic_prost_build when it is available
-    #[cfg(feature = "protoc-gen-rust-grpc")]
-    if protoc_gen_rust_grpc::protoc().exists() {
+    // Use protoc-gen-grpc-rust for tonic_prost_build when it is available
+    #[cfg(feature = "protoc-gen-grpc-rust")]
+    if protoc_gen_grpc_rust::protoc().exists() {
         unsafe {
-            std::env::set_var("PROTOC", protoc_gen_rust_grpc::protoc());
+            std::env::set_var("PROTOC", protoc_gen_grpc_rust::protoc());
         }
     }
 
