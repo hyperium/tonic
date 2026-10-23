@@ -59,6 +59,9 @@ mod load_balancing;
 /// from a channel's Listener/RouteConfiguration/Cluster/Endpoints resources.
 mod xds_config;
 
+/// `grpc` crate based [`xds_client::Transport`] implementation.
+mod transport;
+
 #[cfg(test)]
 mod tests {
     //! Sanity checks that the generated xDS modules are importable and usable

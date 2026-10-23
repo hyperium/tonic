@@ -133,11 +133,26 @@ impl Channel {
         target: impl Into<String>,
         credentials: Arc<dyn ChannelCredentials>,
     ) -> ChannelBuilder {
+        Self::builder_with_runtime(target, credentials, default_runtime())
+    }
+
+    /// Creates a new channel builder for the given target, credentials, and
+    /// runtime.
+    ///
+    /// Always available. When the `_runtime-tokio` feature is enabled,
+    /// [`builder()`](Channel::builder) can be used instead to use the default
+    /// Tokio runtime.
+    #[doc(hidden)]
+    pub fn builder_with_runtime(
+        target: impl Into<String>,
+        credentials: Arc<dyn ChannelCredentials>,
+        runtime: GrpcRuntime,
+    ) -> ChannelBuilder {
         ChannelBuilder {
             target: target.into(),
             credentials,
             authority: None,
-            runtime: default_runtime(),
+            runtime,
         }
     }
 
