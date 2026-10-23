@@ -17,7 +17,7 @@ allowed_external_types = ["protobuf_codegen::Dependency"]
 
 [dependencies]
 prettyplease = "0.2.35"
-protobuf-codegen = { version = "4.35.1-release" }
+protobuf-codegen = { version = "4.36.2-release" }
 syn = "2.0.104"
 which = "8.0"
 protoc-gen-grpc-rust = { version = "0.10.0", path = "../protoc-gen-grpc-rust", optional = true }

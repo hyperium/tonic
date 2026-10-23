@@ -1,5 +1,5 @@
 const _: () = ::protobuf::__internal::assert_compatible_gencode_version(
-    "4.35.1-release",
+    "0.36.2-release",
 );
 pub(crate) static mut helloworld__HelloRequest_msg_init: ::protobuf::__internal::runtime::MiniTableInitPtr = ::protobuf::__internal::runtime::MiniTableInitPtr(
     ::protobuf::__internal::runtime::MiniTablePtr::dangling(),
@@ -259,16 +259,16 @@ unsafe impl ::protobuf::__internal::runtime::AssociatedMiniTable for HelloReques
         unsafe {
             ONCE_LOCK
                 .get_or_init(|| {
-                    super::helloworld__HelloRequest_msg_init.0 = ::protobuf::__internal::runtime::build_mini_table(
+                    super::helloworld_proto::helloworld__HelloRequest_msg_init.0 = ::protobuf::__internal::runtime::build_mini_table(
                         "$M1P",
                     );
                     ::protobuf::__internal::runtime::link_mini_table(
-                        super::helloworld__HelloRequest_msg_init.0,
+                        super::helloworld_proto::helloworld__HelloRequest_msg_init.0,
                         &[],
                         &[],
                     );
                     ::protobuf::__internal::runtime::MiniTableInitPtr(
-                        super::helloworld__HelloRequest_msg_init.0,
+                        super::helloworld_proto::helloworld__HelloRequest_msg_init.0,
                     )
                 })
                 .0
@@ -595,16 +595,16 @@ unsafe impl ::protobuf::__internal::runtime::AssociatedMiniTable for HelloReply 
         unsafe {
             ONCE_LOCK
                 .get_or_init(|| {
-                    super::helloworld__HelloReply_msg_init.0 = ::protobuf::__internal::runtime::build_mini_table(
+                    super::helloworld_proto::helloworld__HelloReply_msg_init.0 = ::protobuf::__internal::runtime::build_mini_table(
                         "$M1P",
                     );
                     ::protobuf::__internal::runtime::link_mini_table(
-                        super::helloworld__HelloReply_msg_init.0,
+                        super::helloworld_proto::helloworld__HelloReply_msg_init.0,
                         &[],
                         &[],
                     );
                     ::protobuf::__internal::runtime::MiniTableInitPtr(
-                        super::helloworld__HelloReply_msg_init.0,
+                        super::helloworld_proto::helloworld__HelloReply_msg_init.0,
                     )
                 })
                 .0

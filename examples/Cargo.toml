@@ -331,14 +331,14 @@ hyper-rustls = { version = "0.27.0", features = ["http2", "ring", "tls12"], opti
 tower-http = { version = "0.6", optional = true }
 grpc-google-cloud-auth = { path = "../grpc-google-cloud-auth", optional = true }
 grpc-protobuf = { path = "../grpc-protobuf", optional = true }
-protobuf = { version = "4.35.1-release", optional = true }
+protobuf = { version = "4.36.2-release", optional = true }
 grpc = { path = "../grpc", optional = true }
 grpc-rustls = { path = "../grpc-rustls", optional = true }
 rustls = { version = "0.23", default-features = false, features = ["ring"], optional = true}
-protobuf-well-known-types = { version = "4.35.1-release", optional = true }
+protobuf-well-known-types = { version = "0.36.2-release", optional = true }
 
 [build-dependencies]
 tonic-prost-build = { path = "../tonic-prost-build" }
 grpc-protobuf-build = { path = "../grpc-protobuf-build", default-features = false }
 protoc-gen-grpc-rust = { path = "../protoc-gen-grpc-rust", optional = true }
-protobuf-well-known-types = { version = "4.35.1-release" }
+protobuf-well-known-types = { version = "0.36.2-release" }

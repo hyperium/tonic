@@ -1,10 +1,9 @@
 #[path = "helloworld.u.pb.rs"]
-#[allow(nonstandard_style, unused, unreachable_pub)]
-#[doc(hidden)]
-mod internal_do_not_use_helloworld;
+#[allow(nonstandard_style, unused)]
+pub mod helloworld_proto;
 #[allow(nonstandard_style, unused)]
 #[doc(inline)]
-pub use internal_do_not_use_helloworld::*;
+pub use helloworld_proto::*;
 #[allow(nonstandard_style, unused)]
 pub mod __unstable {
     pub static HELLOWORLD_DESCRIPTOR_INFO: ::protobuf::__internal::runtime::__unstable::DescriptorInfo = ::protobuf::__internal::runtime::__unstable::DescriptorInfo {

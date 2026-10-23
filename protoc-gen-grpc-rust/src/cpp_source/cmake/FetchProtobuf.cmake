@@ -8,7 +8,9 @@ function(fetch_protobuf VERSION)
 
     # Map of known protobuf versions to their SHA256 hashes
     # You can add more versions here as needed
-    if(VERSION STREQUAL "35.1")
+    if(VERSION STREQUAL "36.2")
+        set(HASH "3d9642a662d10e68ebae5e53f14dcce5105684212d5078f8e0d47d1ab3ae6b64")
+    elseif(VERSION STREQUAL "35.1")
         set(HASH "f0b6838e7522a8da96126d487068c959bc624926368f3024ac8fd03abd0a1ac4")
     elseif(VERSION STREQUAL "34.0")
         set(HASH "e540aae70d3b4f758846588768c9e39090fab880bc3233a1f42a8ab8d3781efd")

@@ -1,4 +1,4 @@
-const _: () = ::protobuf::__internal::assert_compatible_gencode_version("4.35.1-release");
+const _: () = ::protobuf::__internal::assert_compatible_gencode_version("0.36.2-release");
 // This variable must not be referenced except by protobuf generated
 // code.
 pub(crate) static mut google__rpc__Status_msg_init: ::protobuf::__internal::runtime::MiniTableInitPtr =
@@ -108,13 +108,13 @@ impl<'msg> StatusView<'msg> {
   }
 
   // details: repeated message google.protobuf.Any
-  pub fn details(self) -> ::protobuf::RepeatedView<'msg, ::protobuf_well_known_types::Any> {
+  pub fn details(self) -> ::protobuf::RepeatedView<'msg, ::protobuf_well_known_types::google_protobuf_any_proto::Any> {
     unsafe {
       self.inner.ptr().get_array_at_index(
         2
       )
     }.map_or_else(
-        ::protobuf::__internal::runtime::empty_array::<::protobuf_well_known_types::Any>,
+        ::protobuf::__internal::runtime::empty_array::<::protobuf_well_known_types::google_protobuf_any_proto::Any>,
         |raw| unsafe {
           ::protobuf::RepeatedView::from_raw(::protobuf::__internal::Private, raw)
         }
@@ -257,19 +257,19 @@ impl<'msg> StatusMut<'msg> {
   }
 
   // details: repeated message google.protobuf.Any
-  pub fn details(&self) -> ::protobuf::RepeatedView<'_, ::protobuf_well_known_types::Any> {
+  pub fn details(&self) -> ::protobuf::RepeatedView<'_, ::protobuf_well_known_types::google_protobuf_any_proto::Any> {
     unsafe {
       self.inner.ptr().get_array_at_index(
         2
       )
     }.map_or_else(
-        ::protobuf::__internal::runtime::empty_array::<::protobuf_well_known_types::Any>,
+        ::protobuf::__internal::runtime::empty_array::<::protobuf_well_known_types::google_protobuf_any_proto::Any>,
         |raw| unsafe {
           ::protobuf::RepeatedView::from_raw(::protobuf::__internal::Private, raw)
         }
       )
   }
-  pub fn details_mut(&mut self) -> ::protobuf::RepeatedMut<'_, ::protobuf_well_known_types::Any> {
+  pub fn details_mut(&mut self) -> ::protobuf::RepeatedMut<'_, ::protobuf_well_known_types::google_protobuf_any_proto::Any> {
     unsafe {
       let raw_array = self.inner.ptr_mut().get_or_create_mutable_array_at_index(
         2,
@@ -283,7 +283,7 @@ impl<'msg> StatusMut<'msg> {
       )
     }
   }
-  pub fn set_details(&mut self, src: impl ::protobuf::IntoProxied<::protobuf::Repeated<::protobuf_well_known_types::Any>>) {
+  pub fn set_details(&mut self, src: impl ::protobuf::IntoProxied<::protobuf::Repeated<::protobuf_well_known_types::google_protobuf_any_proto::Any>>) {
     unsafe {
       ::protobuf::__internal::runtime::message_set_repeated_field(
         ::protobuf::AsMut::as_mut(self).inner,
@@ -397,19 +397,19 @@ impl Status {
   }
 
   // details: repeated message google.protobuf.Any
-  pub fn details(&self) -> ::protobuf::RepeatedView<'_, ::protobuf_well_known_types::Any> {
+  pub fn details(&self) -> ::protobuf::RepeatedView<'_, ::protobuf_well_known_types::google_protobuf_any_proto::Any> {
     unsafe {
       self.inner.ptr().get_array_at_index(
         2
       )
     }.map_or_else(
-        ::protobuf::__internal::runtime::empty_array::<::protobuf_well_known_types::Any>,
+        ::protobuf::__internal::runtime::empty_array::<::protobuf_well_known_types::google_protobuf_any_proto::Any>,
         |raw| unsafe {
           ::protobuf::RepeatedView::from_raw(::protobuf::__internal::Private, raw)
         }
       )
   }
-  pub fn details_mut(&mut self) -> ::protobuf::RepeatedMut<'_, ::protobuf_well_known_types::Any> {
+  pub fn details_mut(&mut self) -> ::protobuf::RepeatedMut<'_, ::protobuf_well_known_types::google_protobuf_any_proto::Any> {
     unsafe {
       let raw_array = self.inner.ptr_mut().get_or_create_mutable_array_at_index(
         2,
@@ -423,7 +423,7 @@ impl Status {
       )
     }
   }
-  pub fn set_details(&mut self, src: impl ::protobuf::IntoProxied<::protobuf::Repeated<::protobuf_well_known_types::Any>>) {
+  pub fn set_details(&mut self, src: impl ::protobuf::IntoProxied<::protobuf::Repeated<::protobuf_well_known_types::google_protobuf_any_proto::Any>>) {
     unsafe {
       ::protobuf::__internal::runtime::message_set_repeated_field(
         ::protobuf::AsMut::as_mut(self).inner,
@@ -466,12 +466,12 @@ unsafe impl ::protobuf::__internal::runtime::AssociatedMiniTable for Status {
         ::std::sync::OnceLock::new();
     unsafe {
       ONCE_LOCK.get_or_init(|| {
-        super::google__rpc__Status_msg_init.0 =
+        super::google_rpc_status_proto::google__rpc__Status_msg_init.0 =
             ::protobuf::__internal::runtime::build_mini_table("$(P1XG");
         ::protobuf::__internal::runtime::link_mini_table(
-            super::google__rpc__Status_msg_init.0, &[<::protobuf_well_known_types::Any as ::protobuf::__internal::runtime::AssociatedMiniTable>::mini_table(),
+            super::google_rpc_status_proto::google__rpc__Status_msg_init.0, &[<::protobuf_well_known_types::google_protobuf_any_proto::Any as ::protobuf::__internal::runtime::AssociatedMiniTable>::mini_table(),
             ], &[]);
-        ::protobuf::__internal::runtime::MiniTableInitPtr(super::google__rpc__Status_msg_init.0)
+        ::protobuf::__internal::runtime::MiniTableInitPtr(super::google_rpc_status_proto::google__rpc__Status_msg_init.0)
       }).0
     }
   }

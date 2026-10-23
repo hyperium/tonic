@@ -32,7 +32,7 @@ grpc-rustls = {path = "../grpc-rustls"}
 # TODO: Remove once the protobuf-codegen crate supports configuring the path to
 # the protobuf crate used in the generated message code, instead of defaulting
 # to `::protobuf`.
-protobuf = { version = "4.35.1-release" }
+protobuf = { version = "4.36.2-release" }
 grpc-protobuf = {path = "../grpc-protobuf"}
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
 
