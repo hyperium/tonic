@@ -22,8 +22,8 @@ hdrhistogram = { version = "7.5", default-features = false }
 pico-args = "0.5"
 prost = "0.14"
 prost-types = "0.14"
-protobuf = { version = "4.35.1-release" }
-protobuf-well-known-types = { version = "4.35.1-release" }
+protobuf = { version = "4.36.2-release" }
+protobuf-well-known-types = { version = "0.36.2-release" }
 rustls = "0.23"
 tokio = { version = "1.37.0", features = ["sync", "macros"] }
 tokio-stream = { version = "0.1.18", features = ["net", "sync"] }
@@ -36,6 +36,6 @@ nix = { version = "0.31.3", features = ["resource"] }
 
 [build-dependencies]
 grpc-protobuf-build = { path = "../grpc-protobuf-build" }
-protobuf-well-known-types = { version = "4.35.1-release" }
+protobuf-well-known-types = { version = "0.36.2-release" }
 protoc-gen-grpc-rust = { path = "../protoc-gen-grpc-rust" }
 tonic-prost-build = { path = "../tonic-prost-build" }

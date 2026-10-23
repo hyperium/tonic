@@ -1,11 +1,9 @@
 #[path="status.u.pb.rs"]
-#[allow(nonstandard_style, unused, unreachable_pub)]
-#[doc(hidden)]
-mod internal_do_not_use_google_srpc_sstatus;
-
+#[allow(nonstandard_style, unused)]
+pub mod google_rpc_status_proto;
 #[allow(nonstandard_style, unused)]
 #[doc(inline)]
-pub use internal_do_not_use_google_srpc_sstatus::*;
+pub use google_rpc_status_proto::*;
 #[allow(nonstandard_style, unused)]
 pub mod __unstable {
 pub static GOOGLE_RPC_STATUS_DESCRIPTOR_INFO: ::protobuf::__internal::runtime::__unstable::DescriptorInfo = ::protobuf::__internal::runtime::__unstable::DescriptorInfo {

@@ -15,7 +15,7 @@ edition = "2024"
 [package.metadata.cargo_check_external_types]
 allowed_external_types = [
     "grpc::*",
-    "protobuf::*",
+    "google_protobuf::*",
 ]
 
 [features]
@@ -23,8 +23,8 @@ allowed_external_types = [
 [dependencies]
 bytes = "1.11.1"
 grpc = { version = "0.10.0", path = "../grpc", default-features = false }
-protobuf = "4.35.1-release"
-protobuf-well-known-types = "4.35.1-release"
+protobuf = "4.36.2-release"
+protobuf-well-known-types = "0.36.2-release"
 trait-variant = "0.1"
 
 [dev-dependencies]
@@ -32,4 +32,4 @@ tokio = { version = "1", features = ["rt", "macros"] }
 
 [build-dependencies]
 grpc-protobuf-build = { version = "0.10.0", path = "../grpc-protobuf-build", default-features = false }
-protobuf-well-known-types = "4.35.1-release"
+protobuf-well-known-types = "0.36.2-release"
