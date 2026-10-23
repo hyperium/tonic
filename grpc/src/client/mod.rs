@@ -62,6 +62,7 @@ pub use call_options::CallOptions;
 
 mod channel;
 pub use channel::Channel;
+pub use channel::ChannelBuilder;
 
 mod subchannel;
 
