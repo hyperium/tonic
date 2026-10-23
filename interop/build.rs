@@ -33,12 +33,16 @@ fn main() {
         }
     }
 
-    let proto = "proto/grpc/testing/test.proto";
-
-    tonic_prost_build::compile_protos(proto).unwrap();
+    tonic_prost_build::configure()
+        .compile_protos(&["grpc/testing/test.proto"], &["proto"])
+        .unwrap();
     grpc_protobuf_build::CodeGen::new()
-        .include("proto/grpc/testing")
-        .inputs(["test.proto", "empty.proto", "messages.proto"])
+        .include("proto")
+        .inputs([
+            "grpc/testing/test.proto",
+            "grpc/testing/empty.proto",
+            "grpc/testing/messages.proto",
+        ])
         .compile()
         .unwrap();
 }

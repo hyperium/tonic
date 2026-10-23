@@ -37,7 +37,7 @@ pub mod pb {
 
 pub mod grpc_pb {
     #![allow(dead_code, unused_imports, clippy::all)]
-    grpc::include_proto!("test");
+    grpc::include_proto!("grpc/testing", "test");
 }
 
 use std::{default, fmt, iter};

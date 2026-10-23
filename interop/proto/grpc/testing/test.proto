@@ -1,3 +1,4 @@
+
 // Copyright 2015-2016 gRPC authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,8 +18,8 @@
 
 syntax = "proto3";
 
-import "empty.proto";
-import "messages.proto";
+import "grpc/testing/empty.proto";
+import "grpc/testing/messages.proto";
 
 package grpc.testing;
 
