@@ -1,4 +1,9 @@
 #!/bin/bash
+
+# Synchronize protos from grpc-proto. For all folders in the 'for' loop,
+# check their proto/ directory and overwrite .proto files that also exist in
+# grpc-proto.
+
 set -e
 
 cd "$(dirname "$0")/.."
@@ -20,11 +25,11 @@ echo "Files synced:"
 comm -12 "$tmpdir/grpc-rust.lst" "$tmpdir/base.lst"
 
 echo
-echo "Files in grpc-proto not synced:"
+echo "Files in grpc-proto that were not used by grpc-rust:"
 comm -13 "$tmpdir/grpc-rust.lst" "$tmpdir/base.lst"
 
 echo
-echo "Files in grpc-rust not synced:"
+echo "Files in grpc-rust that don't exist in grpc-proto:"
 comm -23 "$tmpdir/grpc-rust.lst" "$tmpdir/base.lst"
 
 rm -r "$tmpdir"
