@@ -374,6 +374,28 @@ impl<T> Grpc<T> {
 
             false
         } else {
+            // When a gRPC server returns an immediate error via a Trailers-Only response,
+            // the server often omits content-type since there is no body payload.
+            // If no grpc-status header is present, ensure the content-type is valid
+            // before attempting to decode the stream.
+            if !is_grpc_content_type(response.headers()) {
+                let error_msg = format!(
+                    "invalid content-type: {:?} (expected application/grpc)",
+                    response
+                        .headers()
+                        .get(CONTENT_TYPE)
+                        .map(|v| v.to_str().unwrap_or("<invalid utf-8>"))
+                        .unwrap_or("<missing>")
+                );
+
+                if let Err(Some(status)) = crate::status::infer_grpc_status(None, status_code) {
+                    // Return the mapped status code but with the custom error message.
+                    return Err(Status::new(status.code(), error_msg));
+                } else {
+                    return Err(Status::unknown(error_msg));
+                }
+            }
+
             true
         };
 
@@ -490,5 +512,81 @@ impl<T: fmt::Debug> fmt::Debug for Grpc<T> {
                 &self.config.max_encoding_message_size,
             )
             .finish()
+    }
+}
+
+fn is_grpc_content_type(headers: &http::HeaderMap) -> bool {
+    if let Some(val) = headers.get(CONTENT_TYPE) {
+        let bytes = val.as_bytes();
+        if bytes.len() >= 16 && bytes[..16].eq_ignore_ascii_case(b"application/grpc") {
+            return bytes.len() == 16 || matches!(bytes[16], b'+' | b';' | b'-' | b' ' | b'\t');
+        }
+    }
+    false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use http::header::CONTENT_TYPE;
+    use http::{HeaderMap, HeaderValue};
+
+    #[test]
+    fn test_is_grpc_content_type() {
+        let mut headers = HeaderMap::new();
+
+        assert!(!is_grpc_content_type(&headers));
+
+        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/grpc"));
+        assert!(is_grpc_content_type(&headers));
+
+        headers.insert(CONTENT_TYPE, HeaderValue::from_static("Application/grpc"));
+        assert!(is_grpc_content_type(&headers));
+
+        headers.insert(CONTENT_TYPE, HeaderValue::from_static("APPLICATION/GRPC"));
+        assert!(is_grpc_content_type(&headers));
+
+        headers.insert(
+            CONTENT_TYPE,
+            HeaderValue::from_static("application/grpc+proto"),
+        );
+        assert!(is_grpc_content_type(&headers));
+
+        headers.insert(
+            CONTENT_TYPE,
+            HeaderValue::from_static("application/grpc+json"),
+        );
+        assert!(is_grpc_content_type(&headers));
+
+        headers.insert(
+            CONTENT_TYPE,
+            HeaderValue::from_static("application/grpc; charset=utf-8"),
+        );
+        assert!(is_grpc_content_type(&headers));
+
+        headers.insert(
+            CONTENT_TYPE,
+            HeaderValue::from_static("application/grpc-web"),
+        );
+        assert!(is_grpc_content_type(&headers));
+
+        headers.insert(
+            CONTENT_TYPE,
+            HeaderValue::from_static("application/grpc-web+proto"),
+        );
+        assert!(is_grpc_content_type(&headers));
+
+        // Invalid content types
+        headers.insert(CONTENT_TYPE, HeaderValue::from_static("text/html"));
+        assert!(!is_grpc_content_type(&headers));
+
+        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+        assert!(!is_grpc_content_type(&headers));
+
+        headers.insert(
+            CONTENT_TYPE,
+            HeaderValue::from_static("application/grpcextra"),
+        );
+        assert!(!is_grpc_content_type(&headers));
     }
 }

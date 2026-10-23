@@ -309,18 +309,9 @@ async fn status_from_server_stream_with_inferred_status() {
         .await
         .unwrap();
 
-    let mut stream = client
-        .stream_call(InputStream {})
-        .await
-        .unwrap()
-        .into_inner();
+    let error = client.stream_call(InputStream {}).await.unwrap_err();
 
-    assert_eq!(
-        stream.message().await.unwrap_err().code(),
-        Code::Unavailable
-    );
-
-    assert_eq!(stream.message().await.unwrap(), None);
+    assert_eq!(error.code(), Code::Unavailable);
 }
 
 #[tokio::test]
@@ -479,4 +470,80 @@ async fn missing_grpc_status_trailer_is_unknown_error() {
         "unexpected error message: {}",
         err.message()
     );
+}
+
+#[tokio::test]
+async fn trailers_only_response_without_content_type() {
+    integration_tests::trace_init();
+
+    struct Svc;
+
+    #[tonic::async_trait]
+    impl test_server::Test for Svc {
+        async fn unary_call(&self, _: Request<Input>) -> Result<Response<Output>, Status> {
+            Ok(Response::new(Output {}))
+        }
+    }
+
+    #[derive(Clone)]
+    struct TestLayer;
+
+    impl<S> tower::Layer<S> for TestLayer {
+        type Service = TestService;
+
+        fn layer(&self, _: S) -> Self::Service {
+            TestService
+        }
+    }
+
+    #[derive(Clone)]
+    struct TestService;
+
+    impl tower::Service<http::Request<Body>> for TestService {
+        type Response = http::Response<Body>;
+        type Error = std::convert::Infallible;
+        type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
+
+        fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+            Poll::Ready(Ok(()))
+        }
+
+        fn call(&mut self, _: http::Request<Body>) -> Self::Future {
+            Box::pin(async {
+                // A Trailers-Only response: grpc-status in headers, no content-type header.
+                Ok(http::Response::builder()
+                    .status(http::StatusCode::OK)
+                    .header("grpc-status", "3")
+                    .header("grpc-message", "custom trailers-only error")
+                    .body(Body::empty())
+                    .unwrap())
+            })
+        }
+    }
+
+    let svc = test_server::TestServer::new(Svc);
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let incoming = TcpIncoming::from(listener).with_nodelay(Some(true));
+
+    tokio::spawn(async move {
+        Server::builder()
+            .layer(TestLayer)
+            .add_service(svc)
+            .serve_with_incoming(incoming)
+            .await
+            .unwrap();
+    });
+
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    let mut client = test_client::TestClient::connect(format!("http://{addr}"))
+        .await
+        .unwrap();
+
+    let error = client.unary_call(Input {}).await.unwrap_err();
+
+    assert_eq!(error.code(), tonic::Code::InvalidArgument);
+    assert_eq!(error.message(), "custom trailers-only error");
 }
