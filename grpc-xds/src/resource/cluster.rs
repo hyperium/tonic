@@ -29,10 +29,10 @@ use xds_client::Error;
 use xds_client::Resource;
 use xds_client::resource::TypeUrl;
 
-use crate::generated::envoy::config::cluster::v3::Cluster;
-use crate::generated::envoy::config::cluster::v3::cluster::ClusterDiscoveryTypeOneof;
-use crate::generated::envoy::config::cluster::v3::cluster::DiscoveryType;
-use crate::generated::envoy::extensions::clusters::aggregate::v3::ClusterConfig as AggregateClusterConfig;
+use crate::generated::envoy_config_cluster_v3_cluster_proto::Cluster;
+use crate::generated::envoy_config_cluster_v3_cluster_proto::cluster::ClusterDiscoveryTypeOneof;
+use crate::generated::envoy_config_cluster_v3_cluster_proto::cluster::DiscoveryType;
+use crate::generated::envoy_extensions_clusters_aggregate_v3_cluster_proto::ClusterConfig as AggregateClusterConfig;
 
 /// Extension name and `typed_config` type for gRFC A37 aggregate clusters.
 const AGGREGATE_CLUSTER_NAME: &str = "envoy.clusters.aggregate";
@@ -229,7 +229,9 @@ fn validate_logical_dns_discovery(message: &Cluster) -> xds_client::Result<Clust
 }
 
 fn validate_aggregate_discovery(
-    custom: crate::generated::envoy::config::cluster::v3::cluster::CustomClusterTypeView<'_>,
+    custom: crate::generated::envoy_config_cluster_v3_cluster_proto::cluster::CustomClusterTypeView<
+        '_,
+    >,
 ) -> xds_client::Result<ClusterDiscovery> {
     if !custom.has_typed_config() {
         return Err(Error::Validation(

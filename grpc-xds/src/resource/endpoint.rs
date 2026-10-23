@@ -32,9 +32,9 @@ use xds_client::Error;
 use xds_client::Resource;
 use xds_client::resource::TypeUrl;
 
-use crate::generated::envoy::config::core::v3::HealthStatus as EnvoyHealthStatus;
-use crate::generated::envoy::config::endpoint::v3::ClusterLoadAssignment;
-use crate::generated::envoy::config::endpoint::v3::lb_endpoint::HostIdentifierOneof;
+use crate::generated::envoy_config_core_v3_health_check_proto::HealthStatus as EnvoyHealthStatus;
+use crate::generated::envoy_config_endpoint_v3_endpoint_components_proto::lb_endpoint::HostIdentifierOneof;
+use crate::generated::envoy_config_endpoint_v3_endpoint_proto::ClusterLoadAssignment;
 
 /// Validated ClusterLoadAssignment (EDS resource).
 #[derive(Debug, Clone)]
@@ -234,7 +234,7 @@ impl Resource for EndpointsResource {
 }
 
 fn validate_lb_endpoint(
-    lb_ep: crate::generated::envoy::config::endpoint::v3::LbEndpointView<'_>,
+    lb_ep: crate::generated::envoy_config_endpoint_v3_endpoint_components_proto::LbEndpointView<'_>,
 ) -> xds_client::Result<Option<LbEndpoint>> {
     let health_status = HealthStatus::from(lb_ep.health_status());
 

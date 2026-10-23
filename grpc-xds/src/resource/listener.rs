@@ -33,8 +33,8 @@ use xds_client::Resource;
 use xds_client::resource::TypeUrl;
 
 use super::route::RouteConfigResource;
-use crate::generated::envoy::config::listener::v3::Listener;
-use crate::generated::envoy::extensions::filters::network::http_connection_manager::v3::{
+use crate::generated::envoy_config_listener_v3_listener_proto::Listener;
+use crate::generated::envoy_extensions_filters_network_http_connection_manager_v3_http_connection_manager_proto::{
     HttpConnectionManager, http_connection_manager::RouteSpecifierOneof,
 };
 
