@@ -460,11 +460,14 @@ impl LbPolicy for PriorityPolicy {
 
     fn resolver_update(
         &mut self,
-        update: ResolverUpdate,
+        mut update: ResolverUpdate,
         config: &Self::LbConfig,
         channel_controller: &mut dyn ChannelController,
     ) -> Result<(), String> {
-        let mut sharded_endpoints = update.endpoints.map(endpoint_filtering::group_by_path);
+        // Take the endpoints out of `update` (rather than moving the field) so
+        // the rest of `update` can still be copied into each child's update.
+        let mut sharded_endpoints = mem::replace(&mut update.endpoints, Ok(Vec::new()))
+            .map(endpoint_filtering::group_by_path);
 
         // Index the existing children by name so they can be moved into the
         // new priority order.  Children that are no longer configured are left
@@ -480,12 +483,7 @@ impl LbPolicy for PriorityPolicy {
                 Err(status) => Err(status.clone()),
             };
 
-            let resolver_update = ResolverUpdate {
-                attributes: update.attributes.clone(),
-                endpoints,
-                service_config: update.service_config.clone(),
-                resolution_note: update.resolution_note.clone(),
-            };
+            let resolver_update = update.with_endpoints(endpoints);
 
             let child_data = match old_children.remove(name) {
                 Some(mut child_data) => {

@@ -306,6 +306,29 @@ impl Default for ResolverUpdate {
     }
 }
 
+impl ResolverUpdate {
+    /// Returns a copy of this update with `endpoints` replaced and every other
+    /// field cloned.
+    ///
+    /// LB policies that shard an update across children should use this
+    /// rather than constructing a new `ResolverUpdate`, so that no fields are
+    /// accidentally dropped.
+    pub fn with_endpoints(&self, endpoints: Result<Vec<Endpoint>, String>) -> Self {
+        let Self {
+            attributes,
+            endpoints: _,
+            service_config,
+            resolution_note,
+        } = self;
+        Self {
+            attributes: attributes.clone(),
+            endpoints,
+            service_config: service_config.clone(),
+            resolution_note: resolution_note.clone(),
+        }
+    }
+}
+
 /// An Endpoint is an address or a collection of addresses which reference one
 /// logical server.  Multiple addresses may be used if there are multiple ways
 /// which the server can be reached, e.g. via IPv4 and IPv6 addresses.
@@ -385,6 +408,32 @@ mod test {
 
     use super::*;
     use crate::byte_str::ByteStr;
+
+    #[test]
+    fn with_endpoints_preserves_other_fields() {
+        #[derive(Debug, PartialEq, Eq)]
+        struct Marker(u32);
+
+        let original = ResolverUpdate {
+            attributes: Attributes::new().add(Marker(7)),
+            endpoints: Err("original endpoints".to_string()),
+            service_config: Err("service config error".to_string()),
+            resolution_note: Some("note".to_string()),
+        };
+        let new_endpoints = vec![Endpoint::default()];
+
+        let updated = original.with_endpoints(Ok(new_endpoints.clone()));
+
+        assert_eq!(updated.endpoints, Ok(new_endpoints));
+        assert_eq!(updated.attributes.get::<Marker>(), Some(&Marker(7)));
+        assert_eq!(
+            updated.service_config.unwrap_err(),
+            "service config error".to_string()
+        );
+        assert_eq!(updated.resolution_note.as_deref(), Some("note"));
+        // The original is left untouched.
+        assert_eq!(original.endpoints, Err("original endpoints".to_string()));
+    }
 
     #[test]
     pub fn parse_target() {
