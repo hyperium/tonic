@@ -15,7 +15,7 @@ edition = "2024"
 [package.metadata.cargo_check_external_types]
 allowed_external_types = [
     "grpc::*",
-    "protobuf::*",
+    "google_protobuf::*",
 ]
 
 [features]
