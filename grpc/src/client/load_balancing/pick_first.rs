@@ -82,6 +82,7 @@ impl LbPolicyBuilder for PickFirstBuilder {
             selected: None,
             frontier_index: 0,
             last_connection_error: None,
+            resolution_note: None,
             shuffler: build_shuffler(),
             timer: None,
             steady_state: None,
@@ -116,6 +117,10 @@ pub(crate) struct PickFirstPolicy {
     // Detailed error tracking.
     last_connection_error: Option<String>,
 
+    // The resolution note from the latest resolver update. It is added to the
+    // status of every TRANSIENT_FAILURE this policy reports.
+    resolution_note: Option<String>,
+
     // Injectable shuffler for deterministic testing.
     shuffler: Arc<ShufflerFn>,
 
@@ -139,6 +144,7 @@ impl Debug for PickFirstPolicy {
             .field("frontier_index", &self.frontier_index)
             .field("connectivity_state", &self.connectivity_state)
             .field("last_connection_error", &self.last_connection_error)
+            .field("resolution_note", &self.resolution_note)
             .finish()
     }
 }
@@ -474,6 +480,12 @@ impl PickFirstPolicy {
             .last_connection_error
             .clone()
             .expect("no last connection error set");
+        // Include the resolver's note, which may explain the failure (e.g. why
+        // the address list is empty).
+        let err = match self.resolution_note.as_deref() {
+            Some(note) if !note.is_empty() => format!("{err} ({note})"),
+            _ => err,
+        };
         self.update_picker(
             ConnectivityState::TransientFailure,
             Arc::new(FailingPicker { error: err.clone() }),
@@ -549,6 +561,8 @@ impl LbPolicy for PickFirstPolicy {
 
         // Reset steady state on new update
         self.steady_state = None;
+
+        self.resolution_note = update.resolution_note;
 
         match update.endpoints {
             Ok(endpoints) => {
@@ -847,6 +861,22 @@ mod test {
                 },
             );
         }
+
+        /// Sends a resolver update with `endpoints` and resolution note
+        /// `note`, using the default config.
+        fn send_resolver_update_with_note(
+            &mut self,
+            endpoints: Vec<Endpoint>,
+            note: &str,
+        ) -> Result<(), String> {
+            let update = ResolverUpdate {
+                endpoints: Ok(endpoints),
+                resolution_note: Some(note.to_string()),
+                ..Default::default()
+            };
+            self.policy
+                .resolver_update(update, &PickFirstConfig::default(), &mut self.tcc)
+        }
     }
 
     // The LB can successfully connect to the first address, and updates the
@@ -1117,6 +1147,58 @@ mod test {
         );
 
         // Check that re-resolution was requested.
+        env.expect_request_resolution();
+    }
+
+    // The resolver's resolution note is added to the error of the
+    // TransientFailure picker, e.g. to explain why the address list is empty.
+    #[tokio::test]
+    async fn test_pick_first_empty_update_includes_resolution_note() {
+        let mut env = new_env();
+
+        let res = env.send_resolver_update_with_note(vec![], "no xDS config");
+
+        assert_eq!(res, Err("empty address list (no xDS config)".to_string()));
+        env.expect_failing_picker("empty address list (no xDS config)");
+        env.expect_request_resolution();
+    }
+
+    // The resolution note is also added to connection failures.
+    #[tokio::test]
+    async fn test_pick_first_connection_failure_includes_resolution_note() {
+        let mut env = new_env();
+        env.send_resolver_update_with_note(create_endpoints(vec!["addr1"], None), "note")
+            .unwrap();
+        env.expect_new_subchannel();
+        env.expect_connect();
+        env.expect_queuing_picker();
+
+        let sc1 = env.policy.subchannels[0].clone();
+        env.send_subchannel_update(
+            &sc1,
+            &SubchannelState {
+                connectivity_state: ConnectivityState::TransientFailure,
+                last_connection_error: Some("connection refused".to_string()),
+            },
+        );
+
+        env.expect_failing_picker("connection refused (note)");
+        env.expect_request_resolution();
+    }
+
+    // Each resolver update replaces the resolution note, so a note isn't used
+    // after an update without one.
+    #[tokio::test]
+    async fn test_pick_first_resolution_note_replaced_by_next_update() {
+        let mut env = new_env();
+        let _ = env.send_resolver_update_with_note(vec![], "old note");
+        env.expect_failing_picker("empty address list (old note)");
+        env.expect_request_resolution();
+
+        let res = env.send_resolver_update(vec![]);
+
+        assert_eq!(res, Err("empty address list".to_string()));
+        env.expect_failing_picker("empty address list");
         env.expect_request_resolution();
     }
 
