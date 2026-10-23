@@ -1,19 +1,12 @@
 {
-  description = "Description for the project";
+  description = "Tonic - A native gRPC client & server implementation with async/await support.";
 
   inputs = {
     flake-parts.url = "github:hercules-ci/flake-parts";
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    fenix = {
-      url = "github:nix-community/fenix";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
     git-hooks = {
       url = "github:cachix/git-hooks.nix";
-      inputs = {
-        nixpkgs.follows = "nixpkgs";
-      };
+      inputs.nixpkgs.follows = "nixpkgs";
     };
   };
 
@@ -36,15 +29,8 @@
           system,
           ...
         }:
-        let
-          rustToolchain = pkgs.fenix.stable;
-        in
         {
-          _module.args.pkgs = import inputs.nixpkgs {
-            inherit system;
-            overlays = [ inputs.fenix.overlays.default ];
-            config = { };
-          };
+          _module.args.pkgs = import inputs.nixpkgs { inherit system; };
 
           formatter = config.treefmt.build.wrapper;
           checks.formatting = config.treefmt.build.check self;
@@ -54,27 +40,14 @@
             settings.hooks = {
               actionlint.enable = true;
               shellcheck.enable = true;
-              clippy = {
-                enable = true;
-                packageOverrides = {
-                  cargo = rustToolchain.cargo;
-                  clippy = rustToolchain.clippy;
-                };
-              };
+              clippy.enable = true;
               cargo-check = {
                 enable = true;
-                package = rustToolchain.cargo;
-                entry = "${rustToolchain.cargo}/bin/cargo check --workspace --all-features";
+                entry = "${pkgs.lib.getExe pkgs.cargo} check --workspace --all-features";
                 files = "\\.rs$";
                 pass_filenames = false;
               };
-              rustfmt = {
-                enable = true;
-                packageOverrides = {
-                  rustfmt = rustToolchain.rustfmt;
-                  cargo = rustToolchain.cargo;
-                };
-              };
+              rustfmt.enable = true;
             };
           };
 
@@ -83,15 +56,13 @@
               cargo-nextest
               pre-commit
               cmake
+              protobuf
 
-              (rustToolchain.withComponents [
-                "cargo"
-                "clippy"
-                "rust-src"
-                "rustc"
-                "rustfmt"
-                "rust-analyzer"
-              ])
+              cargo
+              clippy
+              rustc
+              rustfmt
+              rust-analyzer
             ];
 
             hardeningDisable = [ "fortify" ];
