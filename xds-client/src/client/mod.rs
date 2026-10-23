@@ -182,7 +182,7 @@ impl XdsClient {
     /// # Example
     ///
     /// ```ignore
-    /// let mut watcher = client.watch::<Listener>("my-listener").await;
+    /// let mut watcher = client.watch::<Listener>("my-listener");
     /// while let Some(event) = watcher.next().await {
     ///     match event {
     ///         ResourceEvent::ResourceChanged { result: Ok(resource), done } => {
@@ -198,7 +198,7 @@ impl XdsClient {
     ///     }
     /// }
     /// ```
-    pub async fn watch<T: Resource>(&self, name: impl Into<String>) -> ResourceWatcher<T> {
+    pub fn watch<T: Resource>(&self, name: impl Into<String>) -> ResourceWatcher<T> {
         let name = name.into();
         let watcher_id = WatcherId::new();
         let (event_tx, event_rx) = mpsc::unbounded_channel();
