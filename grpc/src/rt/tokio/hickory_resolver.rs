@@ -100,7 +100,7 @@ impl DnsResolver {
             TokioResolver::builder_tokio().map_err(|err| err.to_string())?
         };
         let mut resolver_opts = ResolverOpts::default();
-        resolver_opts.ip_strategy = LookupIpStrategy::Ipv4AndIpv6;
+        resolver_opts.ip_strategy = LookupIpStrategy::Ipv6AndIpv4;
         Ok(DnsResolver {
             resolver: builder
                 .with_options(resolver_opts)
