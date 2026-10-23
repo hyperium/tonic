@@ -29,6 +29,8 @@ use bytes::Bytes;
 use std::any::Any;
 use std::sync::Arc;
 
+pub mod name;
+
 #[cfg(feature = "codegen-prost")]
 pub mod prost;
 

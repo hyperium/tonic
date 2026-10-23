@@ -84,6 +84,7 @@ pub mod metrics;
 pub mod resource;
 pub mod runtime;
 pub mod transport;
+pub mod uri;
 
 pub use client::config::{ClientConfig, ServerConfig};
 pub use client::retry::{Backoff, RetryPolicy};
@@ -95,6 +96,7 @@ pub use error::{Error, Result};
 pub use message::{DiscoveryRequest, DiscoveryResponse, ErrorDetail, Locality, Node, ResourceAny};
 pub use metrics::{Instrument, InstrumentKind, KeyValue, MetricsRecorder, StringValue, Value};
 
+pub use resource::name::{AuthorityKey, ResourceName};
 pub use resource::{DecodeResult, DecodedResource, Resource};
 pub use runtime::Runtime;
 pub use transport::{Transport, TransportBuilder, TransportReceiver, TransportSender};

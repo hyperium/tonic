@@ -66,6 +66,13 @@ pub enum Error {
     /// This indicates the resource has been deleted or was never created.
     #[error("resource does not exist")]
     ResourceDoesNotExist,
+
+    /// An `xdstp:` resource name could not be parsed.
+    #[error("unable to parse resource name {name:?}")]
+    InvalidResourceName {
+        /// The invalid resource name.
+        name: String,
+    },
 }
 
 /// Result type alias for xDS client operations.
