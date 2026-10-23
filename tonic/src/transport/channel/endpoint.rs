@@ -405,7 +405,7 @@ impl Endpoint {
                 ),
                 ..self
             }),
-            EndpointType::Uds(_) => Err(Error::new(error::Kind::InvalidTlsConfigForUds)),
+            EndpointType::Uds(_) => Err(Error::new(error::ErrorKind::InvalidTlsConfigForUds)),
         }
     }
 
@@ -445,7 +445,7 @@ impl Endpoint {
                 ),
                 ..self
             }),
-            EndpointType::Uds(_) => Err(Error::new(error::Kind::InvalidTlsConfigForUds)),
+            EndpointType::Uds(_) => Err(Error::new(error::ErrorKind::InvalidTlsConfigForUds)),
         }
     }
 
