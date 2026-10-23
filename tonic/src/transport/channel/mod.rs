@@ -165,7 +165,7 @@ impl Channel {
         E: Executor<Pin<Box<dyn Future<Output = ()> + Send>>> + Send + Sync + 'static,
     {
         let (tx, rx) = channel(capacity);
-        let list = DynamicServiceStream::new(rx);
+        let list = DynamicServiceStream::new(rx, tx.clone());
         (Self::balance(list, DEFAULT_BUFFER_SIZE, executor), tx)
     }
 

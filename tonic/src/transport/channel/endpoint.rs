@@ -71,6 +71,7 @@ pub struct Endpoint {
     pub(crate) tcp_keepalive_interval: Option<Duration>,
     pub(crate) tcp_keepalive_retries: Option<u32>,
     pub(crate) tcp_nodelay: bool,
+    pub(crate) eager_connect_errors: bool,
     pub(crate) http2_keep_alive_interval: Option<Duration>,
     pub(crate) http2_keep_alive_timeout: Option<Duration>,
     pub(crate) http2_keep_alive_while_idle: Option<bool>,
@@ -121,6 +122,7 @@ impl Endpoint {
             tcp_keepalive_interval: None,
             tcp_keepalive_retries: None,
             tcp_nodelay: true,
+            eager_connect_errors: false,
             http2_keep_alive_interval: None,
             http2_keep_alive_timeout: None,
             http2_keep_alive_while_idle: None,
@@ -152,6 +154,7 @@ impl Endpoint {
             tcp_keepalive_interval: None,
             tcp_keepalive_retries: None,
             tcp_nodelay: true,
+            eager_connect_errors: false,
             http2_keep_alive_interval: None,
             http2_keep_alive_timeout: None,
             http2_keep_alive_while_idle: None,
@@ -453,6 +456,33 @@ impl Endpoint {
     pub fn tcp_nodelay(self, enabled: bool) -> Self {
         Endpoint {
             tcp_nodelay: enabled,
+            ..self
+        }
+    }
+
+    /// Sets whether connection errors should be surfaced immediately, rather than only
+    /// once an actual call is made.
+    ///
+    /// When enabled, a failed connection attempt is reported right away instead of being
+    /// deferred and retried transparently on the next call.
+    ///
+    /// This has no effect on channels that connect eagerly which already surface their
+    /// initial connection error immediately; it only matters for lazily-connecting channels
+    /// (see [`Endpoint::connect_lazy`] and [`Endpoint::connect_with_connector_lazy`]).
+    ///
+    /// For endpoints used with
+    /// [`Channel::balance_channel`](crate::transport::Channel::balance_channel) or
+    /// [`Channel::balance_list`](crate::transport::Channel::balance_list), enabling this
+    /// lets the load balancer identify a broken backend immediately and skip it rather
+    /// than routing a call to it. Such a backend is removed from the balancer as soon
+    /// as its connection attempt fails; it automatically rejoins the balancer shortly
+    /// after (on a short, fixed backoff) rather than being lost until the caller
+    /// explicitly re-adds it.
+    ///
+    /// Defaults to `false`.
+    pub fn eager_connect_errors(self, enabled: bool) -> Self {
+        Endpoint {
+            eager_connect_errors: enabled,
             ..self
         }
     }

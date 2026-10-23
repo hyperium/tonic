@@ -29,7 +29,7 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
-use tokio::sync::mpsc::Receiver;
+use tokio::sync::mpsc::{Receiver, Sender};
 use tokio_stream::Stream;
 use tower::discover::Change as TowerChange;
 
@@ -44,15 +44,22 @@ pub enum Change<K, V> {
 
 pub(crate) struct DynamicServiceStream<K: Hash + Eq + Clone> {
     changes: Receiver<Change<K, Endpoint>>,
+    /// A sender back into the same channel `changes` reads from, handed to each
+    /// discovered [`Connection`] so it can re-insert itself after being evicted by
+    /// `Balance` for a connect failure. See [`Connection::lazy_for_discovery`].
+    reinsert: Sender<Change<K, Endpoint>>,
 }
 
 impl<K: Hash + Eq + Clone> DynamicServiceStream<K> {
-    pub(crate) fn new(changes: Receiver<Change<K, Endpoint>>) -> Self {
-        Self { changes }
+    pub(crate) fn new(
+        changes: Receiver<Change<K, Endpoint>>,
+        reinsert: Sender<Change<K, Endpoint>>,
+    ) -> Self {
+        Self { changes, reinsert }
     }
 }
 
-impl<K: Hash + Eq + Clone> Stream for DynamicServiceStream<K> {
+impl<K: Hash + Eq + Clone + Send + 'static> Stream for DynamicServiceStream<K> {
     type Item = Result<TowerChange<K, Connection>, crate::BoxError>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
@@ -60,7 +67,12 @@ impl<K: Hash + Eq + Clone> Stream for DynamicServiceStream<K> {
             Poll::Pending | Poll::Ready(None) => Poll::Pending,
             Poll::Ready(Some(change)) => match change {
                 Change::Insert(k, endpoint) => {
-                    let connection = Connection::lazy(endpoint.http_connector(), endpoint);
+                    let connection = Connection::lazy_for_discovery(
+                        endpoint.http_connector(),
+                        endpoint,
+                        k.clone(),
+                        self.reinsert.clone(),
+                    );
                     Poll::Ready(Some(Ok(TowerChange::Insert(k, connection))))
                 }
                 Change::Remove(k) => Poll::Ready(Some(Ok(TowerChange::Remove(k)))),

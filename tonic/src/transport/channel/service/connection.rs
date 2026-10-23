@@ -22,7 +22,7 @@
  *
  */
 
-use super::{AddOrigin, Reconnect, SharedExec, UserAgent};
+use super::{AddOrigin, Change, Reconnect, SharedExec, UserAgent};
 use crate::{
     body::Body,
     transport::{Endpoint, channel::BoxFuture, service::GrpcTimeout},
@@ -34,7 +34,9 @@ use hyper_util::rt::TokioTimer;
 use std::{
     fmt,
     task::{Context, Poll},
+    time::Duration,
 };
+use tokio::sync::mpsc;
 use tower::load::Load;
 use tower::{
     ServiceBuilder, ServiceExt,
@@ -44,12 +46,16 @@ use tower::{
 };
 use tower_service::Service;
 
+/// How long to wait before re-inserting a balanced endpoint that was evicted after a
+/// failed connection attempt. See [`ReinsertOnError`].
+const REINSERT_BACKOFF: Duration = Duration::from_secs(1);
+
 pub(crate) struct Connection {
     inner: BoxService<Request<Body>, Response<Body>, crate::BoxError>,
 }
 
 impl Connection {
-    fn new<C>(connector: C, endpoint: Endpoint, is_lazy: bool) -> Self
+    fn new<C>(connector: C, endpoint: Endpoint, is_lazy: bool, fail_early: bool) -> Self
     where
         C: Service<Uri> + Send + 'static,
         C::Error: Into<crate::BoxError> + Send,
@@ -102,7 +108,7 @@ impl Connection {
         let make_service =
             MakeSendRequestService::new(connector, endpoint.executor.clone(), settings);
 
-        let conn = Reconnect::new(make_service, endpoint.uri().clone(), is_lazy);
+        let conn = Reconnect::new(make_service, endpoint.uri().clone(), is_lazy, fail_early);
 
         Self {
             inner: BoxService::new(stack.layer(conn)),
@@ -119,7 +125,10 @@ impl Connection {
         C::Future: Unpin + Send,
         C::Response: rt::Read + rt::Write + Unpin + Send + 'static,
     {
-        Self::new(connector, endpoint, false).ready_oneshot().await
+        let fail_early = endpoint.eager_connect_errors;
+        Self::new(connector, endpoint, false, fail_early)
+            .ready_oneshot()
+            .await
     }
 
     pub(crate) fn lazy<C>(connector: C, endpoint: Endpoint) -> Self
@@ -129,7 +138,100 @@ impl Connection {
         C::Future: Send,
         C::Response: rt::Read + rt::Write + Unpin + Send + 'static,
     {
-        Self::new(connector, endpoint, true)
+        let fail_early = endpoint.eager_connect_errors;
+        Self::new(connector, endpoint, true, fail_early)
+    }
+
+    /// Like [`Connection::lazy`], but for connections managed by a discovery-driven
+    /// [`tower::balance::p2c::Balance`].
+    ///
+    /// `Balance` polls its services through a `tower::ready_cache::ReadyCache`, which
+    /// permanently evicts any service whose `poll_ready` returns `Err` and never
+    /// retries it on its own. Since [`Endpoint::eager_connect_errors`] intentionally
+    /// causes connect failures to surface from `poll_ready` (so `Balance` can skip a
+    /// broken endpoint instead of routing a call to it), a connection built here is
+    /// wrapped in [`ReinsertOnError`] so that an eviction like that is followed by an
+    /// automatic re-insert of the same key after a short backoff, instead of the
+    /// endpoint being lost until the caller notices and re-inserts it manually.
+    pub(crate) fn lazy_for_discovery<C, K>(
+        connector: C,
+        endpoint: Endpoint,
+        key: K,
+        reinsert: mpsc::Sender<Change<K, Endpoint>>,
+    ) -> Self
+    where
+        C: Service<Uri> + Send + 'static,
+        C::Error: Into<crate::BoxError> + Send,
+        C::Future: Send,
+        C::Response: rt::Read + rt::Write + Unpin + Send + 'static,
+        K: Clone + Send + 'static,
+    {
+        let fail_early = endpoint.eager_connect_errors;
+        let executor = endpoint.executor.clone();
+        let retry_endpoint = endpoint.clone();
+        let inner = Self::new(connector, endpoint, true, fail_early);
+
+        Self {
+            inner: BoxService::new(ReinsertOnError {
+                inner,
+                key,
+                endpoint: retry_endpoint,
+                executor,
+                reinsert,
+            }),
+        }
+    }
+}
+
+/// Wraps a discovery-managed [`Connection`] so that a `poll_ready` error (which causes
+/// `tower`'s `Balance`/`ReadyCache` to evict it permanently, see [`Connection::lazy_for_discovery`])
+/// is followed by scheduling a fresh [`Change::Insert`] for the same key after
+/// [`REINSERT_BACKOFF`], so the endpoint can rejoin the balancer on its own.
+struct ReinsertOnError<K> {
+    inner: Connection,
+    key: K,
+    endpoint: Endpoint,
+    executor: SharedExec,
+    reinsert: mpsc::Sender<Change<K, Endpoint>>,
+}
+
+impl<K> ReinsertOnError<K>
+where
+    K: Clone + Send + 'static,
+{
+    fn schedule_reinsert(&self) {
+        let key = self.key.clone();
+        let endpoint = self.endpoint.clone();
+        let reinsert = self.reinsert.clone();
+
+        Executor::<BoxFuture<'static, ()>>::execute(
+            &self.executor,
+            Box::pin(async move {
+                tokio::time::sleep(REINSERT_BACKOFF).await;
+                let _ = reinsert.send(Change::Insert(key, endpoint)).await;
+            }) as _,
+        );
+    }
+}
+
+impl<K> Service<Request<Body>> for ReinsertOnError<K>
+where
+    K: Clone + Send + 'static,
+{
+    type Response = Response<Body>;
+    type Error = crate::BoxError;
+    type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
+
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        let poll = Service::poll_ready(&mut self.inner, cx);
+        if let Poll::Ready(Err(_)) = &poll {
+            self.schedule_reinsert();
+        }
+        poll
+    }
+
+    fn call(&mut self, req: Request<Body>) -> Self::Future {
+        self.inner.call(req)
     }
 }
 
