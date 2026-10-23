@@ -39,7 +39,6 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::Once;
 
 use grpc::__unstable::client::load_balancing::ChannelController;
 use grpc::__unstable::client::load_balancing::LbConfigJson;
@@ -61,7 +60,6 @@ use grpc::StatusError;
 use serde::Deserialize;
 
 static POLICY_NAME: &str = "xds_cluster_manager_experimental";
-static START: Once = Once::new();
 
 // Target cluster option for an RPC, keyed by its `TypeId` in `CallOptions`.
 #[derive(Debug, Clone)]
@@ -216,9 +214,7 @@ impl Picker for ClusterPicker {
 
 /// Register cluster manager as a LbPolicy.
 pub(crate) fn reg() {
-    START.call_once(|| {
-        GLOBAL_LB_REGISTRY.add_builder(ClusterManagerBuilder {});
-    });
+    GLOBAL_LB_REGISTRY.add_builder(ClusterManagerBuilder {});
 }
 
 #[cfg(test)]
