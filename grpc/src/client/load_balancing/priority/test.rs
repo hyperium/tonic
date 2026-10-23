@@ -394,7 +394,7 @@ async fn switch_priority_failover_and_failback() {
     // child-1 is deactivated with a 15-minute timer.
     assert!(matches!(
         env.policy.child("child-1").unwrap().state(),
-        Some(ChildState::Deactivated(_))
+        Some(ChildState::Deactivated { .. })
     ));
 }
 
@@ -648,7 +648,7 @@ async fn deactivation_and_reactivation() {
     // child-1 is deactivated with a 15-minute timer.
     assert!(matches!(
         env.policy.child("child-1").unwrap().state(),
-        Some(ChildState::Deactivated(_))
+        Some(ChildState::Deactivated { .. })
     ));
 
     // While deactivated, background updates to child-1 do NOT cancel
@@ -657,8 +657,14 @@ async fn deactivation_and_reactivation() {
     env.expect_no_events();
     assert!(matches!(
         env.policy.child("child-1").unwrap().state(),
-        Some(ChildState::Deactivated(_))
+        Some(ChildState::Deactivated { .. })
     ));
+    // A deactivated child still tracks its 10-second failover timer; the timer
+    // expiring must not cancel deactivation or change the picker.
+    advance_time(Duration::from_secs(10)).await;
+    let data = env.expect_schedule_work();
+    env.policy.work(data, &mut env.tcc);
+    env.expect_no_events();
     // Advance time past 15 minutes (901 seconds).
     advance_time(Duration::from_secs(15 * 60 + 1)).await;
 
@@ -1039,5 +1045,154 @@ async fn exit_idle_wakes_only_current_priority() {
     env.policy.exit_idle(&mut env.tcc);
     assert_eq!(*calls.lock().unwrap(), vec!["child-0"]);
     env.expect_picker_state(ConnectivityState::Connecting);
+    env.expect_no_events();
+}
+
+/// A deactivated child that goes READY -> CONNECTING must run its failover timer.
+#[tokio::test(start_paused = true)]
+async fn deactivated_child_connecting_starts_failover_timer() {
+    reg_stub("stub_dft_0");
+    reg_stub("stub_dft_1");
+    reg_stub("stub_dft_2");
+
+    let mut env = setup_test_env();
+    let js = r#"{
+  "priorities": ["child-0", "child-1", "child-2"],
+  "children": {
+    "child-0": {"config": [{"stub_dft_0": {}}]},
+    "child-1": {"config": [{"stub_dft_1": {}}]},
+    "child-2": {"config": [{"stub_dft_2": {}}]}
+  }
+}"#;
+    let cfg = Builder {}
+        .parse_config(&LbConfigJson::new(js).unwrap())
+        .unwrap();
+    let update = ResolverUpdate {
+        attributes: Default::default(),
+        endpoints: Ok(vec![
+            new_test_endpoint("child-0", "127.0.0.1:8300"),
+            new_test_endpoint("child-1", "127.0.0.1:8301"),
+            new_test_endpoint("child-2", "127.0.0.1:8302"),
+        ]),
+        service_config: Ok(None),
+        resolution_note: None,
+    };
+    env.policy
+        .resolver_update(update, &cfg, &mut env.tcc)
+        .unwrap();
+
+    let sc0 = env.expect_new_subchannel();
+    env.expect_picker_state(ConnectivityState::Connecting);
+    env.send_subchannel_update(&sc0, &SubchannelState::transient_failure("a fails"));
+    env.expect_request_resolution();
+    let sc1 = env.expect_new_subchannel();
+    env.expect_picker_state(ConnectivityState::Connecting);
+    env.send_subchannel_update(&sc1, &SubchannelState::ready());
+    env.expect_picker_state(ConnectivityState::Ready);
+    env.send_subchannel_update(&sc1, &SubchannelState::transient_failure("b fails"));
+    env.expect_request_resolution();
+    let sc2 = env.expect_new_subchannel();
+    env.expect_picker_state(ConnectivityState::Connecting);
+    env.send_subchannel_update(&sc2, &SubchannelState::ready());
+    env.expect_picker_state(ConnectivityState::Ready);
+    env.send_subchannel_update(&sc1, &SubchannelState::ready());
+    env.expect_picker_state(ConnectivityState::Ready);
+    env.send_subchannel_update(&sc0, &SubchannelState::ready());
+    env.expect_picker_state(ConnectivityState::Ready);
+    assert!(matches!(
+        env.policy.child("child-1").unwrap().state(),
+        Some(ChildState::Deactivated { .. })
+    ));
+
+    // child-1 is deactivated while READY, then goes CONNECTING.
+    env.send_subchannel_update(&sc1, &SubchannelState::connecting());
+    env.expect_no_events();
+    advance_time(Duration::from_secs(11)).await;
+    let data = env.expect_schedule_work();
+    env.policy.work(data, &mut env.tcc);
+    env.expect_no_events();
+
+    // child-0 fails: child-1's timer has expired, so child-2 (READY) wins.
+    env.send_subchannel_update(&sc0, &SubchannelState::transient_failure("a fails again"));
+    env.expect_request_resolution();
+    env.expect_picker_state(ConnectivityState::Ready);
+}
+
+/// Deactivation preserves the remaining failover-timer time.
+#[tokio::test(start_paused = true)]
+async fn deactivated_child_preserves_pending_failover_timer() {
+    reg_stub("stub_dpt_0");
+    reg_stub("stub_dpt_1");
+    reg_stub("stub_dpt_2");
+
+    let mut env = setup_test_env();
+    let js = r#"{
+  "priorities": ["child-0", "child-1", "child-2"],
+  "children": {
+    "child-0": {"config": [{"stub_dpt_0": {}}]},
+    "child-1": {"config": [{"stub_dpt_1": {}}]},
+    "child-2": {"config": [{"stub_dpt_2": {}}]}
+  }
+}"#;
+    let cfg = Builder {}
+        .parse_config(&LbConfigJson::new(js).unwrap())
+        .unwrap();
+    let update = ResolverUpdate {
+        attributes: Default::default(),
+        endpoints: Ok(vec![
+            new_test_endpoint("child-0", "127.0.0.1:8400"),
+            new_test_endpoint("child-1", "127.0.0.1:8401"),
+            new_test_endpoint("child-2", "127.0.0.1:8402"),
+        ]),
+        service_config: Ok(None),
+        resolution_note: None,
+    };
+    env.policy
+        .resolver_update(update, &cfg, &mut env.tcc)
+        .unwrap();
+
+    let sc0 = env.expect_new_subchannel();
+    env.expect_picker_state(ConnectivityState::Connecting);
+    env.send_subchannel_update(&sc0, &SubchannelState::transient_failure("a fails"));
+    env.expect_request_resolution();
+    let sc1 = env.expect_new_subchannel();
+    env.expect_picker_state(ConnectivityState::Connecting);
+    env.send_subchannel_update(&sc1, &SubchannelState::transient_failure("b fails"));
+    env.expect_request_resolution();
+    let sc2 = env.expect_new_subchannel();
+    env.expect_picker_state(ConnectivityState::Connecting);
+
+    // child-2 READY, then child-1 READY -> child-1 active, child-2 deactivated.
+    env.send_subchannel_update(&sc2, &SubchannelState::ready());
+    env.expect_picker_state(ConnectivityState::Ready);
+    env.send_subchannel_update(&sc1, &SubchannelState::ready());
+    env.expect_picker_state(ConnectivityState::Ready);
+
+    // child-1 goes CONNECTING while active: its 10s timer starts.
+    env.send_subchannel_update(&sc1, &SubchannelState::connecting());
+    env.expect_picker_state(ConnectivityState::Connecting);
+
+    // child-0 READY deactivates child-1 with ~10s remaining on its timer.
+    env.send_subchannel_update(&sc0, &SubchannelState::ready());
+    env.expect_picker_state(ConnectivityState::Ready);
+    assert!(matches!(
+        env.policy.child("child-1").unwrap().state(),
+        Some(ChildState::Deactivated {
+            failover_timer: Some(_),
+            ..
+        })
+    ));
+
+    // 9s later child-0 fails; child-1's remaining timer is not restarted.
+    advance_time(Duration::from_secs(9)).await;
+    env.send_subchannel_update(&sc0, &SubchannelState::transient_failure("a fails again"));
+    env.expect_request_resolution();
+    env.expect_picker_state(ConnectivityState::Connecting);
+
+    // 1s later child-1's preserved timer expires; child-2 (READY) wins.
+    advance_time(Duration::from_secs(2)).await;
+    let data = env.expect_schedule_work();
+    env.policy.work(data, &mut env.tcc);
+    env.expect_picker_state(ConnectivityState::Ready);
     env.expect_no_events();
 }
