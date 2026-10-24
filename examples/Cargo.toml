@@ -13,6 +13,24 @@ name = "helloworld-client"
 path = "src/helloworld/client.rs"
 
 [[bin]]
+name = "socket-activation-tcp-server"
+path = "src/socket_activation/tcp_server.rs"
+
+[[bin]]
+name = "socket-activation-tcp-client"
+path = "src/socket_activation/tcp_client.rs"
+
+[[bin]]
+name = "socket-activation-uds-server"
+path = "src/socket_activation/uds_server.rs"
+required-features = ["uds"]
+
+[[bin]]
+name = "socket-activation-uds-client"
+path = "src/socket_activation/uds_client.rs"
+required-features = ["uds"]
+
+[[bin]]
 name = "blocking-server"
 path = "src/blocking/server.rs"
 

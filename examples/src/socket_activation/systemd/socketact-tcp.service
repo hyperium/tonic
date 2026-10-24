@@ -1,0 +1,11 @@
+# Service unit for the tonic TCP socket-activation example.
+#
+# Replace ExecStart with the absolute path to your built binary, e.g.
+#   /path/to/target/debug/socket-activation-tcp-server
+[Unit]
+Description=tonic socket-activation TCP example service
+Requires=socketact-tcp.socket
+After=socketact-tcp.socket
+
+[Service]
+ExecStart=/path/to/target/debug/socket-activation-tcp-server

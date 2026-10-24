@@ -1,0 +1,13 @@
+# Service unit for the tonic socket-activation UDS example.
+#
+# Replace ExecStart with the absolute path to your built binary, e.g.
+#   /path/to/target/debug/socket-activation-uds-server
+[Unit]
+Description=tonic socket-activation UDS example service
+Requires=socketact-uds.socket
+After=socketact-uds.socket
+
+[Service]
+ExecStart=/path/to/target/debug/socket-activation-uds-server
+# Must match ListenStream in socketact-uds.socket.
+Environment=TONIC_UDS_PATH=%t/tonic-sockact.sock

@@ -1,0 +1,9 @@
+# Socket unit for the tonic socket-activation UDS example.
+[Unit]
+Description=tonic socket-activation UDS example socket
+
+[Socket]
+ListenStream=%t/tonic-sockact.sock
+
+[Install]
+WantedBy=sockets.target

@@ -29,6 +29,8 @@ mod display_error_stack;
 mod incoming;
 mod io_stream;
 mod service;
+#[cfg(all(target_os = "linux", feature = "socket-activation"))]
+mod socket_activation;
 #[cfg(feature = "_tls-any")]
 mod tls;
 #[cfg(unix)]
@@ -59,7 +61,7 @@ pub use conn::TlsConnectInfo;
 use self::service::TlsAcceptor;
 
 #[cfg(unix)]
-pub use unix::UdsConnectInfo;
+pub use unix::{UdsConnectInfo, UnixIncoming};
 
 pub use incoming::TcpIncoming;
 

@@ -1,0 +1,9 @@
+# Socket unit for the tonic TCP socket-activation example.
+[Unit]
+Description=tonic socket-activation TCP example socket
+
+[Socket]
+ListenStream=[::1]:50051
+
+[Install]
+WantedBy=sockets.target

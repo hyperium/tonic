@@ -53,6 +53,12 @@ impl TcpIncoming {
     ///
     /// Returns a TcpIncoming if the socket address was successfully bound.
     ///
+    /// If the process was launched under a socket-activation manager
+    /// that passed a listening socket matching `addr` via the
+    /// `LISTEN_FDS` / `LISTEN_PID` environment variables, that inherited
+    /// descriptor is adopted instead of opening a new socket. This behavior
+    /// requires the `socket-activation` feature (Unix only).
+    ///
     /// # Examples
     /// ```no_run
     /// # use tower_service::Service;
@@ -81,7 +87,11 @@ impl TcpIncoming {
     /// # Ok(())
     /// # }
     pub fn bind(addr: SocketAddr) -> std::io::Result<Self> {
-        let std_listener = StdTcpListener::bind(addr)?;
+        let std_listener = match find_preallocated_fd(addr) {
+            Some(listener) => listener,
+            None => StdTcpListener::bind(addr)?,
+        };
+
         std_listener.set_nonblocking(true)?;
 
         Ok(TcpListener::from_std(std_listener)?.into())
@@ -248,9 +258,133 @@ fn make_keepalive(
     dirty.then_some(keepalive)
 }
 
+// Adopts a socket-activation fd whose address matches `addr`, if one was passed in.
+#[cfg(all(target_os = "linux", feature = "socket-activation"))]
+fn find_preallocated_fd(addr: SocketAddr) -> Option<StdTcpListener> {
+    use std::os::unix::io::FromRawFd;
+
+    let fd = super::socket_activation::find_preallocated_fd(|fd| tcp_fd_matches(fd, addr))?;
+
+    // SAFETY: `fd` is a validated, open activation descriptor. Ownership is taken
+    // once here, the returned listener becomes its sole owner.
+    Some(unsafe { StdTcpListener::from_raw_fd(fd) })
+}
+
+// Returns true if the listening socket at `fd` is bound to the requested address.
+#[cfg(all(target_os = "linux", feature = "socket-activation"))]
+fn tcp_fd_matches(fd: std::os::unix::io::RawFd, requested: SocketAddr) -> bool {
+    use std::mem::ManuallyDrop;
+    use std::os::unix::io::FromRawFd;
+
+    // SAFETY: `fd` is a valid, open activation descriptor. `ManuallyDrop` keeps
+    // ownership with the caller so it is not closed here, it is only borrowed to
+    // read the bound address.
+    let listener = ManuallyDrop::new(unsafe { StdTcpListener::from_raw_fd(fd) });
+    matches!(listener.local_addr(), Ok(local) if socket_addr_matches(local, requested))
+}
+
+// Compares two socket addresses, treating IPv4-mapped and wildcard binds as equal.
+#[cfg(all(target_os = "linux", feature = "socket-activation"))]
+fn socket_addr_matches(inherited: SocketAddr, requested: SocketAddr) -> bool {
+    use std::net::IpAddr;
+
+    if inherited.port() != requested.port() {
+        return false;
+    }
+
+    // Normalize IPv4-mapped IPv6 addresses to plain IPv4.
+    fn normalize(ip: IpAddr) -> IpAddr {
+        match ip {
+            IpAddr::V6(v6) => match v6.to_ipv4_mapped() {
+                Some(v4) => IpAddr::V4(v4),
+                None => IpAddr::V6(v6),
+            },
+            v4 => v4,
+        }
+    }
+
+    let inherited_ip = normalize(inherited.ip());
+    let requested_ip = normalize(requested.ip());
+
+    if inherited_ip == requested_ip {
+        return true;
+    }
+
+    requested_ip.is_unspecified() && inherited_ip.is_unspecified()
+}
+
+#[cfg(not(all(target_os = "linux", feature = "socket-activation")))]
+fn find_preallocated_fd(_addr: SocketAddr) -> Option<StdTcpListener> {
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use crate::transport::server::TcpIncoming;
+
+    #[cfg(all(target_os = "linux", feature = "socket-activation"))]
+    #[test]
+    fn socket_addr_matches_cases() {
+        use super::socket_addr_matches;
+
+        let parse = |s: &str| -> std::net::SocketAddr { s.parse().unwrap() };
+
+        assert!(socket_addr_matches(
+            parse("127.0.0.1:50051"),
+            parse("127.0.0.1:50051")
+        ));
+
+        assert!(!socket_addr_matches(
+            parse("127.0.0.1:50051"),
+            parse("127.0.0.1:1234")
+        ));
+
+        assert!(!socket_addr_matches(
+            parse("127.0.0.1:50051"),
+            parse("192.168.0.1:50051")
+        ));
+
+        assert!(socket_addr_matches(
+            parse("[::]:50051"),
+            parse("0.0.0.0:50051")
+        ));
+        assert!(socket_addr_matches(
+            parse("0.0.0.0:50051"),
+            parse("[::]:50051")
+        ));
+
+        assert!(socket_addr_matches(
+            parse("[::ffff:127.0.0.1]:50051"),
+            parse("127.0.0.1:50051")
+        ));
+
+        assert!(!socket_addr_matches(
+            parse("127.0.0.1:50051"),
+            parse("0.0.0.0:50051")
+        ));
+    }
+
+    #[cfg(all(target_os = "linux", feature = "socket-activation"))]
+    #[test]
+    fn is_listening_stream_socket_cases() {
+        use crate::transport::server::socket_activation::is_listening_stream_socket;
+        use std::os::unix::io::AsRawFd;
+
+        let tcp = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        assert!(is_listening_stream_socket(tcp.as_raw_fd()));
+
+        let udp = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+        assert!(!is_listening_stream_socket(udp.as_raw_fd()));
+
+        let raw = socket2::Socket::new(
+            socket2::Domain::IPV4,
+            socket2::Type::STREAM,
+            Some(socket2::Protocol::TCP),
+        )
+        .unwrap();
+        assert!(!is_listening_stream_socket(raw.as_raw_fd()));
+    }
+
     #[tokio::test]
     async fn one_tcpincoming_at_a_time() {
         let addr = "127.0.0.1:1322".parse().unwrap();
@@ -259,5 +393,25 @@ mod tests {
             let _t2 = TcpIncoming::bind(addr).unwrap_err();
         }
         let _t3 = TcpIncoming::bind(addr).unwrap();
+    }
+
+    #[cfg(all(target_os = "linux", feature = "socket-activation"))]
+    #[test]
+    fn scan_adopts_matching_tcp_fd() {
+        use super::tcp_fd_matches;
+        use crate::transport::server::socket_activation::scan_preallocated_fds;
+        use std::net::TcpListener as StdTcpListener;
+        use std::os::unix::io::AsRawFd;
+
+        let listener = StdTcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let fd = listener.as_raw_fd();
+
+        let n_fds = fd - 2;
+        let found = scan_preallocated_fds(std::process::id(), n_fds, |candidate| {
+            tcp_fd_matches(candidate, addr)
+        });
+
+        assert_eq!(found, Some(fd));
     }
 }

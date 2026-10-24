@@ -233,6 +233,23 @@ The autoload example requires the following crates installed globally:
 * [systemfd](https://crates.io/crates/systemfd)
 * [cargo-watch](https://crates.io/crates/cargo-watch)
 
+## Socket Activation (systemd)
+
+The servers adopt a listening socket passed by a socket-activation manager (via
+`LISTEN_FDS`/`LISTEN_PID`), or bind directly otherwise.
+
+### TCP
+
+```bash
+$ ./src/socket_activation/test_tcp.sh
+```
+
+### Unix domain socket
+
+```bash
+$ ./src/socket_activation/test_uds.sh
+```
+
 ## Richer Error
 
 Both clients and both servers do the same thing, but using the two different
