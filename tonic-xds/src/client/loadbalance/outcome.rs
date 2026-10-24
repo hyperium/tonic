@@ -138,6 +138,13 @@ impl OutcomeClassifier for HttpOutcomeClassifier {
 pub(crate) trait OutcomeSource {
     /// Borrow this response as a [`CallOutcome`].
     fn call_outcome(&self) -> CallOutcome<'_>;
+
+    /// Whether this response was produced locally before the endpoint was
+    /// called, such as an A32 circuit-breaker drop. The load balancer records
+    /// no outlier-detection outcome for these responses.
+    fn is_local_pre_endpoint_response(&self) -> bool {
+        false
+    }
 }
 
 impl<B> OutcomeSource for http::Response<B> {
@@ -146,6 +153,10 @@ impl<B> OutcomeSource for http::Response<B> {
             status: self.status(),
             headers: self.headers(),
         }
+    }
+
+    fn is_local_pre_endpoint_response(&self) -> bool {
+        crate::client::circuit_breaking::is_local_circuit_breaker_drop(self)
     }
 }
 

@@ -31,7 +31,7 @@
 //!    changes).
 //! 2. An [`EndpointManager`], which diffs the endpoint watch into
 //!    `Change::Insert` / `Change::Remove` events for the LB layer, connecting
-//!    each new endpoint through that connector.
+//!    each new endpoint through the connector of its cache generation.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -119,13 +119,13 @@ impl<MC> XdsClusterDiscovery<MC> {
 
 impl<MC: MakeConnector> ClusterDiscovery<EndpointAddress, MC::Service> for XdsClusterDiscovery<MC> {
     fn discover_cluster(&self, cluster_name: &str) -> BoxDiscover<EndpointAddress, MC::Service> {
-        let connector = Arc::new(ClusterConnector::spawn(
+        let connector = ClusterConnector::spawn(
             self.cache.clone(),
             cluster_name.to_string(),
             self.make_connector.clone(),
             #[cfg(feature = "_tls-any")]
             self.cert_registry.clone(),
-        ));
+        );
 
         EndpointManager::new(connector).discover_endpoints(self.cache.watch_endpoints(cluster_name))
     }
@@ -300,6 +300,7 @@ impl Connector for TlsConnector {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::xds::resource::circuit_breaking::CircuitBreakingConfig;
     use crate::xds::resource::cluster::{ClusterResource, LbPolicy};
 
     #[cfg(feature = "_tls-any")]
@@ -315,6 +316,7 @@ mod tests {
             eds_service_name: None,
             lb_policy: LbPolicy::RoundRobin,
             security: None,
+            circuit_breaking: CircuitBreakingConfig::default(),
         }
     }
 
@@ -325,6 +327,7 @@ mod tests {
             eds_service_name: None,
             lb_policy: LbPolicy::RoundRobin,
             security: Some(security),
+            circuit_breaking: CircuitBreakingConfig::default(),
         }
     }
 

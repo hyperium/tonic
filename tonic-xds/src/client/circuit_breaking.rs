@@ -22,7 +22,19 @@
  *
  */
 
-#![cfg_attr(not(test), allow(dead_code))]
+//! [gRFC A32] circuit breaking for xDS clusters.
+//!
+//! Every endpoint attempt reserves a slot from an in-flight counter shared
+//! process-wide by `{cluster, EDS service name}` and sized by the cluster's
+//! CDS `max_requests`. When no slot is free the attempt fails locally with
+//! `UNAVAILABLE` without reaching the endpoint; such drops are neither retried
+//! nor counted by outlier detection. The slot is held until the response body
+//! finishes, errors, or is dropped.
+//!
+//! [`CircuitBreakingMakeConnector`] applies this to gRPC channels at the
+//! per-cluster connector, so both load-balancer backends enforce it.
+//!
+//! [gRFC A32]: https://github.com/grpc/proposal/blob/master/A32-xds-circuit-breaking.md
 
 use std::fmt;
 use std::sync::{
@@ -38,9 +50,10 @@ use http::{Request, Response};
 use http_body::{Body, Frame};
 use pin_project_lite::pin_project;
 use tonic::body::Body as TonicBody;
-use tower::{BoxError, Layer, Service};
+use tower::load::Load;
+use tower::{BoxError, Service};
 
-use crate::client::route::RouteDecision;
+use crate::client::endpoint::{ClusterConfig, Connector, EndpointAddress, MakeConnector};
 use crate::common::async_util::BoxFuture;
 use crate::xds::resource::circuit_breaking::CircuitBreakingConfig;
 
@@ -155,6 +168,7 @@ impl ClusterCircuitBreakerRegistry {
         }
     }
 
+    #[cfg(test)]
     fn clear_state(&self, state: &ClusterCircuitBreakerState) {
         let _update_guard = state
             .update_lock
@@ -172,6 +186,7 @@ impl ClusterCircuitBreakerRegistry {
         self.inner.counters.cleanup_if_unused(&counter_key);
     }
 
+    #[cfg(test)]
     fn acquire(&self, cluster: &str) -> Result<Option<CircuitBreakerPermit>, CircuitBreakerLimit> {
         self.cluster_breaker(cluster).acquire()
     }
@@ -486,84 +501,96 @@ impl Drop for CircuitBreakerPermit {
     }
 }
 
-/// Tower layer that enforces A32 max in-flight requests per xDS cluster.
+/// A [`MakeConnector`] whose endpoints enforce their cluster's A32 limit.
 ///
-/// This layer must wrap the ready per-cluster dispatch service inside retries so
-/// each admitted call represents one upstream attempt rather than queued work.
-#[derive(Clone)]
-pub(crate) struct CircuitBreakingLayer {
+/// Every connector built for a cluster wraps its endpoints in a
+/// [`CircuitBreakingEndpointService`] bound to the cluster's shared breaker.
+/// An accepted CDS update refreshes the limit before its connector is
+/// published, so endpoints connected under an earlier update pick up the new
+/// limit too; a rejected update changes neither.
+///
+/// gRPC-only: the permit is held by the [`TonicBody`] response body, which a
+/// transport-generic response type cannot carry.
+pub(crate) struct CircuitBreakingMakeConnector<MC> {
+    inner: MC,
     circuit_breakers: ClusterCircuitBreakerRegistry,
-    breaker_cache: Arc<DashMap<String, Arc<ClusterCircuitBreaker>>>,
 }
 
-impl CircuitBreakingLayer {
-    pub(crate) fn new(circuit_breakers: ClusterCircuitBreakerRegistry) -> Self {
+impl<MC> CircuitBreakingMakeConnector<MC> {
+    pub(crate) fn new(inner: MC, circuit_breakers: ClusterCircuitBreakerRegistry) -> Self {
         Self {
+            inner,
             circuit_breakers,
-            breaker_cache: Arc::new(DashMap::new()),
         }
     }
 }
 
-impl fmt::Debug for CircuitBreakingLayer {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("CircuitBreakingLayer")
-            .field("circuit_breakers", &self.circuit_breakers)
-            .field("cached_clusters", &self.breaker_cache.len())
-            .finish()
+impl<MC: MakeConnector> MakeConnector for CircuitBreakingMakeConnector<MC> {
+    type Service = CircuitBreakingEndpointService<MC::Service>;
+
+    fn make_connector(
+        &self,
+        cluster: ClusterConfig<'_>,
+    ) -> Result<Arc<dyn Connector<Service = Self::Service> + Send + Sync>, BoxError> {
+        let cluster_name = cluster.name().to_owned();
+        let eds_service_name = cluster.eds_service_name;
+        let config = cluster.circuit_breaking;
+        let inner = self.inner.make_connector(cluster)?;
+        self.circuit_breakers
+            .set_cluster_config(cluster_name.as_str(), eds_service_name, config);
+        Ok(Arc::new(CircuitBreakingConnector {
+            inner,
+            breaker: self.circuit_breakers.cluster_breaker(&cluster_name),
+        }))
     }
 }
 
-impl<S> Layer<S> for CircuitBreakingLayer {
-    type Service = CircuitBreakingService<S>;
+struct CircuitBreakingConnector<S> {
+    inner: Arc<dyn Connector<Service = S> + Send + Sync>,
+    breaker: Arc<ClusterCircuitBreaker>,
+}
 
-    fn layer(&self, service: S) -> Self::Service {
-        CircuitBreakingService {
-            inner: service,
-            circuit_breakers: self.circuit_breakers.clone(),
-            breaker_cache: self.breaker_cache.clone(),
-        }
+impl<S: Send + 'static> Connector for CircuitBreakingConnector<S> {
+    type Service = CircuitBreakingEndpointService<S>;
+
+    fn connect(&self, addr: &EndpointAddress) -> BoxFuture<Self::Service> {
+        let connecting = self.inner.connect(addr);
+        let breaker = self.breaker.clone();
+        Box::pin(async move { CircuitBreakingEndpointService::new(connecting.await, breaker) })
     }
 }
 
+/// An endpoint service that reserves a slot from its cluster's breaker for
+/// every call.
+///
+/// The slot is taken when the call starts, after the load balancer has picked
+/// this endpoint and found it ready, so it covers one endpoint attempt rather
+/// than time spent queued or backed off between retries.
 #[derive(Clone)]
-pub(crate) struct CircuitBreakingService<S> {
+pub(crate) struct CircuitBreakingEndpointService<S> {
     inner: S,
-    circuit_breakers: ClusterCircuitBreakerRegistry,
-    breaker_cache: Arc<DashMap<String, Arc<ClusterCircuitBreaker>>>,
+    breaker: Arc<ClusterCircuitBreaker>,
 }
 
-impl<S: fmt::Debug> fmt::Debug for CircuitBreakingService<S> {
+impl<S> CircuitBreakingEndpointService<S> {
+    fn new(inner: S, breaker: Arc<ClusterCircuitBreaker>) -> Self {
+        Self { inner, breaker }
+    }
+}
+
+impl<S: fmt::Debug> fmt::Debug for CircuitBreakingEndpointService<S> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("CircuitBreakingService")
+        f.debug_struct("CircuitBreakingEndpointService")
             .field("inner", &self.inner)
-            .field("circuit_breakers", &self.circuit_breakers)
-            .field("cached_clusters", &self.breaker_cache.len())
+            .field("breaker", &self.breaker)
             .finish()
     }
 }
 
-impl<S> CircuitBreakingService<S> {
-    fn breaker_for_cluster(&self, cluster: &str) -> Arc<ClusterCircuitBreaker> {
-        if let Some(breaker) = self.breaker_cache.get(cluster) {
-            return breaker.clone();
-        }
-
-        self.breaker_cache
-            .entry(cluster.to_string())
-            .or_insert_with(|| self.circuit_breakers.cluster_breaker(cluster))
-            .clone()
-    }
-}
-
-impl<S, B> Service<Request<B>> for CircuitBreakingService<S>
+impl<S, B> Service<Request<B>> for CircuitBreakingEndpointService<S>
 where
-    S: Service<Request<B>, Response = Response<TonicBody>, Error: Into<BoxError>>
-        + Clone
-        + Send
-        + 'static,
+    S: Service<Request<B>, Response = Response<TonicBody>, Error: Into<BoxError>>,
     S::Future: Send + 'static,
-    B: Send + 'static,
 {
     type Response = Response<TonicBody>;
     type Error = BoxError;
@@ -574,32 +601,18 @@ where
     }
 
     fn call(&mut self, request: Request<B>) -> Self::Future {
-        let Some(cluster) = request
-            .extensions()
-            .get::<RouteDecision>()
-            .map(|route_decision| route_decision.cluster.as_str())
-        else {
-            return Box::pin(async {
-                Ok(status_response(tonic::Status::internal(
-                    CircuitBreakingError::NoRoutingDecision.to_string(),
-                )))
-            });
-        };
-
-        let breaker = self.breaker_for_cluster(cluster);
-        let permit = match breaker.acquire() {
+        let permit = match self.breaker.acquire() {
             Ok(permit) => permit,
             Err(limit) => {
                 return Box::pin(std::future::ready(Ok(limit_exceeded_response(
-                    &breaker.cluster,
+                    &self.breaker.cluster,
                     limit,
                 ))));
             }
         };
-        let clone = self.inner.clone();
-        let mut inner = std::mem::replace(&mut self.inner, clone);
+        let response = self.inner.call(request);
         Box::pin(async move {
-            let response = inner.call(request).await.map_err(Into::into)?;
+            let response = response.await.map_err(Into::into)?;
             match permit {
                 Some(permit) => {
                     Ok(response.map(|body| TonicBody::new(PermitBody::new(body, permit))))
@@ -610,10 +623,12 @@ where
     }
 }
 
-#[derive(Debug, Clone, thiserror::Error)]
-enum CircuitBreakingError {
-    #[error("No routing decision extension from the routing layer available")]
-    NoRoutingDecision,
+impl<S: Load> Load for CircuitBreakingEndpointService<S> {
+    type Metric = S::Metric;
+
+    fn load(&self) -> Self::Metric {
+        self.inner.load()
+    }
 }
 
 /// Marks responses rejected by the local circuit breaker before reaching an endpoint.
@@ -621,7 +636,7 @@ enum CircuitBreakingError {
 /// The retry layer uses this extension to distinguish local `UNAVAILABLE` drops
 /// from retryable responses returned by an upstream service.
 #[derive(Clone, Copy, Debug)]
-struct LocalCircuitBreakerDrop;
+pub(crate) struct LocalCircuitBreakerDrop;
 
 pub(crate) fn is_local_circuit_breaker_drop<B>(response: &Response<B>) -> bool {
     response
@@ -715,7 +730,6 @@ mod tests {
     use http::{HeaderMap, Request, Response};
     use http_body::{Body, Frame};
     use tonic::Code;
-    use tower::Layer;
     use tower::ServiceExt;
     use tower::service_fn;
 
@@ -729,13 +743,14 @@ mod tests {
     const EDS_SERVICE_NAME: &str = "eds-service-a";
 
     fn request() -> Request<TonicBody> {
-        let mut request = Request::new(TonicBody::empty());
-        request.extensions_mut().insert(RouteDecision {
-            cluster: CLUSTER.to_string(),
-            request_hash: None,
-            retry_config: None,
-        });
-        request
+        Request::new(TonicBody::empty())
+    }
+
+    fn endpoint<S>(
+        breakers: &ClusterCircuitBreakerRegistry,
+        service: S,
+    ) -> CircuitBreakingEndpointService<S> {
+        CircuitBreakingEndpointService::new(service, breakers.cluster_breaker(CLUSTER))
     }
 
     fn configured_breakers(max_requests: u32) -> ClusterCircuitBreakerRegistry {
@@ -757,7 +772,7 @@ mod tests {
             call_counter.fetch_add(1, Ordering::SeqCst);
             async { Ok::<_, BoxError>(Response::new(TonicBody::new(PendingBody))) }
         });
-        let mut service = CircuitBreakingLayer::new(breakers.clone()).layer(service);
+        let mut service = endpoint(&breakers, service);
 
         let first = service
             .ready()
@@ -803,7 +818,7 @@ mod tests {
             call_counter.fetch_add(1, Ordering::SeqCst);
             async { Ok::<_, BoxError>(Response::new(TonicBody::new(PendingBody))) }
         });
-        let mut service = CircuitBreakingLayer::new(breakers.clone()).layer(service);
+        let mut service = endpoint(&breakers, service);
 
         let first = service
             .ready()
@@ -878,7 +893,7 @@ mod tests {
                 state: BodyState::Data,
             })))
         });
-        let mut service = CircuitBreakingLayer::new(breakers.clone()).layer(service);
+        let mut service = endpoint(&breakers, service);
 
         let response = service
             .ready()
@@ -905,7 +920,7 @@ mod tests {
         let service = service_fn(|_request: Request<TonicBody>| async {
             Ok::<_, BoxError>(Response::new(TonicBody::new(ErrorBody { emitted: false })))
         });
-        let mut service = CircuitBreakingLayer::new(breakers.clone()).layer(service);
+        let mut service = endpoint(&breakers, service);
 
         let response = service
             .ready()
@@ -928,7 +943,7 @@ mod tests {
         let service = service_fn(|_request: Request<TonicBody>| async {
             std::future::pending::<Result<Response<TonicBody>, BoxError>>().await
         });
-        let mut service = CircuitBreakingLayer::new(breakers.clone()).layer(service);
+        let mut service = endpoint(&breakers, service);
 
         let mut future = service.ready().await.unwrap().call(request());
         std::future::poll_fn(|cx| match Future::poll(Pin::new(&mut future), cx) {
@@ -943,26 +958,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn reports_missing_route_decision_as_grpc_status() {
-        let service = service_fn(|_request: Request<TonicBody>| async {
-            Ok::<_, BoxError>(Response::new(TonicBody::empty()))
-        });
-        let mut service =
-            CircuitBreakingLayer::new(ClusterCircuitBreakerRegistry::new_for_test()).layer(service);
-
-        let response = service
-            .ready()
-            .await
-            .unwrap()
-            .call(Request::new(TonicBody::empty()))
-            .await
-            .unwrap();
-        let status = tonic::Status::from_header_map(response.headers()).unwrap();
-        assert_eq!(status.code(), Code::Internal);
-        assert!(status.message().contains("No routing decision"));
-    }
-
-    #[tokio::test]
     async fn oneshot_honors_config_after_consuming_service() {
         let calls = Arc::new(AtomicU32::new(0));
         let call_counter = calls.clone();
@@ -970,7 +965,8 @@ mod tests {
             call_counter.fetch_add(1, Ordering::SeqCst);
             async { Ok::<_, BoxError>(Response::new(TonicBody::empty())) }
         });
-        let service = CircuitBreakingLayer::new(configured_breakers(0)).layer(service);
+        let breakers = configured_breakers(0);
+        let service = endpoint(&breakers, service);
 
         let response = service.oneshot(request()).await.unwrap();
         let status = tonic::Status::from_header_map(response.headers()).unwrap();
@@ -1000,8 +996,7 @@ mod tests {
         );
         let mut service = tower::ServiceBuilder::new()
             .layer(RetryLayer::new(policy.into_shared()))
-            .layer(CircuitBreakingLayer::new(breakers.clone()))
-            .service(service);
+            .service(endpoint(&breakers, service));
 
         let response = service
             .ready()
@@ -1114,7 +1109,7 @@ mod tests {
             call_counter.fetch_add(1, Ordering::SeqCst);
             async { Ok::<_, BoxError>(Response::new(TonicBody::empty())) }
         });
-        let mut service = CircuitBreakingLayer::new(breakers.clone()).layer(service);
+        let mut service = endpoint(&breakers, service);
 
         let first = service
             .ready()
@@ -1206,7 +1201,7 @@ mod tests {
             ready_budget: Arc::new(AtomicU32::new(0)),
             calls: calls.clone(),
         };
-        let mut service = CircuitBreakingLayer::new(breakers.clone()).layer(service);
+        let mut service = endpoint(&breakers, service);
 
         let mut ready = Box::pin(service.ready());
         std::future::poll_fn(|cx| match ready.as_mut().poll(cx) {
@@ -1217,6 +1212,120 @@ mod tests {
 
         assert_eq!(breakers.in_flight(CLUSTER), 0);
         assert_eq!(calls.load(Ordering::SeqCst), 0);
+    }
+
+    /// Every CDS update that yields a connector refreshes the cluster's limit,
+    /// including for endpoints connected before it; a rejected one does not.
+    #[tokio::test]
+    async fn accepted_cds_updates_set_the_limit_for_connected_endpoints() {
+        let make = CircuitBreakingMakeConnector::new(
+            TestMakeConnector::default(),
+            ClusterCircuitBreakerRegistry::new_for_test(),
+        );
+        let connector = make_connector(&make, 1).unwrap();
+        let mut endpoint = connector
+            .connect(&EndpointAddress::new("10.0.0.1", 8080))
+            .await;
+        let mut call = async || {
+            endpoint
+                .ready()
+                .await
+                .unwrap()
+                .call(request())
+                .await
+                .unwrap()
+        };
+
+        let first = call().await;
+        assert!(tonic::Status::from_header_map(first.headers()).is_none());
+        assert!(is_local_circuit_breaker_drop(&call().await));
+
+        make.inner.reject.store(true, Ordering::SeqCst);
+        assert!(make_connector(&make, 2).is_err());
+        assert!(is_local_circuit_breaker_drop(&call().await));
+
+        make.inner.reject.store(false, Ordering::SeqCst);
+        make_connector(&make, 2).unwrap();
+        let second = call().await;
+        assert!(tonic::Status::from_header_map(second.headers()).is_none());
+    }
+
+    fn make_connector(
+        make: &CircuitBreakingMakeConnector<TestMakeConnector>,
+        max_requests: u32,
+    ) -> Result<
+        Arc<dyn Connector<Service = CircuitBreakingEndpointService<PendingEndpoint>> + Send + Sync>,
+        BoxError,
+    > {
+        use crate::xds::resource::cluster::{ClusterResource, LbPolicy};
+
+        let cluster = ClusterResource {
+            name: CLUSTER.to_string(),
+            eds_service_name: None,
+            lb_policy: LbPolicy::RoundRobin,
+            security: None,
+            circuit_breaking: CircuitBreakingConfig { max_requests },
+        };
+        #[cfg(feature = "_tls-any")]
+        let registry = crate::xds::cert_provider::CertProviderRegistry::from_bootstrap(
+            &Default::default(),
+            Default::default(),
+        )
+        .unwrap();
+        make.make_connector(ClusterConfig::from_resource(
+            &cluster,
+            #[cfg(feature = "_tls-any")]
+            &registry,
+        ))
+    }
+
+    /// Builds connectors to [`PendingEndpoint`]s, or rejects the update while
+    /// `reject` is set.
+    #[derive(Default)]
+    struct TestMakeConnector {
+        reject: std::sync::atomic::AtomicBool,
+    }
+
+    impl MakeConnector for TestMakeConnector {
+        type Service = PendingEndpoint;
+
+        fn make_connector(
+            &self,
+            _cluster: ClusterConfig<'_>,
+        ) -> Result<Arc<dyn Connector<Service = PendingEndpoint> + Send + Sync>, BoxError> {
+            if self.reject.load(Ordering::SeqCst) {
+                return Err("rejected".into());
+            }
+            Ok(Arc::new(PendingConnector))
+        }
+    }
+
+    struct PendingConnector;
+
+    impl Connector for PendingConnector {
+        type Service = PendingEndpoint;
+
+        fn connect(&self, _addr: &EndpointAddress) -> BoxFuture<PendingEndpoint> {
+            Box::pin(async { PendingEndpoint })
+        }
+    }
+
+    /// An endpoint whose responses stay in flight until dropped.
+    #[derive(Clone)]
+    struct PendingEndpoint;
+
+    impl Service<Request<TonicBody>> for PendingEndpoint {
+        type Response = Response<TonicBody>;
+        type Error = BoxError;
+        type Future = std::future::Ready<Result<Self::Response, Self::Error>>;
+
+        fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+            Poll::Ready(Ok(()))
+        }
+
+        fn call(&mut self, _request: Request<TonicBody>) -> Self::Future {
+            std::future::ready(Ok(Response::new(TonicBody::new(PendingBody))))
+        }
     }
 
     #[derive(Clone, Debug)]
