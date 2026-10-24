@@ -44,6 +44,7 @@ use std::collections::{HashMap, HashSet};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
+use std::time::Duration;
 
 use futures_core::Stream;
 use tokio_stream::{StreamExt, StreamMap};
@@ -101,6 +102,12 @@ struct CascadeState {
     rds_watcher: Option<ResourceWatcher<RouteConfigResource>>,
     /// Active RDS name to detect changes across LDS updates.
     rds_name: Option<String>,
+    /// Latest route config received for `rds_name`, as received (without the
+    /// listener's defaults), so a listener-only change can be republished.
+    rds_route_config: Option<Arc<RouteConfigResource>>,
+    /// The current listener's HCM default max stream duration (gRFC A31),
+    /// applied to routes that set none when a route config is published.
+    listener_max_stream_duration: Option<Duration>,
     /// Per-cluster CDS watchers, keyed by cluster name.
     cds_watchers: StreamMap<String, WatcherStream<ClusterResource>>,
     /// Per-cluster EDS watchers, keyed by cluster name.
@@ -114,6 +121,8 @@ impl CascadeState {
         Self {
             rds_watcher: None,
             rds_name: None,
+            rds_route_config: None,
+            listener_max_stream_duration: None,
             cds_watchers: StreamMap::new(),
             eds_watchers: StreamMap::new(),
             eds_names: HashMap::new(),
@@ -149,6 +158,7 @@ impl CascadeState {
                     let Some(event) = rds_event else {
                         self.rds_watcher = None;
                         self.rds_name = None;
+                        self.rds_route_config = None;
                         continue;
                     };
                     self.handle_rds(event, &xds_client, &cache).await;
@@ -180,21 +190,31 @@ impl CascadeState {
                 result: Ok(listener),
                 done,
             } => {
+                let listener_msd_changed =
+                    self.listener_max_stream_duration != listener.max_stream_duration;
+                self.listener_max_stream_duration = listener.max_stream_duration;
                 match &listener.route_source {
                     RouteSource::Inline(rc) => {
                         // Drop any existing RDS watcher — routes are inline.
                         self.rds_watcher = None;
                         self.rds_name = None;
+                        self.rds_route_config = None;
 
                         let rc = Arc::new(rc.clone());
-                        cache.update_route_config(Arc::clone(&rc));
+                        self.publish_route_config(&rc, cache);
                         self.reconcile_clusters(&rc, xds_client, cache).await;
                     }
                     RouteSource::Rds(rds_name) => {
                         if self.rds_name.as_deref() != Some(rds_name) {
+                            // Keep serving the previous route config until the
+                            // new one arrives; it is published from `handle_rds`.
                             self.rds_watcher =
                                 Some(xds_client.watch::<RouteConfigResource>(rds_name).await);
                             self.rds_name = Some(rds_name.clone());
+                            self.rds_route_config = None;
+                        } else if listener_msd_changed && let Some(rc) = &self.rds_route_config {
+                            // Same route config, new listener defaults.
+                            self.publish_route_config(rc, cache);
                         }
                     }
                 }
@@ -221,7 +241,8 @@ impl CascadeState {
                 result: Ok(rc),
                 done,
             } => {
-                cache.update_route_config(Arc::clone(&rc));
+                self.publish_route_config(&rc, cache);
+                self.rds_route_config = Some(Arc::clone(&rc));
                 self.reconcile_clusters(&rc, xds_client, cache).await;
                 drop(done);
             }
@@ -229,6 +250,20 @@ impl CascadeState {
             ResourceEvent::ResourceChanged { result: Err(_), .. }
             | ResourceEvent::AmbientError { .. } => {}
         }
+    }
+
+    /// Publishes `rc` with the listener's default max stream duration applied
+    /// to routes that set none (gRFC A31), so routing reads a single per-route
+    /// value.
+    fn publish_route_config(&self, rc: &Arc<RouteConfigResource>, cache: &XdsCache) {
+        let rc = match self.listener_max_stream_duration {
+            // Zero means no limit, the same as unset, so there is nothing to apply.
+            Some(default) if !default.is_zero() => {
+                Arc::new((**rc).clone().with_default_max_stream_duration(default))
+            }
+            _ => Arc::clone(rc),
+        };
+        cache.update_route_config(rc);
     }
 
     async fn handle_cds(
@@ -342,6 +377,7 @@ mod tests {
                         },
                         action: RouteConfigAction::Cluster((*c).into()),
                         retry_config: None,
+                        max_stream_duration: None,
                     })
                     .collect(),
             }],
@@ -368,18 +404,28 @@ mod tests {
                             },
                             action: RouteConfigAction::Cluster((*c).into()),
                             retry_config: None,
+                            max_stream_duration: None,
                         })
                         .collect(),
                 }],
                 metadata: Default::default(),
             }),
+            max_stream_duration: None,
         })
     }
 
     fn make_listener_rds(rds_name: &str) -> Arc<ListenerResource> {
+        make_listener_rds_with_msd(rds_name, None)
+    }
+
+    fn make_listener_rds_with_msd(
+        rds_name: &str,
+        max_stream_duration: Option<Duration>,
+    ) -> Arc<ListenerResource> {
         Arc::new(ListenerResource {
             name: "listener".into(),
             route_source: RouteSource::Rds(rds_name.into()),
+            max_stream_duration,
         })
     }
 
@@ -620,6 +666,81 @@ mod tests {
         assert_eq!(state.rds_name.as_deref(), Some("rc"));
     }
 
+    /// The route config currently published by `cache`.
+    async fn published(cache: &XdsCache) -> Arc<RouteConfigResource> {
+        cache.watch_route_config().next().await.unwrap()
+    }
+
+    /// The max stream duration of the published config's first route.
+    async fn published_msd(cache: &XdsCache) -> Option<Duration> {
+        published(cache).await.virtual_hosts[0].routes[0].max_stream_duration
+    }
+
+    #[tokio::test]
+    async fn handle_lds_inline_applies_listener_max_stream_duration() {
+        let cache = test_cache();
+        let client = test_client();
+        let mut state = CascadeState::new();
+
+        let mut listener = Arc::into_inner(make_listener_inline(&["c1"])).unwrap();
+        listener.max_stream_duration = Some(Duration::from_secs(4));
+        state
+            .handle_lds(ok_event(Arc::new(listener)), &client, &cache)
+            .await;
+
+        assert_eq!(published_msd(&cache).await, Some(Duration::from_secs(4)));
+    }
+
+    #[tokio::test]
+    async fn rds_route_config_follows_listener_max_stream_duration() {
+        let cache = test_cache();
+        let client = test_client();
+        let mut state = CascadeState::new();
+        let secs = |s| Some(Duration::from_secs(s));
+
+        // The RDS config is published with the listener's default applied.
+        let listener = make_listener_rds_with_msd("rc", secs(7));
+        state
+            .handle_lds(ok_event(Arc::clone(&listener)), &client, &cache)
+            .await;
+        let rc = make_route_config("rc", &["c1"]);
+        state
+            .handle_rds(ok_event(Arc::clone(&rc)), &client, &cache)
+            .await;
+        let config = published(&cache).await;
+        assert_eq!(config.name, "rc");
+        assert_eq!(published_msd(&cache).await, secs(7));
+
+        // An unchanged listener does not republish.
+        state.handle_lds(ok_event(listener), &client, &cache).await;
+        assert!(Arc::ptr_eq(&published(&cache).await, &config));
+
+        // A listener-only change republishes the route config with the new
+        // default, applied to the config as received rather than the old one.
+        let listener = make_listener_rds_with_msd("rc", secs(3));
+        state.handle_lds(ok_event(listener), &client, &cache).await;
+        assert_eq!(published_msd(&cache).await, secs(3));
+        let listener = make_listener_rds_with_msd("rc", None);
+        state.handle_lds(ok_event(listener), &client, &cache).await;
+        assert!(Arc::ptr_eq(&published(&cache).await, &rc));
+
+        // A new RDS name keeps serving the old config until the new one arrives,
+        // which is then published with the new default.
+        let listener = make_listener_rds_with_msd("rc-2", secs(9));
+        state.handle_lds(ok_event(listener), &client, &cache).await;
+        assert!(Arc::ptr_eq(&published(&cache).await, &rc));
+
+        state
+            .handle_rds(
+                ok_event(make_route_config("rc-2", &["c1"])),
+                &client,
+                &cache,
+            )
+            .await;
+        assert_eq!(published(&cache).await.name, "rc-2");
+        assert_eq!(published_msd(&cache).await, secs(9));
+    }
+
     /// End-to-end replica of the production Istio hang: an RDS update that
     /// references far more clusters than the xds-client worker's command
     /// channel buffers (64), reconciled through the real cascade path —
@@ -633,7 +754,6 @@ mod tests {
     /// behavior and completes under the fixed worker.
     #[tokio::test]
     async fn rds_referencing_many_clusters_reconciles_without_deadlock() {
-        use std::time::Duration;
         use xds_client::{
             ClientConfig, Node, ProstCodec, TokioRuntime, TonicTransportBuilder,
             XdsClient as RealXdsClient,

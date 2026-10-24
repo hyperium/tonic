@@ -159,12 +159,60 @@ pub(crate) async fn spawn_fail_first_n_server(
     msg: &str,
     fail_first_n: u32,
 ) -> Result<TestServer, Box<dyn Error>> {
+    spawn_plaintext_server(FailFirstNGreeter::new(msg, fail_first_n)).await
+}
+
+/// A greeter whose behavior is scripted by the request name: it stalls for
+/// `delay` before answering [`ScriptedGreeter::SLOW`], fails
+/// [`ScriptedGreeter::FAIL`] with UNAVAILABLE, and answers all others
+/// immediately.
+pub(crate) struct ScriptedGreeter {
+    msg: String,
+    delay: std::time::Duration,
+}
+
+impl ScriptedGreeter {
+    /// The request name that makes the greeter stall.
+    pub(crate) const SLOW: &'static str = "slow";
+    /// The request name that makes the greeter fail with UNAVAILABLE.
+    pub(crate) const FAIL: &'static str = "fail";
+}
+
+#[tonic::async_trait]
+impl Greeter for ScriptedGreeter {
+    async fn say_hello(&self, req: Request<HelloRequest>) -> Result<Response<HelloReply>, Status> {
+        let name = req.into_inner().name;
+        match name.as_str() {
+            Self::SLOW => tokio::time::sleep(self.delay).await,
+            Self::FAIL => return Err(Status::unavailable("scripted failure")),
+            _ => {}
+        }
+        Ok(Response::new(HelloReply {
+            message: format!("{}: {name}", self.msg),
+        }))
+    }
+}
+
+/// Spawns a [`ScriptedGreeter`] server that stalls slow requests for `delay`.
+pub(crate) async fn spawn_scripted_server(
+    msg: &str,
+    delay: std::time::Duration,
+) -> Result<TestServer, Box<dyn Error>> {
+    spawn_plaintext_server(ScriptedGreeter {
+        msg: msg.to_string(),
+        delay,
+    })
+    .await
+}
+
+/// Spawns a plaintext gRPC server for `greeter` on an ephemeral port.
+async fn spawn_plaintext_server<G: Greeter>(greeter: G) -> Result<TestServer, Box<dyn Error>> {
     let listener = TcpListener::bind("127.0.0.1:0").await?;
     let addr = listener.local_addr()?;
     let incoming = tokio_stream::wrappers::TcpListenerStream::new(listener);
 
     let (tx, rx) = oneshot::channel();
-    let svc = GreeterServer::new(FailFirstNGreeter::new(msg, fail_first_n));
+    let svc = GreeterServer::new(greeter);
 
     let handle = tokio::spawn(async move {
         Server::builder()

@@ -24,6 +24,8 @@
 
 //! Validated Listener resource (LDS).
 
+use std::time::Duration;
+
 use bytes::Bytes;
 use envoy_types::pb::envoy::config::listener::v3::Listener;
 use envoy_types::pb::envoy::extensions::filters::network::http_connection_manager::v3::{
@@ -33,6 +35,7 @@ use prost::Message;
 use xds_client::resource::TypeUrl;
 use xds_client::{Error, Resource};
 
+use super::proto_duration;
 use super::route_config::RouteConfigResource;
 
 /// How the listener obtains its route configuration.
@@ -52,6 +55,11 @@ pub(crate) enum RouteSource {
 pub(crate) struct ListenerResource {
     pub name: String,
     pub route_source: RouteSource,
+    /// gRFC A31 default max stream duration from
+    /// `HttpConnectionManager.common_http_protocol_options.max_stream_duration`,
+    /// applied to routes that set no `RouteAction.max_stream_duration`. `None`
+    /// when unset; `Some(ZERO)` means no limit.
+    pub max_stream_duration: Option<Duration>,
 }
 
 impl Resource for ListenerResource {
@@ -86,6 +94,20 @@ impl Resource for ListenerResource {
             Error::Validation(format!("failed to decode HttpConnectionManager: {e}"))
         })?;
 
+        let max_stream_duration = hcm
+            .common_http_protocol_options
+            .as_ref()
+            .and_then(|opts| opts.max_stream_duration.as_ref())
+            .map(|d| {
+                proto_duration(d).ok_or_else(|| {
+                    Error::Validation(
+                        "common_http_protocol_options.max_stream_duration is not a valid duration"
+                            .into(),
+                    )
+                })
+            })
+            .transpose()?;
+
         let route_specifier = hcm.route_specifier.ok_or_else(|| {
             Error::Validation("HttpConnectionManager missing route_specifier".into())
         })?;
@@ -98,6 +120,7 @@ impl Resource for ListenerResource {
                 Ok(ListenerResource {
                     name,
                     route_source: RouteSource::Rds(rds.route_config_name),
+                    max_stream_duration,
                 })
             }
             RouteSpecifier::RouteConfig(route_config) => {
@@ -105,6 +128,7 @@ impl Resource for ListenerResource {
                 Ok(ListenerResource {
                     name,
                     route_source: RouteSource::Inline(validated),
+                    max_stream_duration,
                 })
             }
             RouteSpecifier::ScopedRoutes(_) => Err(Error::Validation(
@@ -133,13 +157,21 @@ mod tests {
     use super::*;
 
     fn make_rds_listener(name: &str, route_config_name: &str) -> Listener {
+        make_rds_listener_with_hcm(name, route_config_name, HttpConnectionManager::default())
+    }
+
+    fn make_rds_listener_with_hcm(
+        name: &str,
+        route_config_name: &str,
+        hcm: HttpConnectionManager,
+    ) -> Listener {
         let rds = Rds {
             route_config_name: route_config_name.to_string(),
             ..Default::default()
         };
         let hcm = HttpConnectionManager {
             route_specifier: Some(RouteSpecifier::Rds(rds)),
-            ..Default::default()
+            ..hcm
         };
         let hcm_any = Any {
             type_url: "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager".to_string(),
@@ -257,5 +289,39 @@ mod tests {
         assert_eq!(validated.name, "inline-listener");
         assert!(matches!(&validated.route_source, RouteSource::Inline(_)));
         assert!(validated.route_config_name().is_none());
+    }
+
+    fn hcm_with_max_stream_duration(seconds: i64, nanos: i32) -> HttpConnectionManager {
+        use envoy_types::pb::envoy::config::core::v3::HttpProtocolOptions;
+        use envoy_types::pb::google::protobuf::Duration as ProtoDuration;
+        HttpConnectionManager {
+            common_http_protocol_options: Some(HttpProtocolOptions {
+                max_stream_duration: Some(ProtoDuration { seconds, nanos }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn test_max_stream_duration_parsed_from_hcm() {
+        let validated =
+            ListenerResource::validate(make_rds_listener("l", "rc")).expect("should validate");
+        assert_eq!(validated.max_stream_duration, None);
+
+        // Zero ("no limit") is kept rather than collapsed to unset.
+        for (seconds, want) in [(2, Duration::from_secs(2)), (0, Duration::ZERO)] {
+            let hcm = hcm_with_max_stream_duration(seconds, 0);
+            let listener = make_rds_listener_with_hcm("l", "rc", hcm);
+            let validated = ListenerResource::validate(listener).expect("should validate");
+            assert_eq!(validated.max_stream_duration, Some(want));
+        }
+    }
+
+    #[test]
+    fn test_invalid_max_stream_duration_is_rejected() {
+        let listener = make_rds_listener_with_hcm("l", "rc", hcm_with_max_stream_duration(-1, 0));
+        let err = ListenerResource::validate(listener).unwrap_err();
+        assert!(err.to_string().contains("max_stream_duration"), "{err}");
     }
 }

@@ -37,6 +37,7 @@ use prost::Message;
 use xds_client::resource::TypeUrl;
 use xds_client::{Error, Resource};
 
+use super::proto_duration;
 use super::safe_regex::SafeRegex;
 use super::string_matcher::StringMatcher;
 /// A `typed_filter_metadata` entry — a `google.protobuf.Any` (a type URL plus an
@@ -218,21 +219,28 @@ impl RouteRetryConfig {
     }
 }
 
-/// Maximum `seconds` for a well-formed `google.protobuf.Duration`.
-const MAX_PROTO_DURATION_SECONDS: i64 = 315_576_000_000;
-
-/// Convert a protobuf `Duration` to [`std::time::Duration`], returning `None` for
-/// values outside the documented `google.protobuf.Duration` range. Rejected here
-/// so an invalid retry policy fails validation rather than overflowing later.
-fn proto_duration(d: &envoy_types::pb::google::protobuf::Duration) -> Option<Duration> {
-    if !(0..=MAX_PROTO_DURATION_SECONDS).contains(&d.seconds)
-        || !(0..=999_999_999).contains(&d.nanos)
-    {
-        return None;
-    }
-    let seconds = u64::try_from(d.seconds).ok()?;
-    let nanos = u32::try_from(d.nanos).ok()?;
-    Some(Duration::new(seconds, nanos))
+/// Parse a route's gRFC A31 max stream duration from
+/// `RouteAction.max_stream_duration`.
+///
+/// `grpc_timeout_header_max` takes precedence when present; otherwise
+/// `max_stream_duration` is used. Returns `Ok(None)` when neither is set, so
+/// the route falls back to the listener's `HttpConnectionManager` default. A
+/// zero value is returned as `Some(ZERO)` (not `None`): it means "no limit" and
+/// still overrides the listener default. `grpc_timeout_header_offset` is
+/// ignored per A31. Returns `Err(Validation)` for an out-of-range duration.
+fn parse_max_stream_duration(
+    msd: &route_action::MaxStreamDuration,
+) -> xds_client::Result<Option<Duration>> {
+    let (field, value) = match (&msd.grpc_timeout_header_max, &msd.max_stream_duration) {
+        (Some(header_max), _) => ("grpc_timeout_header_max", header_max),
+        (None, Some(max)) => ("max_stream_duration", max),
+        (None, None) => return Ok(None),
+    };
+    proto_duration(value).map(Some).ok_or_else(|| {
+        Error::Validation(format!(
+            "route_action.max_stream_duration.{field} is not a valid duration"
+        ))
+    })
 }
 
 /// Parse and validate an Envoy `RetryPolicy` into a shared [`RouteRetryConfig`].
@@ -257,6 +265,13 @@ pub(crate) struct RouteConfig {
     /// else the inherited `VirtualHost.retry_policy` (route-level fully overrides,
     /// no merge), else `None`. Routes that inherit share one `Arc`.
     pub retry_config: Option<Arc<RouteRetryConfig>>,
+    /// gRFC A31 max stream duration from `RouteAction.max_stream_duration`
+    /// (`grpc_timeout_header_max`, else `max_stream_duration`). `None` means the
+    /// route sets neither; the listener's `HttpConnectionManager` default is
+    /// filled in when the route config is published (see
+    /// [`RouteConfigResource::with_default_max_stream_duration`]). `Some(ZERO)`
+    /// means no limit, overriding that default.
+    pub max_stream_duration: Option<Duration>,
 }
 
 /// Validated route match criteria.
@@ -408,16 +423,25 @@ fn validate_route(
         .ok_or_else(|| Error::Validation("route missing action field".into()))?;
 
     let validated_action;
-    let route_retry = match action {
+    let (route_retry, max_stream_duration) = match action {
         route::Action::Route(mut route_action) => {
-            // Take the retry policy before `route_action` is consumed; parse it
-            // only if the route is kept, so dropped routes cost no parse.
+            // Take the retry policy and max stream duration before `route_action`
+            // is consumed; parse them only if the route is kept, so dropped
+            // routes cost no parse. `RouteAction.timeout` is ignored per A31.
             let retry_policy = route_action.retry_policy.take();
+            let max_stream_duration = route_action.max_stream_duration.take();
             match validate_route_action(route_action)? {
                 Some(action) => validated_action = action,
                 None => return Ok(None),
             }
-            retry_policy.as_ref().map(parse_retry).transpose()?
+            (
+                retry_policy.as_ref().map(parse_retry).transpose()?,
+                max_stream_duration
+                    .as_ref()
+                    .map(parse_max_stream_duration)
+                    .transpose()?
+                    .flatten(),
+            )
         }
         // Per A28: action field must be "route", otherwise NACK.
         _ => {
@@ -431,6 +455,7 @@ fn validate_route(
         match_criteria,
         action: validated_action,
         retry_config: route_retry.or_else(|| vh_retry.cloned()),
+        max_stream_duration,
     }))
 }
 
@@ -600,6 +625,15 @@ impl RouteConfigResource {
             }
         }
         clusters
+    }
+
+    /// Applies the listener's `HttpConnectionManager` max stream duration to
+    /// every route that sets none of its own (gRFC A31).
+    pub(crate) fn with_default_max_stream_duration(mut self, default: Duration) -> Self {
+        for route in self.virtual_hosts.iter_mut().flat_map(|vh| &mut vh.routes) {
+            route.max_stream_duration.get_or_insert(default);
+        }
+        self
     }
 }
 
@@ -1344,5 +1378,138 @@ mod tests {
             ..Default::default()
         };
         assert!(RouteConfigResource::validate(rc).is_err());
+    }
+
+    // --- gRFC A31 max_stream_duration ---
+
+    fn validate_with_route_action(action: RouteAction) -> xds_client::Result<RouteConfigResource> {
+        let rc = RouteConfiguration {
+            name: "rc".to_string(),
+            virtual_hosts: vec![VirtualHost {
+                name: "vh1".to_string(),
+                domains: vec!["*".to_string()],
+                routes: vec![envoy_types::pb::envoy::config::route::v3::Route {
+                    r#match: Some(RouteMatch {
+                        path_specifier: Some(route_match::PathSpecifier::Prefix("/".into())),
+                        ..Default::default()
+                    }),
+                    action: Some(Action::Route(action)),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        RouteConfigResource::validate(rc)
+    }
+
+    fn cluster_action() -> RouteAction {
+        RouteAction {
+            cluster_specifier: Some(ClusterSpecifier::Cluster("c1".to_string())),
+            ..Default::default()
+        }
+    }
+
+    /// A route action whose `max_stream_duration` message sets the given fields.
+    fn action_with_msd(
+        max: Option<ProtoDuration>,
+        header_max: Option<ProtoDuration>,
+    ) -> RouteAction {
+        RouteAction {
+            max_stream_duration: Some(route_action::MaxStreamDuration {
+                max_stream_duration: max,
+                grpc_timeout_header_max: header_max,
+                ..Default::default()
+            }),
+            ..cluster_action()
+        }
+    }
+
+    #[test]
+    fn test_max_stream_duration_resolution() {
+        let ms = |ms: i64| Some(proto_dur(ms / 1000, (ms % 1000) as i32 * 1_000_000));
+        // Ignored per A31.
+        let header_offset = RouteAction {
+            max_stream_duration: Some(route_action::MaxStreamDuration {
+                grpc_timeout_header_offset: ms(1000),
+                ..Default::default()
+            }),
+            ..cluster_action()
+        };
+        let timeout = RouteAction {
+            timeout: ms(3000),
+            ..cluster_action()
+        };
+        // (route action, resolved value in ms)
+        let cases = [
+            (cluster_action(), None),
+            // Present but empty: inherit the HCM default.
+            (action_with_msd(None, None), None),
+            (action_with_msd(ms(5000), None), Some(5000)),
+            // `grpc_timeout_header_max` takes precedence.
+            (action_with_msd(ms(5000), ms(250)), Some(250)),
+            // Zero means "no limit" but must still override the HCM default, so
+            // it is kept as `Some(ZERO)` rather than collapsed to `None`.
+            (action_with_msd(ms(5000), ms(0)), Some(0)),
+            (action_with_msd(ms(0), None), Some(0)),
+            (header_offset, None),
+            (timeout, None),
+        ];
+        for (i, (action, want)) in cases.into_iter().enumerate() {
+            let rc = validate_with_route_action(action).unwrap_or_else(|e| panic!("case {i}: {e}"));
+            let want = want.map(Duration::from_millis);
+            let got = rc.virtual_hosts[0].routes[0].max_stream_duration;
+            assert_eq!(got, want, "case {i}");
+        }
+    }
+
+    #[test]
+    fn test_invalid_max_stream_duration_is_rejected() {
+        for (field, action) in [
+            (
+                "max_stream_duration",
+                action_with_msd(Some(proto_dur(-1, 0)), None),
+            ),
+            (
+                "grpc_timeout_header_max",
+                action_with_msd(None, Some(proto_dur(0, 1_000_000_000))),
+            ),
+        ] {
+            let err = validate_with_route_action(action).unwrap_err();
+            assert!(err.to_string().contains(field), "{err}");
+        }
+    }
+
+    #[test]
+    fn test_invalid_max_stream_duration_on_dropped_route_is_ignored() {
+        // Routes skipped per A28 (here: `cluster_header`) are not parsed further.
+        let action = RouteAction {
+            cluster_specifier: Some(ClusterSpecifier::ClusterHeader("x-cluster".into())),
+            ..action_with_msd(Some(proto_dur(-1, 0)), None)
+        };
+        let validated = validate_with_route_action(action).expect("route is dropped");
+        assert!(validated.virtual_hosts[0].routes.is_empty());
+    }
+
+    #[test]
+    fn test_default_max_stream_duration_fills_unset_routes() {
+        let ms = |ms: i32| Some(proto_dur(0, ms * 1_000_000));
+        let route =
+            |action| validate_with_route_action(action).unwrap().virtual_hosts[0].routes[0].clone();
+        let mut rc = validate_with_route_action(cluster_action()).unwrap();
+        rc.virtual_hosts[0].routes = vec![
+            route(cluster_action()),
+            route(action_with_msd(ms(250), None)),
+            route(action_with_msd(ms(0), None)),
+        ];
+        let rc = rc.with_default_max_stream_duration(Duration::from_secs(4));
+        let got: Vec<_> = rc.virtual_hosts[0]
+            .routes
+            .iter()
+            .map(|route| route.max_stream_duration)
+            .collect();
+        // A route's own value, even zero, overrides the listener's.
+        let want = [4000, 250, 0].map(|ms| Some(Duration::from_millis(ms)));
+        assert_eq!(got, want);
     }
 }

@@ -217,6 +217,7 @@
 //! | Route matching (domain, path, headers) | [A28] | Supported |
 //! | Weighted cluster traffic splitting | [A28] | Supported |
 //! | Case-insensitive header matching | [A63] | Supported |
+//! | Timeouts (max stream duration) | [A31] | Supported |
 //! | Client-side P2C load balancing | | Supported |
 //! | ADS TLS and mTLS credentials | [A65] | Supported |
 //! | TLS endpoint connections | [A29] | Supported |
@@ -251,6 +252,7 @@
 //! [A27]: https://github.com/grpc/proposal/blob/master/A27-xds-global-load-balancing.md
 //! [A28]: https://github.com/grpc/proposal/blob/master/A28-xds-traffic-splitting-and-routing.md
 //! [A29]: https://github.com/grpc/proposal/blob/master/A29-xds-tls-security.md
+//! [A31]: https://github.com/grpc/proposal/blob/master/A31-xds-timeout-support-and-config-selector.md
 //! [A48]: https://github.com/grpc/proposal/blob/master/A48-xds-least-request-lb-policy.md
 //! [A63]: https://github.com/grpc/proposal/blob/master/A63-xds-string-matcher-ignore-case.md
 //! [A65]: https://github.com/grpc/proposal/blob/master/A65-xds-mtls-creds-in-bootstrap.md

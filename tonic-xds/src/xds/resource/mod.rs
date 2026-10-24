@@ -51,3 +51,23 @@ pub(crate) use cluster::ClusterResource;
 pub(crate) use endpoints::EndpointsResource;
 pub(crate) use listener::ListenerResource;
 pub(crate) use route_config::RouteConfigResource;
+
+/// Maximum `seconds` for a well-formed `google.protobuf.Duration`.
+const MAX_PROTO_DURATION_SECONDS: i64 = 315_576_000_000;
+
+/// Convert a protobuf `Duration` to [`std::time::Duration`], returning `None` for
+/// values outside the documented `google.protobuf.Duration` range (including
+/// negative durations). Callers reject `None` so a malformed duration fails
+/// validation rather than overflowing later.
+pub(crate) fn proto_duration(
+    d: &envoy_types::pb::google::protobuf::Duration,
+) -> Option<std::time::Duration> {
+    if !(0..=MAX_PROTO_DURATION_SECONDS).contains(&d.seconds)
+        || !(0..=999_999_999).contains(&d.nanos)
+    {
+        return None;
+    }
+    let seconds = u64::try_from(d.seconds).ok()?;
+    let nanos = u32::try_from(d.nanos).ok()?;
+    Some(std::time::Duration::new(seconds, nanos))
+}
