@@ -220,7 +220,12 @@ impl StreamingInner {
                 )));
             }
 
-            self.buf.reserve(len);
+            let missing = len.saturating_sub(self.buf.len());
+            if self.buf.capacity() - self.buf.len() < missing {
+                let mut buf = BytesMut::with_capacity(self.buf.len() + missing);
+                buf.extend_from_slice(&self.buf);
+                self.buf = buf;
+            }
 
             self.state = State::ReadBody {
                 compression: compression_encoding,
@@ -453,3 +458,71 @@ impl<T> fmt::Debug for Streaming<T> {
 
 #[cfg(test)]
 static_assertions::assert_impl_all!(Streaming<()>: Send, Sync);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bytes::Bytes;
+    use http_body::Frame;
+
+    #[derive(Debug)]
+    struct BytesDecoder;
+
+    impl Decoder for BytesDecoder {
+        type Item = Bytes;
+        type Error = Status;
+
+        fn decode(&mut self, buf: &mut DecodeBuf<'_>) -> Result<Option<Bytes>, Status> {
+            Ok(Some(buf.copy_to_bytes(buf.remaining())))
+        }
+    }
+
+    fn message(len: usize) -> Bytes {
+        let mut buf = BytesMut::with_capacity(HEADER_SIZE + len);
+        buf.put_u8(0);
+        buf.put_u32(len as u32);
+        buf.put_bytes(7, len);
+        buf.freeze()
+    }
+
+    fn streaming(mut wire: Bytes, frame_sizes: &[usize]) -> Streaming<Bytes> {
+        let frames: Vec<_> = frame_sizes
+            .iter()
+            .map(|&size| Ok::<_, Status>(Frame::data(wire.split_to(size))))
+            .collect();
+        assert!(wire.is_empty());
+        let body = http_body_util::StreamBody::new(tokio_stream::iter(frames));
+        Streaming::new_request(BytesDecoder, body, None, Some(8 * 1024 * 1024))
+    }
+
+    #[tokio::test]
+    async fn decode_buffer_is_sized_to_the_message() {
+        const LEN: usize = 2 * 1024 * 1024;
+        const TOTAL: usize = HEADER_SIZE + LEN;
+        let mut small_frames = vec![16 * 1024; TOTAL / (16 * 1024)];
+        small_frames.push(TOTAL % (16 * 1024));
+        let cases: [&[usize]; 4] = [
+            &[TOTAL],
+            &[4096, TOTAL - 4096],
+            &[1536 * 1024, TOTAL - 1536 * 1024],
+            &small_frames,
+        ];
+        for frame_sizes in cases {
+            let mut stream = streaming(message(LEN), frame_sizes);
+            assert_eq!(stream.message().await.unwrap().unwrap().len(), LEN);
+            assert_eq!(stream.inner.buf.capacity(), 0, "frames: {frame_sizes:?}");
+            assert!(stream.message().await.unwrap().is_none());
+        }
+    }
+
+    #[tokio::test]
+    async fn decodes_several_messages_in_one_frame() {
+        let wire: Bytes = [10, 20, 30].into_iter().flat_map(message).collect();
+        let total = wire.len();
+        let mut stream = streaming(wire, &[total]);
+        for len in [10, 20, 30] {
+            assert_eq!(stream.message().await.unwrap().unwrap().len(), len);
+        }
+        assert!(stream.message().await.unwrap().is_none());
+    }
+}
