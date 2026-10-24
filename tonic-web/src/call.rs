@@ -356,7 +356,21 @@ where
     }
 
     fn size_hint(&self) -> SizeHint {
-        self.inner.size_hint()
+        match (self.direction, self.encoding, self.client) {
+            // The bytes pass through unchanged.
+            (Direction::Decode, Encoding::None, false) => self.inner.size_hint(),
+            // Every data byte passes through, and the trailers may follow as
+            // one more data frame.
+            (Direction::Encode, Encoding::None, _) => {
+                let mut hint = SizeHint::new();
+                hint.set_lower(self.inner.size_hint().lower());
+                hint
+            }
+            (Direction::Empty, _, _) => SizeHint::with_exact(0),
+            // base64 changes the length, and a client takes the trailers
+            // frame out of the data.
+            _ => SizeHint::new(),
+        }
     }
 }
 
@@ -710,6 +724,128 @@ mod tests {
         );
 
         assert_eq!(map, expected);
+    }
+
+    /// A body of `frames` whose size hint is the exact length of its data,
+    /// as a buffered body (e.g. `Full`, a request with `content-length`)
+    /// reports it.
+    struct Exact {
+        frames: std::collections::VecDeque<Frame<Bytes>>,
+    }
+
+    impl Exact {
+        fn new(frames: impl IntoIterator<Item = Frame<Bytes>>) -> Self {
+            Self {
+                frames: frames.into_iter().collect(),
+            }
+        }
+    }
+
+    impl Body for Exact {
+        type Data = Bytes;
+        type Error = std::convert::Infallible;
+
+        fn poll_frame(
+            mut self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+        ) -> Poll<Option<Result<Frame<Bytes>, Self::Error>>> {
+            Poll::Ready(self.frames.pop_front().map(Ok))
+        }
+
+        fn size_hint(&self) -> SizeHint {
+            let len = self
+                .frames
+                .iter()
+                .filter_map(|frame| frame.data_ref())
+                .map(|data| data.len() as u64)
+                .sum();
+            SizeHint::with_exact(len)
+        }
+    }
+
+    /// Check that `call`'s size hint, taken before it is read, bounds the
+    /// data it yields: HTTP implementations send an exact hint as the
+    /// `content-length` of the message.
+    fn assert_size_hint_holds<B>(call: GrpcWebCall<B>)
+    where
+        B: Body,
+        B::Error: fmt::Display,
+    {
+        let hint = Body::size_hint(&call);
+        let mut call = std::pin::pin!(call);
+        let mut cx = Context::from_waker(std::task::Waker::noop());
+        let mut len = 0;
+        while let Poll::Ready(Some(frame)) = call.as_mut().poll_frame(&mut cx) {
+            if let Ok(data) = frame.unwrap().into_data() {
+                len += data.len() as u64;
+            }
+        }
+        assert!(hint.lower() <= len, "lower {} > {len}", hint.lower());
+        if let Some(upper) = hint.upper() {
+            assert!(len <= upper, "{len} > upper {upper}");
+        }
+    }
+
+    fn message(payload: &[u8]) -> Bytes {
+        let mut frame = BytesMut::new();
+        frame.put_u8(0);
+        frame.put_u32(payload.len() as u32);
+        frame.put_slice(payload);
+        frame.freeze()
+    }
+
+    fn status_trailers() -> HeaderMap {
+        let mut trailers = HeaderMap::new();
+        trailers.insert(Status::GRPC_STATUS, 0.into());
+        trailers
+    }
+
+    #[test]
+    fn size_hint_of_a_base64_request_bounds_the_decoded_bytes() {
+        let text = crate::util::base64::STANDARD.encode(message(b"hello grpc-web"));
+        let call = GrpcWebCall::request(Exact::new([Frame::data(text.into())]), Encoding::Base64);
+        assert_size_hint_holds(call);
+    }
+
+    #[test]
+    fn size_hint_of_a_base64_response_bounds_the_encoded_bytes() {
+        let call = GrpcWebCall::response(
+            Exact::new([Frame::data(message(b"hello grpc-web"))]),
+            Encoding::Base64,
+        );
+        assert_size_hint_holds(call);
+    }
+
+    #[test]
+    fn size_hint_of_a_response_counts_the_trailers_frame() {
+        // The trailers become a data frame of the grpc-web body.
+        let call = GrpcWebCall::response(
+            Exact::new([
+                Frame::data(message(b"hello")),
+                Frame::trailers(status_trailers()),
+            ]),
+            Encoding::None,
+        );
+        assert_size_hint_holds(call);
+    }
+
+    #[test]
+    fn size_hint_of_a_client_response_leaves_out_the_trailers_frame() {
+        // The trailers frame in the data becomes trailers of the gRPC body.
+        let mut body = BytesMut::from(&message(b"hello")[..]);
+        body.put_slice(&make_trailers_frame(status_trailers()));
+        let call = GrpcWebCall::client_response(Exact::new([Frame::data(body.freeze())]));
+        assert_size_hint_holds(call);
+    }
+
+    #[test]
+    fn size_hint_of_a_binary_request_stays_exact() {
+        // Bytes pass through unchanged, so the inner length still holds.
+        let data = message(b"hello");
+        let len = data.len() as u64;
+        let call = GrpcWebCall::request(Exact::new([Frame::data(data)]), Encoding::None);
+        assert_eq!(Body::size_hint(&call).exact(), Some(len));
+        assert_size_hint_holds(call);
     }
 
     #[test]
