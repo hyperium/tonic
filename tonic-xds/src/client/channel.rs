@@ -30,6 +30,7 @@ use crate::client::loadbalance::outcome::{
     GrpcOutcomeClassifier, HttpOutcomeClassifier, OutcomeClassifier,
 };
 use crate::client::route::{PreRouteInterceptor, Router, XdsRoutingLayer};
+use crate::csds::{CsdsRegistration, CsdsRegistry};
 use crate::xds::bootstrap::{BootstrapConfig, BootstrapError};
 use crate::xds::cache::XdsCache;
 #[cfg(feature = "_tls-any")]
@@ -202,6 +203,7 @@ impl AdsTlsConfigProvider {
 struct XdsChannelResources {
     _resource_manager: XdsResourceManager,
     _xds_client: XdsClient,
+    _csds_registration: Option<CsdsRegistration>,
 }
 
 /// xDS runtime built once from bootstrap (cache, ADS client, resource manager,
@@ -214,6 +216,8 @@ struct XdsRuntimeParts {
     resource_manager: XdsResourceManager,
     #[cfg(feature = "_tls-any")]
     cert_provider_registry: Arc<CertProviderRegistry>,
+    /// Reports the xDS client through CSDS while the channel is alive.
+    csds_registration: Option<CsdsRegistration>,
 }
 
 /// `XdsChannel` is an xDS-capable [`tower::Service`] implementation.
@@ -304,6 +308,8 @@ pub struct XdsChannelBuilder {
     lb_backend: LbBackend,
     #[cfg(feature = "_tls-any")]
     cert_providers: HashMap<String, Arc<dyn CertificateProvider>>,
+    /// Where built channels register their xDS client for CSDS.
+    csds_registry: Arc<CsdsRegistry>,
 }
 
 impl Debug for XdsChannelBuilder {
@@ -352,7 +358,16 @@ impl XdsChannelBuilder {
             lb_backend: LbBackend::default(),
             #[cfg(feature = "_tls-any")]
             cert_providers: HashMap::new(),
+            csds_registry: CsdsRegistry::global(),
         }
+    }
+
+    /// Registers built channels in `registry` instead of the process-wide
+    /// one, so a test sees only its own channels.
+    #[cfg(test)]
+    pub(crate) fn with_csds_registry(mut self, registry: Arc<CsdsRegistry>) -> Self {
+        self.csds_registry = registry;
+        self
     }
 
     /// Sets the [`MetricsRecorder`] backend that receives the gRFC A78 xDS
@@ -492,14 +507,18 @@ impl XdsChannelBuilder {
         )?);
 
         let node = Node::try_from(bootstrap.node)?;
+        let target = self.config.target_uri.to_string();
         let client_config =
-            ClientConfig::new(node, &server_uri).with_target(self.config.target_uri.to_string());
+            ClientConfig::new(node.clone(), &server_uri).with_target(target.clone());
         let mut client_builder =
             XdsClient::builder(client_config, transport_builder, ProstCodec, TokioRuntime);
         if let Some(recorder) = self.recorder.clone() {
             client_builder = client_builder.with_metrics_recorder(recorder);
         }
         let xds_client = client_builder.build();
+        let csds_registration = self
+            .csds_registry
+            .register(target, &node, xds_client.clone());
 
         let cache = Arc::new(XdsCache::new());
         let resource_manager =
@@ -509,6 +528,7 @@ impl XdsChannelBuilder {
             cache,
             xds_client,
             resource_manager,
+            csds_registration: Some(csds_registration),
             #[cfg(feature = "_tls-any")]
             cert_provider_registry,
         })
@@ -596,6 +616,7 @@ impl XdsChannelBuilder {
         let resources = Arc::new(XdsChannelResources {
             _resource_manager: parts.resource_manager,
             _xds_client: parts.xds_client,
+            _csds_registration: parts.csds_registration,
         });
 
         let routing_layer = XdsRoutingLayer::new(router, self.pre_route.clone(), self.authority());
@@ -1413,6 +1434,15 @@ mod tests {
         provider.client_tls_config().unwrap();
     }
 
+    #[test]
+    fn channels_register_with_the_global_csds_registry_by_default() {
+        let builder = XdsChannelBuilder::new(test_config());
+        assert!(Arc::ptr_eq(
+            &builder.csds_registry,
+            &crate::csds::CsdsRegistry::global()
+        ));
+    }
+
     /// Smoke test: verifies builder wiring with a disconnected XdsClient
     /// doesn't panic during construction.
     #[tokio::test]
@@ -1439,6 +1469,7 @@ mod tests {
                 xds_client,
                 resource_manager,
                 cert_provider_registry,
+                csds_registration: None,
             }
         };
         #[cfg(not(feature = "_tls-any"))]
@@ -1446,6 +1477,7 @@ mod tests {
             cache,
             xds_client,
             resource_manager,
+            csds_registration: None,
         };
         let _channel = builder.build_grpc_channel_from_runtime(parts);
         // Construction should succeed without panicking.
