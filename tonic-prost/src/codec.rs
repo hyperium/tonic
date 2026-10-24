@@ -307,8 +307,9 @@ mod tests {
         assert!(body.is_end_stream());
     }
 
-    // skip on windows because CI stumbles over our 4GB allocation
-    #[cfg(not(target_family = "windows"))]
+    // Skip on Windows because CI stumbles over our 4GB allocation, and on
+    // 32-bit targets because that allocation exceeds the addressable size.
+    #[cfg(all(not(target_family = "windows"), target_pointer_width = "64"))]
     #[tokio::test]
     async fn encode_too_big() {
         let encoder = MockEncoder::default();
